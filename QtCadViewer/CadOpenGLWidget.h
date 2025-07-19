@@ -13,6 +13,13 @@
 
 #include "CadNode.h"
 
+// Selection mode enum
+enum class SelectionMode {
+    None,
+    Faces,
+    Edges
+};
+
 // Geometry cache structure using legacy OpenGL
 struct CachedGeometry {
     GLuint displayList = 0;
@@ -20,6 +27,18 @@ struct CachedGeometry {
     bool initialized = false;
     
     CachedGeometry() {}
+    
+    // Helper to check if this geometry is valid for rendering
+    bool isValid() const {
+        return initialized && displayList != 0 && triangleCount > 0;
+    }
+    
+    // Helper to mark as invalid
+    void markInvalid() {
+        initialized = true;
+        displayList = 0;
+        triangleCount = 0;
+    }
 };
 
 struct ColorBatch {
@@ -38,9 +57,15 @@ public:
     void setPivotSphere(const QVector3D& worldPos);
     void clearCache(); // Clear geometry cache to free memory
     int getCacheSize() const; // Get number of cached geometries
+    // Selection mode control
+    void setSelectionMode(SelectionMode mode);
+    SelectionMode getSelectionMode() const { return m_selectionMode; }
     // Add this slot for tree selection
 public slots:
     void setSelectedNode(TreeNode* node);
+    void clearSelection();
+    void addToSelection(TreeNode* node);
+    void removeFromSelection(TreeNode* node);
     void setCamera(const QVector3D& pos, const QQuaternion& rot, float zoom = 1.0f);
     void reframeCamera();
 protected:
@@ -51,6 +76,9 @@ protected:
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
+    void leaveEvent(QEvent* event) override;
+    void focusInEvent(QFocusEvent* event) override;
+    void focusOutEvent(QFocusEvent* event) override;
 private:
     TreeNode* rootNode_ = nullptr;
     // New camera state
@@ -68,9 +96,28 @@ private:
     // Selection state
     TopoDS_Face selectedFace_;
     TopoDS_Edge selectedEdge_;
-    TopoDS_Face hoveredFace_; // <--- Add this line
+    TopoDS_Face hoveredFace_;
+    TopoDS_Edge hoveredEdge_;
     TreeNode* selectedFaceNode_ = nullptr;
     TreeNode* hoveredFaceNode_ = nullptr;
+    TreeNode* selectedEdgeNode_ = nullptr;
+    TreeNode* hoveredEdgeNode_ = nullptr;
+    
+    // Multi-selection support
+    std::vector<TreeNode*> selectedFaceNodes_;
+    std::vector<TreeNode*> selectedEdgeNodes_;
+    
+    // Selection mode
+    SelectionMode m_selectionMode = SelectionMode::None;
+    
+    // Continuous rendering timer for smooth updates
+    QTimer m_renderTimer;
+    bool m_windowActive = true;
+    
+    // Mouse state for click vs drag detection
+    QPoint m_mousePressPos;
+    bool m_mousePressed = false;
+    bool m_mouseDragged = false;
 
     // Flat cache of all visible faces (per instance)
     struct FaceInstance {
@@ -78,12 +125,25 @@ private:
     };
     std::vector<FaceInstance> faceCache_;
     void buildFaceCache();
+    
+    // Flat cache of all visible edges (per instance)
+    struct EdgeInstance {
+        TreeNode* node;
+    };
+    std::vector<EdgeInstance> edgeCache_;
+    void buildEdgeCache();
     void traverseAndRender(TreeNode *node, CADNodeColor inheritedColor, bool ancestorsVisible);
     void renderEdge(const TopoDS_Edge &edge, const CADNodeColor &color);
     // Overload: pick and output intersection point (returns true if hit)
     bool pickElementAt(const QPoint& pos, QVector3D* outIntersection = nullptr);
+    // Edge picking function
+    bool pickEdgeAt(const QPoint& pos, QVector3D* outIntersection = nullptr);
+    // Picking function for pivot setting that doesn't change selection
+    bool pickElementAtForPivot(const QPoint& pos, QVector3D* outIntersection = nullptr);
     // Helper to pick hovered face
     void pickHoveredFaceAt(const QPoint& pos);
+    // Helper to pick hovered edge
+    void pickHoveredEdgeAt(const QPoint& pos);
     void renderFace(TreeNode* node, const CADNodeColor& color);
     void drawPivotSphere(); // Draws a sphere at m_center
     QVector3D m_zoomContactPoint; // Last zoom contact point
@@ -100,6 +160,8 @@ private:
     void renderBatchedGeometry();
     void buildColorBatches();
     void renderFaceOptimized(TreeNode* node, const CADNodeColor& color);
+    void renderEdgeOptimized(TreeNode* node, const CADNodeColor& color);
+    void renderHighlightedEdges();
     CachedGeometry& getOrCreateCachedGeometry(const TopoDS_Face& face);
     
     // Frustum culling helpers
@@ -108,6 +170,16 @@ private:
     
     // Frustum planes (normal + distance)
     QVector4D m_frustumPlanes[6];
+    
+    // Cache-related member variables (previously globals)
+    std::map<const void*, CachedGeometry> m_geometryCache;
+    bool m_cacheDirty = true;
+    int m_frameCount = 0; // Frame counter for performance monitoring
+    int m_skipFrames = 0; // Frame skipping counter
+    int m_totalFaces = 0; // Total faces processed
+    int m_skippedFaces = 0; // Faces skipped
+    void clearGeometryCache();
 signals:
     void facePicked(TreeNode* node);
+    void edgePicked(TreeNode* node);
 };

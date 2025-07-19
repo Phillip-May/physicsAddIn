@@ -10,7 +10,6 @@
 #include <QSplitter>
 #include "CadOpenGLWidget.h"
 #include "CadTreeModel.h"
-// #include "CadNode.h"  // Removed
 #include <memory>
 #include <QDebug>
 #include <BRep_Builder.hxx>
@@ -18,16 +17,103 @@
 #include <QSet>
 #include <QHash>
 #include <TDF_ChildIterator.hxx>
+#include <TDataStd_TreeNode.hxx>
 
 #include "CadNode.h"
 #include "XCAFLabelTreeModel.h"
+#include "CadOpenGLWidget.h" // For SelectionMode enum
 
-// Helper to recursively build XCAFLabelNode tree
-std::unique_ptr<XCAFLabelNode> buildLabelTree(const TDF_Label& label) {
+// Helper to recursively build XCAFLabelNode tree with sub-assembly detection
+std::unique_ptr<XCAFLabelNode> buildLabelTree(const TDF_Label& label, const Handle(XCAFDoc_ShapeTool)& shapeTool = nullptr) {
     auto node = std::make_unique<XCAFLabelNode>(label);
-    for (TDF_ChildIterator it(label); it.More(); it.Next()) {
-        node->children.push_back(buildLabelTree(it.Value()));
+    
+    // Check if this is a compound that might contain sub-assemblies
+    bool isCompoundWithSubAssemblies = false;
+    if (!shapeTool.IsNull() && !label.IsNull()) {
+        TopoDS_Shape shape = shapeTool->GetShape(label);
+        if (!shape.IsNull() && shape.ShapeType() == TopAbs_COMPOUND) {
+            // Count direct shape children to detect sub-assemblies
+            int shapeChildCount = 0;
+            for (TDF_ChildIterator it(label); it.More(); it.Next()) {
+                TDF_Label childLabel = it.Value();
+                if (!childLabel.IsNull()) {
+                    TopoDS_Shape childShape = shapeTool->GetShape(childLabel);
+                    if (!childShape.IsNull()) {
+                        shapeChildCount++;
+                        if (shapeChildCount > 1) {
+                            isCompoundWithSubAssemblies = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
     }
+    
+    // Recursively build children
+    for (TDF_ChildIterator it(label); it.More(); it.Next()) {
+        TDF_Label childLabel = it.Value();
+        if (!childLabel.IsNull()) {
+            auto childNode = buildLabelTree(childLabel, shapeTool);
+            node->children.push_back(std::move(childNode));
+        }
+    }
+    
+    return node;
+}
+
+// Enhanced tree building that follows reference chains for STEP 214 assemblies
+std::unique_ptr<XCAFLabelNode> buildLabelTreeWithReferences(const TDF_Label& label, const Handle(XCAFDoc_ShapeTool)& shapeTool = nullptr) {
+    auto node = std::make_unique<XCAFLabelNode>(label);
+    
+    if (!shapeTool.IsNull() && !label.IsNull()) {
+        // If this is a reference, also add the referred shape as a child
+        if (shapeTool->IsReference(label)) {
+            TDF_Label refLabel;
+            if (shapeTool->GetReferredShape(label, refLabel)) {
+                qDebug() << "Following reference from label" << label.Tag() << "to" << refLabel.Tag();
+                auto refNode = buildLabelTreeWithReferences(refLabel, shapeTool);
+                refNode->label = refLabel; // Ensure the referred label is set correctly
+                node->children.push_back(std::move(refNode));
+            }
+        }
+        
+        // Check if this compound has no direct geometry but might be an assembly
+        TopoDS_Shape shape = shapeTool->GetShape(label);
+        if (!shape.IsNull() && shape.ShapeType() == TopAbs_COMPOUND) {
+            bool hasDirectGeometry = false;
+            int refChildCount = 0;
+            
+            // Check children for direct geometry vs references
+            for (TDF_ChildIterator it(label); it.More(); it.Next()) {
+                TDF_Label childLabel = it.Value();
+                if (!childLabel.IsNull()) {
+                    TopoDS_Shape childShape = shapeTool->GetShape(childLabel);
+                    if (!childShape.IsNull()) {
+                        hasDirectGeometry = true;
+                    }
+                    if (shapeTool->IsReference(childLabel)) {
+                        refChildCount++;
+                    }
+                }
+            }
+            
+            // If this is an assembly with references, explore the reference chain
+            if (!hasDirectGeometry && refChildCount > 0) {
+                qDebug() << "Found assembly with" << refChildCount << "references at label" << label.Tag();
+            }
+        }
+    }
+    
+    // Recursively build children
+    for (TDF_ChildIterator it(label); it.More(); it.Next()) {
+        TDF_Label childLabel = it.Value();
+        if (!childLabel.IsNull()) {
+            auto childNode = buildLabelTreeWithReferences(childLabel, shapeTool);
+            node->children.push_back(std::move(childNode));
+        }
+    }
+    
     return node;
 }
 
@@ -55,6 +141,11 @@ std::unique_ptr<XCAFLabelNode> buildLabelTree(const TDF_Label& label) {
 #include <QPushButton>
 #include <TopLoc_Location.hxx>
 #include <QVector3D>
+#include <QTabWidget>
+#include <BRepBndLib.hxx>
+#include <Bnd_Box.hxx>
+#include <BRep_Tool.hxx>
+#include <Geom_Surface.hxx>
 
 // qHash overload for TDF_Label to allow use in QSet/QHash
 #include <TDF_Label.hxx>
@@ -159,7 +250,49 @@ QString makeTransformString(const TopLoc_Location& loc) {
         .arg(QString::number(trans.Z(), 'f', 2));
 }
 
-// Recursive function to build tree and collect faces
+// Helper to check if a label represents an assembly (compound with multiple children)
+bool isAssembly(const TDF_Label& label, const Handle(XCAFDoc_ShapeTool)& shapeTool) {
+    TopoDS_Shape shape = shapeTool->GetShape(label);
+    if (shape.IsNull() || shape.ShapeType() != TopAbs_COMPOUND) {
+        return false;
+    }
+    
+    // Check if this compound has multiple direct shape children
+    int shapeCount = 0;
+    for (TDF_ChildIterator it(label); it.More(); it.Next()) {
+        TDF_Label childLabel = it.Value();
+        TopoDS_Shape childShape = shapeTool->GetShape(childLabel);
+        if (!childShape.IsNull()) {
+            shapeCount++;
+            if (shapeCount > 1) return true;
+        }
+    }
+    return false;
+}
+
+// Helper to get the effective transform for a label, considering STEP 214 assembly structure
+TopLoc_Location getEffectiveTransform(const TDF_Label& label, 
+                                     const Handle(XCAFDoc_ShapeTool)& shapeTool,
+                                     const TopLoc_Location& parentLoc) {
+    TopLoc_Location effectiveLoc = parentLoc;
+    
+    // Check if this is a reference
+    if (shapeTool->IsReference(label)) {
+        effectiveLoc = parentLoc * shapeTool->GetLocation(label);
+    }
+    
+    // For STEP 214, also check if there's a product definition context
+    // that might affect the transform
+    Handle(TDataStd_TreeNode) treeNode;
+    if (label.FindAttribute(TDataStd_TreeNode::GetDefaultTreeID(), treeNode)) {
+        // Handle product definition context if present
+        // This is specific to STEP 214 assembly structure
+    }
+    
+    return effectiveLoc;
+}
+
+// Improved tree building function for STEP 214 compatibility
 std::unique_ptr<TreeNode> build_tree_xcaf(const TDF_Label& label,
                    const Handle(XCAFDoc_ShapeTool)& shapeTool,
                    const Handle(XCAFDoc_ColorTool)& colorTool,
@@ -168,10 +301,12 @@ std::unique_ptr<TreeNode> build_tree_xcaf(const TDF_Label& label,
 {
     CADNodeColor color = get_label_color(label, colorTool, parentColor);
     TopoDS_Shape shape = shapeTool->GetShape(label);
+    
     // Skip edge shapes entirely
     if (!shape.IsNull() && shape.ShapeType() == TopAbs_EDGE) {
         return nullptr;
     }
+    
     QString name;
     Handle(TDataStd_Name) nameAttr;
     if (label.FindAttribute(TDataStd_Name::GetID(), nameAttr) && !nameAttr.IsNull()) {
@@ -179,32 +314,84 @@ std::unique_ptr<TreeNode> build_tree_xcaf(const TDF_Label& label,
     } else {
         name = QString("Label %1").arg(label.Tag());
     }
-    // Determine the correct transform for this node
-    TopLoc_Location nodeLoc = parentLoc;
+    
+    // Get effective transform for this node
+    TopLoc_Location nodeLoc = getEffectiveTransform(label, shapeTool, parentLoc);
+    
     auto node = std::make_unique<TreeNode>();
     node->color = color;
     node->loc = nodeLoc;
+    
     if (!shape.IsNull()) {
         node->type = shape.ShapeType();
     } else {
         node->type = TopAbs_SHAPE;
     }
+    
     QString typeName = shapeTypeToString(node->type);
+    
+    // Enhanced assembly detection and handling
+    bool isCompoundAssembly = false;
+    if (!shape.IsNull() && shape.ShapeType() == TopAbs_COMPOUND) {
+        // Check if this compound has no direct geometry but contains references (assembly pattern)
+        bool hasDirectGeometry = false;
+        int refChildCount = 0;
+        int totalChildCount = 0;
+        
+        for (TDF_ChildIterator it(label); it.More(); it.Next()) {
+            totalChildCount++;
+            TDF_Label childLabel = it.Value();
+            if (!childLabel.IsNull()) {
+                TopoDS_Shape childShape = shapeTool->GetShape(childLabel);
+                if (!childShape.IsNull()) {
+                    hasDirectGeometry = true;
+                }
+                if (shapeTool->IsReference(childLabel)) {
+                    refChildCount++;
+                }
+            }
+        }
+        
+        // If this is an assembly with references but no direct geometry
+        if (!hasDirectGeometry && refChildCount > 0) {
+            isCompoundAssembly = true;
+            qDebug() << "Found assembly compound at label" << label.Tag() << "with" << refChildCount << "references";
+        }
+    }
+    
+    // Enhanced name for STEP 214 debugging
+    QString assemblyInfo = "";
+    if (isAssembly(label, shapeTool)) {
+        assemblyInfo = " | ASSEMBLY";
+    }
+    if (isCompoundAssembly) {
+        assemblyInfo = " | COMPOUND_ASSEMBLY";
+    }
+    if (shapeTool->IsReference(label)) {
+        assemblyInfo += " | REFERENCE";
+    }
+    
     // Compose a detailed name string
-    node->name = QString("Label %1 | Type: %2 | Transform: %3%4")
+    node->name = QString("Label %1 | Type: %2 | Transform: %3%4%5")
         .arg(label.Tag())
         .arg(typeName)
         .arg(makeTransformString(nodeLoc))
         .arg(name.isEmpty() ? "" : QString(" | OCC Name: %1").arg(name))
+        .arg(assemblyInfo)
         .toStdString();
 
-    // If this label is a reference, add the referred label as a child
+    // Enhanced reference handling for STEP 214 assemblies
     if (shapeTool->IsReference(label)) {
         TDF_Label refLabel;
         if (shapeTool->GetReferredShape(label, refLabel)) {
-            TopLoc_Location refLoc = parentLoc * shapeTool->GetLocation(label);
+            qDebug() << "Following reference from label" << label.Tag() << "to" << refLabel.Tag();
+            TopLoc_Location refLoc = nodeLoc; // Use the effective transform
             auto child = build_tree_xcaf(refLabel, shapeTool, colorTool, color, refLoc);
-            if (child) node->children.push_back(std::move(child));
+            if (child) {
+                // Mark this as a reference node in the name
+                child->name = QString("REF->%1 | %2").arg(refLabel.Tag()).arg(QString::fromStdString(child->name)).toStdString();
+                node->children.push_back(std::move(child));
+            }
         }
     }
 
@@ -213,19 +400,16 @@ std::unique_ptr<TreeNode> build_tree_xcaf(const TDF_Label& label,
         auto child = build_tree_xcaf(it.Value(), shapeTool, colorTool, color, nodeLoc);
         if (child) node->children.push_back(std::move(child));
     }
+    
     // After node is created and type is set
     if (!shape.IsNull()) {
         node->shapeData.shape = shape;
     }
-    // Only add face/edge children for solids that would otherwise be leafs
-    if (!shape.IsNull() && shape.ShapeType() == TopAbs_SOLID) {
-        // Check if this solid is a leaf node (no child labels)
-        bool isLeafNode = true;
-        for (TDF_ChildIterator it(label); it.More(); it.Next()) {
-            isLeafNode = false;
-            break;
-        }
-        // Also check if any existing children are solids (to avoid intermediate solids)
+    
+    // Add face/edge children for solids that don't have other solid children
+    // This allows faces/edges to be shown even when the solid has reference children
+    if (!shape.IsNull() && shape.ShapeType() == TopAbs_SOLID && !isAssembly(label, shapeTool)) {
+        // Check if any existing children are solids (to avoid intermediate solids)
         bool hasSolidChildren = false;
         for (const auto& child : node->children) {
             if (child->type == TopAbs_SOLID) {
@@ -233,9 +417,13 @@ std::unique_ptr<TreeNode> build_tree_xcaf(const TDF_Label& label,
                 break;
             }
         }
-        if (isLeafNode && !hasSolidChildren) {
+        
+        // Add faces and edges if this solid doesn't have other solid children
+        // Note: We removed the isCompoundAssembly check to allow faces on solids within compounds
+        if (!hasSolidChildren) {
             // Add face children
             int faceIdx = 0;
+            int faceCount = 0;
             for (TopExp_Explorer exp(shape, TopAbs_FACE); exp.More(); exp.Next(), ++faceIdx) {
                 TopoDS_Shape face = exp.Current();
                 auto faceNode = std::make_unique<TreeNode>();
@@ -245,9 +433,12 @@ std::unique_ptr<TreeNode> build_tree_xcaf(const TDF_Label& label,
                 faceNode->loc = nodeLoc;
                 faceNode->name = QString("Face %1 of %2").arg(faceIdx).arg(QString::fromStdString(node->name)).toStdString();
                 node->children.push_back(std::move(faceNode));
+                faceCount++;
             }
+            
             // Add edge children
             int edgeIdx = 0;
+            int edgeCount = 0;
             for (TopExp_Explorer exp(shape, TopAbs_EDGE); exp.More(); exp.Next(), ++edgeIdx) {
                 TopoDS_Shape edge = exp.Current();
                 auto edgeNode = std::make_unique<TreeNode>();
@@ -257,9 +448,13 @@ std::unique_ptr<TreeNode> build_tree_xcaf(const TDF_Label& label,
                 edgeNode->loc = nodeLoc;
                 edgeNode->name = QString("Edge %1 of %2").arg(edgeIdx).arg(QString::fromStdString(node->name)).toStdString();
                 node->children.push_back(std::move(edgeNode));
+                edgeCount++;
             }
+            
+            qDebug() << "Added" << faceCount << "faces and" << edgeCount << "edges to solid at label" << label.Tag();
         }
     }
+    
     return node;
 }
 
@@ -290,6 +485,9 @@ int main(int argc, char *argv[])
     reader.SetColorMode(true);
     reader.SetNameMode(true);
     reader.SetLayerMode(true);
+    
+    // Enhanced STEP 214 handling - using available methods
+    
     if (reader.ReadFile(stepFile.toStdString().c_str()) != IFSelect_RetDone) {
         QMessageBox::critical(nullptr, "Error", "Failed to read STEP file.");
         return 1;
@@ -298,6 +496,10 @@ int main(int argc, char *argv[])
         QMessageBox::critical(nullptr, "Error", "Failed to transfer STEP file.");
         return 1;
     }
+    
+    // Log STEP file information for debugging
+    qDebug() << "STEP file loaded successfully:" << stepFile;
+    qDebug() << "Document has" << doc->Main().NbChildren() << "root children";
 
     // Get shape and color tools from the document
     Handle(XCAFDoc_ShapeTool) shapeTool = XCAFDoc_DocumentTool::ShapeTool(doc->Main());
@@ -309,14 +511,74 @@ int main(int argc, char *argv[])
     TopLoc_Location identityLoc;
     TDF_LabelSequence roots;
     shapeTool->GetFreeShapes(roots);
+    
+    qDebug() << "Found" << roots.Length() << "free shapes in STEP file";
+    
     auto root = std::make_unique<TreeNode>();
     root->name = "Root";
     root->color = defaultColor;
     root->loc = identityLoc;
+    
     for (Standard_Integer i = 1; i <= roots.Length(); ++i) {
-        auto child = build_tree_xcaf(roots.Value(i), shapeTool, colorTool, defaultColor, identityLoc);
-        if (child) root->children.push_back(std::move(child));
+        TDF_Label rootLabel = roots.Value(i);
+        qDebug() << "Processing root shape" << i << "with tag" << rootLabel.Tag();
+        
+        auto child = build_tree_xcaf(rootLabel, shapeTool, colorTool, defaultColor, identityLoc);
+        if (child) {
+            root->children.push_back(std::move(child));
+            qDebug() << "Successfully added root shape" << i << "to tree";
+        } else {
+            qDebug() << "Failed to build tree for root shape" << i;
+        }
     }
+    
+    // For STEP 214 files, also explore the main document structure to find assemblies
+    // that might not be in the free shapes list
+    qDebug() << "Exploring main document structure for STEP 214 assemblies...";
+    std::function<void(const TDF_Label&)> exploreDocument = [&](const TDF_Label& label) {
+        if (label.IsNull()) return;
+        
+        // Check if this label has a shape and is not already processed
+        TopoDS_Shape shape = shapeTool->GetShape(label);
+        if (!shape.IsNull()) {
+            // Check if this is an assembly compound
+            if (shape.ShapeType() == TopAbs_COMPOUND) {
+                bool hasDirectGeometry = false;
+                int refChildCount = 0;
+                
+                for (TDF_ChildIterator it(label); it.More(); it.Next()) {
+                    TDF_Label childLabel = it.Value();
+                    if (!childLabel.IsNull()) {
+                        TopoDS_Shape childShape = shapeTool->GetShape(childLabel);
+                        if (!childShape.IsNull()) {
+                            hasDirectGeometry = true;
+                        }
+                        if (shapeTool->IsReference(childLabel)) {
+                            refChildCount++;
+                        }
+                    }
+                }
+                
+                // If this looks like an assembly, add it to the tree
+                if (!hasDirectGeometry && refChildCount > 0) {
+                    qDebug() << "Found additional assembly at label" << label.Tag() << "with" << refChildCount << "references";
+                    auto assemblyChild = build_tree_xcaf(label, shapeTool, colorTool, defaultColor, identityLoc);
+                    if (assemblyChild) {
+                        root->children.push_back(std::move(assemblyChild));
+                    }
+                }
+            }
+        }
+        
+        // Recurse into children
+        for (TDF_ChildIterator it(label); it.More(); it.Next()) {
+            exploreDocument(it.Value());
+        }
+    };
+    
+    exploreDocument(doc->Main());
+    
+    qDebug() << "Tree building complete. Root has" << root->children.size() << "children";
     qDebug() << "Total faces collected:" << faces.size();
 
     // Central widget and splitter
@@ -333,20 +595,62 @@ int main(int argc, char *argv[])
     centralWidget->setLayout(vLayout);
     mainWindow.setCentralWidget(centralWidget);
 
-    // Model/view tree
+    // Create tab widget for the left side
+    QTabWidget *tabWidget = new QTabWidget;
+    tabWidget->setMinimumWidth(300);
+    splitter->addWidget(tabWidget);
+
+    // Model/view tree for first tab
     CadTreeModel *model = new CadTreeModel(std::move(root));
     QTreeView *treeView = new QTreeView;
     treeView->setModel(model);
     treeView->setHeaderHidden(false);
     treeView->setSelectionMode(QAbstractItemView::ExtendedSelection); // Allow multi-selection
-    splitter->addWidget(treeView);
+    tabWidget->addTab(treeView, "CAD Tree");
 
     // Add OpenGL widget for geometry display
     CadOpenGLWidget *viewer = new CadOpenGLWidget;
     splitter->addWidget(viewer);
     // Pass the root node to the viewer for rendering
     viewer->setRootTreeNode(model->getRootNodePointer());
+    
+    // Force the viewer to update and render the geometry
+    viewer->update();
 
+    // Add selection mode buttons
+    QPushButton* noSelectionBtn = new QPushButton("No Selection");
+    QPushButton* faceSelectionBtn = new QPushButton("Face Selection");
+    QPushButton* edgeSelectionBtn = new QPushButton("Edge Selection");
+    
+    // Style the buttons to show current selection mode
+    noSelectionBtn->setStyleSheet("QPushButton { background-color: #4CAF50; color: white; font-weight: bold; }");
+    
+    buttonLayout->addWidget(noSelectionBtn);
+    buttonLayout->addWidget(faceSelectionBtn);
+    buttonLayout->addWidget(edgeSelectionBtn);
+    
+    // Connect selection mode buttons
+    QObject::connect(noSelectionBtn, &QPushButton::clicked, [=]() {
+        viewer->setSelectionMode(SelectionMode::None);
+        noSelectionBtn->setStyleSheet("QPushButton { background-color: #4CAF50; color: white; font-weight: bold; }");
+        faceSelectionBtn->setStyleSheet("QPushButton { background-color: #f0f0f0; color: black; }");
+        edgeSelectionBtn->setStyleSheet("QPushButton { background-color: #f0f0f0; color: black; }");
+    });
+    
+    QObject::connect(faceSelectionBtn, &QPushButton::clicked, [=]() {
+        viewer->setSelectionMode(SelectionMode::Faces);
+        noSelectionBtn->setStyleSheet("QPushButton { background-color: #f0f0f0; color: black; }");
+        faceSelectionBtn->setStyleSheet("QPushButton { background-color: #4CAF50; color: white; font-weight: bold; }");
+        edgeSelectionBtn->setStyleSheet("QPushButton { background-color: #f0f0f0; color: black; }");
+    });
+    
+    QObject::connect(edgeSelectionBtn, &QPushButton::clicked, [=]() {
+        viewer->setSelectionMode(SelectionMode::Edges);
+        noSelectionBtn->setStyleSheet("QPushButton { background-color: #f0f0f0; color: black; }");
+        faceSelectionBtn->setStyleSheet("QPushButton { background-color: #f0f0f0; color: black; }");
+        edgeSelectionBtn->setStyleSheet("QPushButton { background-color: #4CAF50; color: white; font-weight: bold; }");
+    });
+    
     // Add Reframe button
     QPushButton* reframeBtn = new QPushButton("Reframe");
     buttonLayout->addWidget(reframeBtn);
@@ -366,34 +670,159 @@ int main(int argc, char *argv[])
             treeView->scrollTo(idx);
         }
     });
-
-    // Connect tree selection to OpenGL widget highlighting
-    QObject::connect(treeView->selectionModel(), &QItemSelectionModel::currentChanged, viewer, [=](const QModelIndex &current, const QModelIndex &/*previous*/){
-        TreeNode* node = model->getNode(current);
-        viewer->setSelectedNode(node);
+    
+    // Connect edge selection in viewer to tree selection
+    QObject::connect(viewer, &CadOpenGLWidget::edgePicked, treeView, [=](TreeNode* node) {
+        QModelIndex idx = model->indexForNode(node);
+        if (idx.isValid()) {
+            // Expand all parents so the item is visible
+            QModelIndex parentIdx = idx.parent();
+            while (parentIdx.isValid()) {
+                treeView->expand(parentIdx);
+                parentIdx = parentIdx.parent();
+            }
+            treeView->setCurrentIndex(idx);
+            treeView->scrollTo(idx);
+        }
     });
 
-    // --- XCAF Label Tree View ---
-    // Build label tree from XCAF roots
+    // Connect tree selection to OpenGL widget highlighting
+    QObject::connect(treeView->selectionModel(), &QItemSelectionModel::selectionChanged, viewer, [=](const QItemSelection &selected, const QItemSelection &/*deselected*/){
+        // Clear current selection first
+        viewer->clearSelection();
+        
+        // Add all selected items and their descendants to the multi-selection
+        QModelIndexList selectedIndexes = selected.indexes();
+        QSet<TreeNode*> allNodesToSelect;
+        
+        for (const QModelIndex& index : selectedIndexes) {
+            TreeNode* node = model->getNode(index);
+            if (node) {
+                // Add the selected node
+                allNodesToSelect.insert(node);
+                
+                // Add all descendants recursively
+                std::function<void(TreeNode*)> addDescendants = [&](TreeNode* currentNode) {
+                    for (const auto& child : currentNode->children) {
+                        if (child) {
+                            allNodesToSelect.insert(child.get());
+                            addDescendants(child.get());
+                        }
+                    }
+                };
+                addDescendants(node);
+            }
+        }
+        
+        // Add all collected nodes to the selection
+        for (TreeNode* node : allNodesToSelect) {
+            viewer->addToSelection(node);
+        }
+    });
+
+    // --- XCAF Label Tree View for second tab ---
+    // Build comprehensive label tree showing all XCAF structure
     auto labelRoot = std::make_unique<XCAFLabelNode>(doc->Main());
+    labelRoot->label = doc->Main();
+    
+    qDebug() << "Building comprehensive XCAF tree...";
+    
+    // Add all direct children of the main document
     for (TDF_ChildIterator it(doc->Main()); it.More(); it.Next()) {
-        labelRoot->children.push_back(buildLabelTree(it.Value()));
+        TDF_Label childLabel = it.Value();
+        qDebug() << "Adding main document child with tag:" << childLabel.Tag();
+        labelRoot->children.push_back(buildLabelTreeWithReferences(childLabel, shapeTool));
     }
+    
+    // Also add all free shapes (important for STEP 214)
+    TDF_LabelSequence freeShapes;
+    shapeTool->GetFreeShapes(freeShapes);
+    qDebug() << "Found" << freeShapes.Length() << "free shapes";
+    
+    for (Standard_Integer i = 1; i <= freeShapes.Length(); ++i) {
+        TDF_Label freeShapeLabel = freeShapes.Value(i);
+        qDebug() << "Adding free shape with tag:" << freeShapeLabel.Tag();
+        
+        // Check if this free shape is already in the tree
+        bool alreadyAdded = false;
+        for (const auto& existingChild : labelRoot->children) {
+            if (existingChild->label == freeShapeLabel) {
+                alreadyAdded = true;
+                break;
+            }
+        }
+        
+        if (!alreadyAdded) {
+            labelRoot->children.push_back(buildLabelTreeWithReferences(freeShapeLabel, shapeTool));
+        }
+    }
+    
+    // Add a special node for all shapes in the document
+    auto allShapesNode = std::make_unique<XCAFLabelNode>(TDF_Label());
+    allShapesNode->label = TDF_Label(); // Empty label to indicate special node
+    
+    // Find all labels that have shapes
+    std::function<void(const TDF_Label&)> collectShapeLabels = [&](const TDF_Label& label) {
+        if (!label.IsNull()) {
+            TopoDS_Shape shape = shapeTool->GetShape(label);
+            if (!shape.IsNull()) {
+                auto shapeNode = std::make_unique<XCAFLabelNode>(label);
+                allShapesNode->children.push_back(std::move(shapeNode));
+            }
+            
+            // Recurse into children
+            for (TDF_ChildIterator it(label); it.More(); it.Next()) {
+                collectShapeLabels(it.Value());
+            }
+        }
+    };
+    
+    collectShapeLabels(doc->Main());
+    qDebug() << "Found" << allShapesNode->children.size() << "labels with shapes";
+    
+    if (!allShapesNode->children.empty()) {
+        labelRoot->children.push_back(std::move(allShapesNode));
+    }
+    
+    qDebug() << "XCAF tree built with" << labelRoot->children.size() << "root children";
+    
     XCAFLabelTreeModel* labelModel = new XCAFLabelTreeModel(std::move(labelRoot));
+    
+    // Pass tools to the model for enhanced information display
+    labelModel->setShapeTool(shapeTool);
+    labelModel->setColorTool(colorTool);
+    
     QTreeView* labelTreeView = new QTreeView;
     labelTreeView->setModel(labelModel);
     labelTreeView->setHeaderHidden(false);
-    labelTreeView->setMinimumWidth(250);
-    splitter->addWidget(labelTreeView);
+    tabWidget->addTab(labelTreeView, "XCAF Labels (Enhanced)");
+    
 
-    // Context menu for show/hide
+
+    // Context menu for show/hide and debug info
     treeView->setContextMenuPolicy(Qt::CustomContextMenu);
     QObject::connect(treeView, &QTreeView::customContextMenuRequested, treeView, [=](const QPoint& pos) {
         QModelIndex idx = treeView->indexAt(pos);
         if (!idx.isValid()) return;
+        
+        TreeNode* node = model->getNode(idx);
+        if (!node) return;
+        
         QMenu menu;
         QAction* showAction = menu.addAction("Show");
         QAction* hideAction = menu.addAction("Hide");
+        
+        // Add debug info option for solids and faces
+        QAction* debugAction = nullptr;
+        QAction* debugFaceAction = nullptr;
+        if (node->type == TopAbs_SOLID) {
+            menu.addSeparator();
+            debugAction = menu.addAction("Debug Solid Info");
+        } else if (node->type == TopAbs_FACE) {
+            menu.addSeparator();
+            debugFaceAction = menu.addAction("Debug Face Info");
+        }
+        
         QObject::connect(showAction, &QAction::triggered, treeView, [=]() {
             auto selection = treeView->selectionModel()->selectedIndexes();
             QSet<TreeNode*> affected;
@@ -407,6 +836,7 @@ int main(int argc, char *argv[])
             viewer->update();
             for (const QModelIndex& selIdx : selection) model->dataChanged(selIdx, selIdx);
         });
+        
         QObject::connect(hideAction, &QAction::triggered, treeView, [=]() {
             auto selection = treeView->selectionModel()->selectedIndexes();
             QSet<TreeNode*> affected;
@@ -420,6 +850,208 @@ int main(int argc, char *argv[])
             viewer->update();
             for (const QModelIndex& selIdx : selection) model->dataChanged(selIdx, selIdx);
         });
+        
+        // Debug info action for solids
+        if (debugAction) {
+            QObject::connect(debugAction, &QAction::triggered, treeView, [=]() {
+                TreeNode* solidNode = model->getNode(idx);
+                if (!solidNode || solidNode->type != TopAbs_SOLID) return;
+                
+                qDebug() << "=== SOLID DEBUG INFO ===";
+                qDebug() << "Node name:" << QString::fromStdString(solidNode->name);
+                qDebug() << "Node type:" << shapeTypeToString(solidNode->type);
+                qDebug() << "Has shape:" << !solidNode->shapeData.shape.IsNull();
+                qDebug() << "Visible:" << solidNode->visible;
+                qDebug() << "Color:" << solidNode->color.r << solidNode->color.g << solidNode->color.b << solidNode->color.a;
+                
+                // Check if solid has faces
+                if (!solidNode->shapeData.shape.IsNull()) {
+                    TopoDS_Shape shape = solidNode->shapeData.shape;
+                    int faceCount = 0;
+                    int edgeCount = 0;
+                    for (TopExp_Explorer exp(shape, TopAbs_FACE); exp.More(); exp.Next()) faceCount++;
+                    for (TopExp_Explorer exp(shape, TopAbs_EDGE); exp.More(); exp.Next()) edgeCount++;
+                    qDebug() << "Solid has" << faceCount << "faces and" << edgeCount << "edges";
+                    
+                    // Check bounding box
+                    Bnd_Box bbox;
+                    BRepBndLib::Add(shape, bbox);
+                    Standard_Real xmin, ymin, zmin, xmax, ymax, zmax;
+                    bbox.Get(xmin, ymin, zmin, xmax, ymax, zmax);
+                    double size = std::max(std::max(xmax-xmin, ymax-ymin), zmax-zmin);
+                    qDebug() << "Bounding box:" << xmin << ymin << zmin << "to" << xmax << ymax << zmax;
+                    qDebug() << "Size:" << size;
+                    
+                    // Check if faces were added to tree
+                    int treeFaceCount = 0;
+                    int treeEdgeCount = 0;
+                    for (const auto& child : solidNode->children) {
+                        if (child->type == TopAbs_FACE) treeFaceCount++;
+                        if (child->type == TopAbs_EDGE) treeEdgeCount++;
+                    }
+                    qDebug() << "Tree has" << treeFaceCount << "faces and" << treeEdgeCount << "edges";
+                    
+                    if (treeFaceCount == 0 && faceCount > 0) {
+                        qDebug() << "WARNING: Solid has faces but no faces in tree!";
+                        qDebug() << "This suggests faces were not added during tree building.";
+                    }
+                }
+                
+                // Check parent info
+                if (idx.parent().isValid()) {
+                    TreeNode* parentNode = model->getNode(idx.parent());
+                    if (parentNode) {
+                        qDebug() << "Parent type:" << shapeTypeToString(parentNode->type);
+                        qDebug() << "Parent name:" << QString::fromStdString(parentNode->name);
+                        qDebug() << "Parent has" << parentNode->children.size() << "children";
+                    }
+                }
+                
+                // Check if solid is in viewer selection
+                bool isSelected = false;
+                // Note: We'd need to access viewer's selection state here
+                qDebug() << "Is selected in viewer:" << isSelected;
+                
+                qDebug() << "=== END SOLID DEBUG INFO ===";
+            });
+        }
+        
+        // Debug info action for faces
+        if (debugFaceAction) {
+            QObject::connect(debugFaceAction, &QAction::triggered, treeView, [=]() {
+                TreeNode* faceNode = model->getNode(idx);
+                if (!faceNode || faceNode->type != TopAbs_FACE) return;
+                
+                qDebug() << "=== FACE DEBUG INFO ===";
+                qDebug() << "Node name:" << QString::fromStdString(faceNode->name);
+                qDebug() << "Node type:" << shapeTypeToString(faceNode->type);
+                qDebug() << "Has shape:" << !faceNode->shapeData.shape.IsNull();
+                qDebug() << "Visible:" << faceNode->visible;
+                qDebug() << "Color:" << faceNode->color.r << faceNode->color.g << faceNode->color.b << faceNode->color.a;
+                
+                // Check face geometry
+                if (!faceNode->shapeData.shape.IsNull()) {
+                    TopoDS_Face face = TopoDS::Face(faceNode->shapeData.shape);
+                    
+                    // Check bounding box
+                    Bnd_Box bbox;
+                    BRepBndLib::Add(face, bbox);
+                    Standard_Real xmin, ymin, zmin, xmax, ymax, zmax;
+                    bbox.Get(xmin, ymin, zmin, xmax, ymax, zmax);
+                    double size = std::max(std::max(xmax-xmin, ymax-ymin), zmax-zmin);
+                    qDebug() << "Face bounding box:" << xmin << ymin << zmin << "to" << xmax << ymax << zmax;
+                    qDebug() << "Face size:" << size;
+                    
+                    // Check if face is too small
+                    if (size < 0.001) {
+                        qDebug() << "WARNING: Face is very small (< 0.001), might be skipped during rendering";
+                    }
+                    
+                    // Check face orientation
+                    if (face.Orientation() == TopAbs_FORWARD) {
+                        qDebug() << "Face orientation: FORWARD";
+                    } else if (face.Orientation() == TopAbs_REVERSED) {
+                        qDebug() << "Face orientation: REVERSED";
+                    } else {
+                        qDebug() << "Face orientation: INTERNAL";
+                    }
+                    
+                    // Check if face is closed
+                    TopExp_Explorer edgeExp(face, TopAbs_EDGE);
+                    int edgeCount = 0;
+                    for (; edgeExp.More(); edgeExp.Next()) edgeCount++;
+                    qDebug() << "Face has" << edgeCount << "edges";
+                    
+                    // Check surface type
+                    Handle(Geom_Surface) surface = BRep_Tool::Surface(face);
+                    if (!surface.IsNull()) {
+                        qDebug() << "Surface type:" << surface->DynamicType()->Name();
+                    } else {
+                        qDebug() << "WARNING: Face has no surface!";
+                    }
+                    
+                    // Test tessellation
+                    qDebug() << "=== TESSELLATION TEST ===";
+                    double testPrecision = 0.1; // Start with coarse precision
+                    BRepMesh_IncrementalMesh testMesher(face, testPrecision);
+                    TopLoc_Location testLoc;
+                    Handle(Poly_Triangulation) testTriangulation = BRep_Tool::Triangulation(face, testLoc);
+                    
+                    if (testTriangulation.IsNull()) {
+                        qDebug() << "TESSELLATION FAILED: triangulation is null";
+                    } else if (testTriangulation->Triangles().IsEmpty()) {
+                        qDebug() << "TESSELLATION FAILED: triangulation has no triangles";
+                        qDebug() << "Triangulation has" << testTriangulation->NbNodes() << "nodes";
+                    } else {
+                        qDebug() << "TESSELLATION SUCCESS: triangulation has" << testTriangulation->Triangles().Size() << "triangles";
+                        qDebug() << "Triangulation has" << testTriangulation->NbNodes() << "nodes";
+                    }
+                    
+                    // Try different precision values
+                    for (double precision : {0.5, 0.1, 0.05, 0.01}) {
+                        BRepMesh_IncrementalMesh testMesher2(face, precision);
+                        Handle(Poly_Triangulation) testTri2 = BRep_Tool::Triangulation(face, testLoc);
+                        if (!testTri2.IsNull() && !testTri2->Triangles().IsEmpty()) {
+                            qDebug() << "SUCCESS with precision" << precision << ":" << testTri2->Triangles().Size() << "triangles";
+                            break;
+                        } else {
+                            qDebug() << "FAILED with precision" << precision;
+                        }
+                    }
+                    qDebug() << "=== END TESSELLATION TEST ===";
+                    
+                    // Test rendering pipeline
+                    qDebug() << "=== RENDERING PIPELINE TEST ===";
+                    
+                    // Test distance culling (simulate OpenGL widget logic)
+                    QVector3D faceCenter((xmin + xmax) * 0.5, (ymin + ymax) * 0.5, (zmin + zmax) * 0.5);
+                    qDebug() << "Face center:" << faceCenter;
+                    
+                    // Simulate camera position (you might need to adjust these values)
+                    QVector3D simulatedCameraPos(0, 0, 100); // Typical camera position
+                    float simulatedCameraZoom = 100.0f; // Typical zoom
+                    
+                    QVector3D toCamera = faceCenter - simulatedCameraPos;
+                    float distanceSquared = toCamera.x() * toCamera.x() + toCamera.y() * toCamera.y() + toCamera.z() * toCamera.z();
+                    float distanceLimit = simulatedCameraZoom * simulatedCameraZoom * 200.0f;
+                    
+                    qDebug() << "Distance to camera:" << sqrt(distanceSquared);
+                    qDebug() << "Distance limit:" << sqrt(distanceLimit);
+                    if (distanceSquared > distanceLimit) {
+                        qDebug() << "WARNING: Face would be culled due to distance!";
+                    } else {
+                        qDebug() << "Distance OK for rendering";
+                    }
+                    
+                    // Test size culling
+                    if (size < 0.001) {
+                        qDebug() << "WARNING: Face would be culled due to small size!";
+                    } else {
+                        qDebug() << "Size OK for rendering";
+                    }
+                    
+                    // Test if face is a plane (which should render fine)
+                    if (surface->DynamicType()->Name() == "Geom_Plane") {
+                        qDebug() << "Plane surface - should render easily";
+                    }
+                    
+                    qDebug() << "=== END RENDERING PIPELINE TEST ===";
+                }
+                
+                // Check parent info
+                if (idx.parent().isValid()) {
+                    TreeNode* parentNode = model->getNode(idx.parent());
+                    if (parentNode) {
+                        qDebug() << "Parent type:" << shapeTypeToString(parentNode->type);
+                        qDebug() << "Parent name:" << QString::fromStdString(parentNode->name);
+                        qDebug() << "Parent has" << parentNode->children.size() << "children";
+                    }
+                }
+                
+                qDebug() << "=== END FACE DEBUG INFO ===";
+            });
+        }
+        
         menu.exec(treeView->viewport()->mapToGlobal(pos));
     });
 

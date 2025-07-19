@@ -44,27 +44,39 @@ static void screenToWorldRay(const QPoint& pos, int width, int height, const QVe
 QPoint CadOpenGLWidget_projectWorldToScreen(const QVector3D& world, int width, int height, const QVector3D& cameraPos, const QQuaternion& cameraRot, float cameraZoom);
 static QVector3D unprojectScreenToWorld(const QPoint& screenPos, float depth, int width, int height, const QVector3D& cameraPos, const QQuaternion& cameraRot, float cameraZoom);
 
-// Global geometry cache using TShape pointer as key
-static std::map<const void*, CachedGeometry> g_geometryCache;
-static bool g_cacheDirty = true;
-static int g_frameCount = 0; // Add frame counter for performance monitoring
-static bool g_performanceMode = false; // Force performance mode immediately
-static int g_skipFrames = 0; // Frame skipping counter
-
 // Function to clear geometry cache
-void clearGeometryCache() {
-    for (auto& [shapePtr, cache] : g_geometryCache) {
-        if (cache.initialized && cache.displayList != 0) {
+void CadOpenGLWidget::clearGeometryCache() {
+    for (auto& [shapePtr, cache] : m_geometryCache) {
+        if (cache.isValid()) {
             glDeleteLists(cache.displayList, 1);
-            cache.initialized = false;
         }
+        cache.markInvalid();
     }
-    g_geometryCache.clear();
-    g_cacheDirty = true;
+    m_geometryCache.clear();
+    m_cacheDirty = true;
 }
 
 CadOpenGLWidget::CadOpenGLWidget(QWidget *parent)
-    : QOpenGLWidget(parent), m_rotating(false), m_firstRotateMove(false) {}
+    : QOpenGLWidget(parent), m_rotating(false), m_firstRotateMove(false) {
+    
+    // Set up continuous rendering timer for 60fps
+    m_renderTimer.setInterval(16); // ~60fps (1000ms / 60fps ≈ 16.67ms)
+    connect(&m_renderTimer, &QTimer::timeout, this, [this]() {
+        if (m_windowActive) {
+            // Update hover state continuously when in selection modes
+            QPoint currentPos = mapFromGlobal(QCursor::pos());
+            if (rect().contains(currentPos)) {
+                if (m_selectionMode == SelectionMode::Faces) {
+                    pickHoveredFaceAt(currentPos);
+                } else if (m_selectionMode == SelectionMode::Edges) {
+                    pickHoveredEdgeAt(currentPos);
+                }
+            }
+            update(); // Trigger a render update
+        }
+    });
+    m_renderTimer.start();
+}
 
 CadOpenGLWidget::~CadOpenGLWidget() {
     // Clean up color batches
@@ -110,13 +122,14 @@ void CadOpenGLWidget::resizeGL(int w, int h) {
 
 // Optimized geometry caching function with balanced settings
 CachedGeometry& CadOpenGLWidget::getOrCreateCachedGeometry(const TopoDS_Face& face) {
+    m_totalFaces++;
     const void* shapePtr = face.TShape().get();
-    auto it = g_geometryCache.find(shapePtr);
-    if (it != g_geometryCache.end() && it->second.initialized) {
+    auto it = m_geometryCache.find(shapePtr);
+    if (it != m_geometryCache.end() && it->second.initialized) {
         return it->second;
     }
     
-    CachedGeometry& cache = g_geometryCache[shapePtr];
+    CachedGeometry& cache = m_geometryCache[shapePtr];
     if (cache.initialized) {
         return cache;
     }
@@ -141,24 +154,25 @@ CachedGeometry& CadOpenGLWidget::getOrCreateCachedGeometry(const TopoDS_Face& fa
     
     // Skip only very small faces
     if (faceSize < 0.001) {
-        cache.initialized = true;
-        cache.triangleCount = 0;
+        m_skippedFaces++;
+        qDebug() << "Skipping face due to small size:" << faceSize << "at center" << faceCenter;
+        cache.markInvalid();
         return cache;
     }
-    
-    // Moderate distance culling
-    if (distanceSquared > m_cameraZoom * m_cameraZoom * 200.0f) {
-        cache.initialized = true;
-        cache.triangleCount = 0;
-        return cache;
-    }
-    
+
     // Use moderate precision reduction
     precision *= 1.5; // 1.5x coarser for performance
     
     BRepMesh_IncrementalMesh mesher(face, precision);
     TopLoc_Location locCopy;
     Handle(Poly_Triangulation) triangulation = BRep_Tool::Triangulation(face, locCopy);
+    
+    // Validate that we have a valid OpenGL context before creating display lists
+    if (!QOpenGLContext::currentContext()) {
+        qDebug() << "No OpenGL context available for face at center" << faceCenter;
+        cache.markInvalid();
+        return cache;
+    }
     
     if (!triangulation.IsNull() && !triangulation->Triangles().IsEmpty()) {
         const Poly_Array1OfTriangle& triangles = triangulation->Triangles();
@@ -204,22 +218,38 @@ CachedGeometry& CadOpenGLWidget::getOrCreateCachedGeometry(const TopoDS_Face& fa
         }
         
         if (!vertices.empty()) {
+            qDebug () << "VertCount: " << vertices.size();
             // Create display list for legacy OpenGL
             cache.displayList = glGenLists(1);
-            glNewList(cache.displayList, GL_COMPILE);
-            
-            glBegin(GL_TRIANGLES);
-            for (size_t i = 0; i < vertices.size(); i += 9) {
-                glVertex3f(vertices[i], vertices[i+1], vertices[i+2]);
-                glVertex3f(vertices[i+3], vertices[i+4], vertices[i+5]);
-                glVertex3f(vertices[i+6], vertices[i+7], vertices[i+8]);
+            if (cache.displayList != 0) { // Check if display list creation succeeded
+                glNewList(cache.displayList, GL_COMPILE);
+                
+                glBegin(GL_TRIANGLES);
+                for (size_t i = 0; i < vertices.size(); i += 9) {
+                    glVertex3f(vertices[i], vertices[i+1], vertices[i+2]);
+                    glVertex3f(vertices[i+3], vertices[i+4], vertices[i+5]);
+                    glVertex3f(vertices[i+6], vertices[i+7], vertices[i+8]);
+                }
+                glEnd();
+                
+                glEndList();
+                cache.triangleCount = vertices.size() / 9;
+                cache.initialized = true;
+            } else {
+                // Display list creation failed
+                qDebug() << "Failed to create display list for face at center" << faceCenter;
+                cache.markInvalid();
             }
-            glEnd();
-            
-            glEndList();
-            cache.triangleCount = vertices.size() / 9;
-            cache.initialized = true;
+        } else {
+            // No vertices generated
+            qDebug() << "No vertices generated for face at center" << faceCenter;
+            cache.markInvalid();
         }
+    } else {
+        // Tessellation failed
+        m_skippedFaces++;
+        qDebug() << "Skipping face due to tessellation failure - triangulation null or empty at center" << faceCenter;
+        cache.markInvalid();
     }
     
     return cache;
@@ -278,7 +308,7 @@ void CadOpenGLWidget::traverseAndRender(TreeNode* node, CADNodeColor inheritedCo
                 }
                 break;
             case TopAbs_EDGE:
-                // Skip dedicated edge rendering for performance
+                // Skip edge rendering for performance - only render highlighted edges separately
                 break;
             default:
                 break;
@@ -305,20 +335,61 @@ void CadOpenGLWidget::renderFaceOptimized(TreeNode* node, const CADNodeColor& co
     if (face.IsNull()) return;
     
     CachedGeometry& cache = getOrCreateCachedGeometry(face);
-    if (!cache.initialized) return;
+    if (!cache.isValid()) {
+        // Skip rendering for invalid geometry
+        return;
+    }
     
-    // Set color once
-    glColor4f(color.r, color.g, color.b, color.a);
+    // Check if this face is being hovered over
+    bool isHovered = false;
+    if (m_selectionMode == SelectionMode::Faces && hoveredFaceNode_) {
+        // Compare TreeNode pointers to check if this is the hovered face
+        if (node == hoveredFaceNode_) {
+            isHovered = true;
+        }
+    }
     
-    // Render using display list
+    // Check if this face is selected
+    bool isSelected = false;
+    if (!selectedFaceNodes_.empty()) {
+        // Check if this node is in the selected faces list
+        auto it = std::find(selectedFaceNodes_.begin(), selectedFaceNodes_.end(), node);
+        if (it != selectedFaceNodes_.end()) {
+            isSelected = true;
+                    if (m_frameCount % 60 == 0) {
+            qDebug() << "[MultiSelect] Rendering selected face, total selected:" << selectedFaceNodes_.size() << "node:" << node;
+        }
+        }
+    }
+    
+    // Set color based on state
+    if (isSelected) {
+        // Selected face: bright yellow
+        glColor4f(1.0f, 1.0f, 0.0f, 0.8f);
+    } else if (isHovered) {
+        // Hovered face: bright green
+        glColor4f(0.0f, 1.0f, 0.0f, 0.7f);
+    } else {
+        // Normal face: use original color
+        glColor4f(color.r, color.g, color.b, color.a);
+    }
+    
+    // Render using display list (only if valid)
     glCallList(cache.displayList);
     
     // Add thin wireframe overlay for edge effect without dedicated edge rendering
-    glColor4f(0.0f, 0.0f, 0.0f, 0.3f); // Semi-transparent black
-    glLineWidth(1.0f);
+    if (isSelected || isHovered) {
+        // Highlighted faces get a more prominent wireframe
+        glColor4f(0.0f, 0.0f, 0.0f, 0.8f); // Darker, more opaque wireframe
+        glLineWidth(2.0f); // Thicker lines for highlighted faces
+    } else {
+        glColor4f(0.0f, 0.0f, 0.0f, 0.3f); // Semi-transparent black
+        glLineWidth(1.0f);
+    }
     glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-    glCallList(cache.displayList);
+    glCallList(cache.displayList); // This is safe now since we checked displayList != 0 above
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL); // Reset to fill mode
+    glLineWidth(1.0f); // Reset line width
 }
 
 void CadOpenGLWidget::paintGL() {
@@ -326,9 +397,9 @@ void CadOpenGLWidget::paintGL() {
     paintTimer.start();
     
     // Frame skipping for very slow rendering
-    g_frameCount++;
-    if (g_skipFrames > 0) {
-        g_skipFrames--;
+    m_frameCount++;
+    if (m_skipFrames > 0) {
+        m_skipFrames--;
         return; // Skip this frame entirely
     }
     
@@ -341,7 +412,7 @@ void CadOpenGLWidget::paintGL() {
         if (frameTime > 100000000) { // If frame took more than 100ms (10 FPS)
             consecutiveSlowFrames++;
             if (consecutiveSlowFrames > 3) {
-                g_skipFrames = 2; // Skip next 2 frames
+                m_skipFrames = 2; // Skip next 2 frames
                 consecutiveSlowFrames = 0;
             }
         } else {
@@ -375,21 +446,31 @@ void CadOpenGLWidget::paintGL() {
     renderTimer.start();
     
     // Only rebuild cache if dirty
-    if (g_cacheDirty) {
+    if (m_cacheDirty) {
         buildColorBatches();
-        g_cacheDirty = false;
+        m_cacheDirty = false;
     }
     
     renderBatchedGeometry();
     
+    // Render highlighted edges only (performance optimized)
+    if (m_selectionMode == SelectionMode::Edges && (hoveredEdgeNode_ || !selectedEdgeNodes_.empty())) {
+        renderHighlightedEdges();
+    }
+    
     qint64 renderTime = renderTimer.nsecsElapsed();
     
     // Print render time every frame for real-time monitoring
-    qDebug() << "[Profile] Optimized geometry rendering took:" << renderTime / 1000000.0 << "ms";
+    //qDebug() << "[Profile] Optimized geometry rendering took:" << renderTime / 1000000.0 << "ms";
     
     // Log cache statistics (very infrequently to minimize overhead)
-    if (g_frameCount % 1200 == 0) { // Log every 20 seconds
-        qDebug() << "[Cache] Geometry cache size:" << g_geometryCache.size() << "entries";
+    if (m_frameCount % 1200 == 0) { // Log every 20 seconds
+        qDebug() << "[Cache] Geometry cache size:" << m_geometryCache.size() << "entries";
+    }
+    
+    // Log face processing statistics every 300 frames (5 seconds at 60fps)
+    if (m_frameCount % 300 == 0) {
+        qDebug() << "[Face Stats] Total faces processed:" << m_totalFaces << "Skipped:" << m_skippedFaces << "Success rate:" << (m_totalFaces > 0 ? (100.0 * (m_totalFaces - m_skippedFaces) / m_totalFaces) : 0) << "%";
     }
     
     // Keep camera controls working by not disabling pivot sphere
@@ -410,14 +491,67 @@ void CadOpenGLWidget::paintGL() {
     }
     
     qint64 totalPaintTime = paintTimer.nsecsElapsed();
-    qDebug() << "[Profile] Total optimized paintGL time:" << totalPaintTime / 1000000.0 << "ms";
+    //qDebug() << "[Profile] Total optimized paintGL time:" << totalPaintTime / 1000000.0 << "ms";
 }
 
 void CadOpenGLWidget::mousePressEvent(QMouseEvent* event) {
     g_lastMousePos = event->pos();
-    if (event->button() == Qt::RightButton) {
+    
+    if (event->button() == Qt::LeftButton) {
+        // Store press position for click detection
+        m_mousePressPos = event->pos();
+        m_mousePressed = true;
+        m_mouseDragged = false;
+    } else if (event->button() == Qt::MiddleButton) {
+        // Middle mouse button for selection based on current mode
         QVector3D hitPoint;
-        if (pickElementAt(event->pos(), &hitPoint)) {
+        TreeNode* pickedNode = nullptr;
+        
+        if (m_selectionMode == SelectionMode::Faces) {
+            if (pickElementAt(event->pos(), &hitPoint)) {
+                pickedNode = selectedFaceNode_;
+            }
+        } else if (m_selectionMode == SelectionMode::Edges) {
+            if (pickEdgeAt(event->pos(), &hitPoint)) {
+                pickedNode = selectedEdgeNode_;
+            }
+        }
+        
+        // Handle multi-selection with Ctrl+click
+        if (pickedNode) {
+            if (event->modifiers() & Qt::ControlModifier) {
+                // Ctrl+click: add/remove from selection
+                if (m_selectionMode == SelectionMode::Faces) {
+                    addToSelection(pickedNode);
+                    // Don't emit signal for Ctrl+click to avoid tree view interference
+                } else if (m_selectionMode == SelectionMode::Edges) {
+                    addToSelection(pickedNode);
+                    // Don't emit signal for Ctrl+click to avoid tree view interference
+                }
+            } else {
+                // Regular click: clear selection and select single item
+                clearSelection();
+                if (m_selectionMode == SelectionMode::Faces) {
+                    selectedFaceNodes_.push_back(pickedNode);
+                    selectedFaceNode_ = pickedNode;
+                    selectedFace_ = TopoDS::Face(pickedNode->getFace().Located(pickedNode->loc));
+                    qDebug() << "[MultiSelect] Regular click selected face, total:" << selectedFaceNodes_.size();
+                    emit facePicked(pickedNode); // Emit signal for tree view update
+                } else if (m_selectionMode == SelectionMode::Edges) {
+                    selectedEdgeNodes_.push_back(pickedNode);
+                    selectedEdgeNode_ = pickedNode;
+                    selectedEdge_ = TopoDS::Edge(pickedNode->getEdge().Located(pickedNode->loc));
+                    qDebug() << "[MultiSelect] Regular click selected edge, total:" << selectedEdgeNodes_.size();
+                    emit edgePicked(pickedNode); // Emit signal for tree view update
+                }
+                update();
+            }
+        }
+        // No selection for SelectionMode::None
+    } else if (event->button() == Qt::RightButton) {
+        QVector3D hitPoint;
+        // Use a separate picking function that doesn't change selection
+        if (pickElementAtForPivot(event->pos(), &hitPoint)) {
             // Only update the pivot position and show the sphere, do NOT move or recenter the camera
             m_pivotWorldPos = hitPoint;
             setPivotSphere(hitPoint);
@@ -440,6 +574,16 @@ void CadOpenGLWidget::mouseMoveEvent(QMouseEvent* event) {
     QVector3D newCameraPos = m_cameraPos;
     QQuaternion newCameraRot = m_cameraRot;
     float newCameraZoom = m_cameraZoom;
+    bool cameraChanged = false;
+    
+    // Check if mouse has moved enough to be considered a drag
+    if (m_mousePressed && !m_mouseDragged) {
+        int dragDistance = (event->pos() - m_mousePressPos).manhattanLength();
+        if (dragDistance > 3) { // 3 pixel threshold for drag detection
+            m_mouseDragged = true;
+        }
+    }
+    
     if (event->buttons() & Qt::LeftButton) {
         // Pan: move both camera and pivot in local X/Y
         float panSpeed = m_cameraZoom * 0.002f;
@@ -448,6 +592,7 @@ void CadOpenGLWidget::mouseMoveEvent(QMouseEvent* event) {
         QVector3D pan = -right * dx * panSpeed + up * dy * panSpeed;
         newCameraPos += pan;
         m_pivotWorldPos += pan;
+        cameraChanged = true;
     } else if (event->buttons() & Qt::RightButton) {
         // --- Precise fix: Keep pivot at same screen position during rotation using unprojection ---
         QPoint oldScreenPos;
@@ -496,21 +641,120 @@ void CadOpenGLWidget::mouseMoveEvent(QMouseEvent* event) {
         // 7. Apply offset to camera position and pivot
         newCameraPos += offset;
         m_pivotWorldPos += offset;
+        cameraChanged = true;
     }
-    setCamera(newCameraPos, newCameraRot, m_cameraZoom);
+    
+    if (cameraChanged) {
+        setCamera(newCameraPos, newCameraRot, m_cameraZoom);
+    }
+    
     g_lastMousePos = event->pos();
-    pickHoveredFaceAt(event->pos());
+    
+    // Always do hover picking and update rendering on mouse movement
+    // This ensures smooth hover highlighting even when no buttons are pressed
+    if (m_selectionMode == SelectionMode::Faces) {
+        pickHoveredFaceAt(event->pos());
+        // Clear edge hover state
+        hoveredEdge_.Nullify();
+        hoveredEdgeNode_ = nullptr;
+    } else if (m_selectionMode == SelectionMode::Edges) {
+        pickHoveredEdgeAt(event->pos());
+        // Clear face hover state
+        hoveredFace_.Nullify();
+        hoveredFaceNode_ = nullptr;
+    } else {
+        // Clear all hover states when not in selection mode
+        hoveredFace_.Nullify();
+        hoveredFaceNode_ = nullptr;
+        hoveredEdge_.Nullify();
+        hoveredEdgeNode_ = nullptr;
+    }
+    
+    // Always trigger a render update on mouse movement for smooth hover feedback
     update();
 }
 
 // On mouse release, hide the pivot sphere
 void CadOpenGLWidget::mouseReleaseEvent(QMouseEvent* event) {
-    if (event->button() == Qt::RightButton) {
+    if (event->button() == Qt::LeftButton) {
+        // Check if this was a click (not a drag)
+        if (m_mousePressed && !m_mouseDragged) {
+            // This was a click in place - handle selection
+            QVector3D hitPoint;
+            TreeNode* pickedNode = nullptr;
+            
+            if (m_selectionMode == SelectionMode::Faces) {
+                if (pickElementAt(event->pos(), &hitPoint)) {
+                    pickedNode = selectedFaceNode_;
+                }
+            } else if (m_selectionMode == SelectionMode::Edges) {
+                if (pickEdgeAt(event->pos(), &hitPoint)) {
+                    pickedNode = selectedEdgeNode_;
+                }
+            }
+            
+            // Handle multi-selection with Ctrl+click
+            if (pickedNode) {
+                if (event->modifiers() & Qt::ControlModifier) {
+                    // Ctrl+click: add/remove from selection
+                    if (m_selectionMode == SelectionMode::Faces) {
+                        addToSelection(pickedNode);
+                        // Don't emit signal for Ctrl+click to avoid tree view interference
+                    } else if (m_selectionMode == SelectionMode::Edges) {
+                        addToSelection(pickedNode);
+                        // Don't emit signal for Ctrl+click to avoid tree view interference
+                    }
+                } else {
+                    // Regular click: clear selection and select single item
+                    clearSelection();
+                    if (m_selectionMode == SelectionMode::Faces) {
+                        selectedFaceNodes_.push_back(pickedNode);
+                        selectedFaceNode_ = pickedNode;
+                        selectedFace_ = TopoDS::Face(pickedNode->getFace().Located(pickedNode->loc));
+                        qDebug() << "[MultiSelect] Left click selected face, total:" << selectedFaceNodes_.size();
+                        emit facePicked(pickedNode); // Only emit signal for single selection
+                    } else if (m_selectionMode == SelectionMode::Edges) {
+                        selectedEdgeNodes_.push_back(pickedNode);
+                        selectedEdgeNode_ = pickedNode;
+                        selectedEdge_ = TopoDS::Edge(pickedNode->getEdge().Located(pickedNode->loc));
+                        qDebug() << "[MultiSelect] Left click selected edge, total:" << selectedEdgeNodes_.size();
+                        emit edgePicked(pickedNode); // Only emit signal for single selection
+                    }
+                    update();
+                }
+            }
+        }
+        
+        // Reset mouse state
+        m_mousePressed = false;
+        m_mouseDragged = false;
+    } else if (event->button() == Qt::RightButton) {
         m_showPivotSphere = false;
         m_rotating = false;
         m_firstRotateMove = false;
         update();
     }
+}
+
+// Clear hover state when mouse leaves the widget
+void CadOpenGLWidget::leaveEvent(QEvent* event) {
+    hoveredFace_.Nullify();
+    hoveredFaceNode_ = nullptr;
+    hoveredEdge_.Nullify();
+    hoveredEdgeNode_ = nullptr;
+    update();
+    QOpenGLWidget::leaveEvent(event);
+}
+
+// Handle window focus events to control continuous rendering
+void CadOpenGLWidget::focusInEvent(QFocusEvent* event) {
+    m_windowActive = true;
+    QOpenGLWidget::focusInEvent(event);
+}
+
+void CadOpenGLWidget::focusOutEvent(QFocusEvent* event) {
+    m_windowActive = false;
+    QOpenGLWidget::focusOutEvent(event);
 }
 
 // Helper: Project a 3D point to screen coordinates using the current camera state
@@ -560,7 +804,7 @@ void CadOpenGLWidget::wheelEvent(QWheelEvent* event) {
     QPoint mousePos = event->position().toPoint();
     QVector3D intersection;
     
-    if (pickElementAt(mousePos, &intersection)) {
+    if (pickElementAtForPivot(mousePos, &intersection)) {
         // Zoom to point: adjust camera position to keep intersection under cursor
         QVector3D viewDir = m_cameraRot.rotatedVector(QVector3D(0, 0, -1));
         float newCameraZoom = m_cameraZoom - zoomDelta;
@@ -596,7 +840,7 @@ void CadOpenGLWidget::wheelEvent(QWheelEvent* event) {
 
 void CadOpenGLWidget::setRootTreeNode(TreeNode* root) {
     rootNode_ = root;
-    g_cacheDirty = true; // Mark cache as dirty when root changes
+    m_cacheDirty = true; // Mark cache as dirty when root changes
     update();
 }
 
@@ -606,7 +850,7 @@ void CadOpenGLWidget::clearCache() {
 }
 
 int CadOpenGLWidget::getCacheSize() const {
-    return static_cast<int>(g_geometryCache.size());
+    return static_cast<int>(m_geometryCache.size());
 }
 
 // Simple frustum culling implementation with extremely aggressive culling
@@ -688,6 +932,9 @@ bool CadOpenGLWidget::isInFrustum(const TopoDS_Face& face, const TopLoc_Location
 void CadOpenGLWidget::renderFace(TreeNode* node, const CADNodeColor& color) {
     if (!node || !node->hasFace()) return;
     const TopoDS_Face& face = node->getFace();
+    if (face.IsNull()) {
+        qDebug() << "Null face data";
+    }
     if (face.IsNull()) return;
     // No transform here! It is already applied in traverseAndRender or paintGL.
     glDisable(GL_LIGHTING); // Ensure flat coloring
@@ -795,6 +1042,98 @@ void CadOpenGLWidget::renderEdge(const TopoDS_Edge& edge, const CADNodeColor& co
     glLineWidth(1.0f); // Reset line width
 } 
 
+// Optimized edge rendering for highlighted edges only
+void CadOpenGLWidget::renderEdgeOptimized(TreeNode* node, const CADNodeColor& color) {
+    if (!node || !node->hasEdge()) return;
+    
+    const TopoDS_Edge& edge = node->getEdge();
+    if (edge.IsNull()) return;
+    
+    // Apply node transformation if needed
+    bool needsTransform = !node->loc.IsIdentity();
+    if (needsTransform) {
+        const TopLoc_Location& fullLoc = node->loc;
+        const gp_Trsf& trsf = fullLoc.Transformation();
+        const gp_Mat& mat = trsf.VectorialPart();
+        const gp_XYZ& trans = trsf.TranslationPart();
+        
+        glMatrixMode(GL_MODELVIEW);
+        glPushMatrix();
+        double matrix[16] = {
+            mat.Value(1,1), mat.Value(2,1), mat.Value(3,1), 0.0,
+            mat.Value(1,2), mat.Value(2,2), mat.Value(3,2), 0.0,
+            mat.Value(1,3), mat.Value(2,3), mat.Value(3,3), 0.0,
+            trans.X(),     trans.Y(),     trans.Z(),     1.0
+        };
+        glMultMatrixd(matrix);
+    }
+    
+    // Set color and line width based on passed color (already determined by caller)
+    glColor4f(color.r, color.g, color.b, color.a);
+    if (color.r == 1.0f && color.g == 1.0f && color.b == 0.0f) {
+        // Selected edge: bright yellow
+        glLineWidth(4.0f);
+    } else if (color.r == 0.0f && color.g == 1.0f && color.b == 0.0f) {
+        // Hovered edge: bright green
+        glLineWidth(3.0f);
+    } else {
+        // Fallback
+        glLineWidth(2.0f);
+    }
+    
+    // Render the edge
+    Standard_Real first, last;
+    TopLoc_Location locCopy;
+    Handle(Geom_Curve) curve = BRep_Tool::Curve(edge, locCopy, first, last);
+    
+    if (curve.IsNull()) {
+        if (needsTransform) {
+            glPopMatrix();
+        }
+        return;
+    }
+    
+    // Determine number of segments based on curve length
+    Standard_Real curveLength = last - first;
+    int N = std::max<int>(10, static_cast<int>(curveLength * 5)); // Optimized for performance
+    
+    glBegin(GL_LINE_STRIP);
+    for (int i = 0; i <= N; ++i) {
+        Standard_Real t = first + (last - first) * i / N;
+        gp_Pnt p;
+        
+        try {
+            curve->D0(t, p);
+            glVertex3d(p.X(), p.Y(), p.Z());
+        } catch (const Standard_Failure&) {
+            continue;
+        }
+    }
+    glEnd();
+    
+    glLineWidth(1.0f); // Reset line width
+    
+    // Restore transformation if needed
+    if (needsTransform) {
+        glPopMatrix();
+    }
+}
+
+// Render only highlighted edges for performance
+void CadOpenGLWidget::renderHighlightedEdges() {
+    // Render hovered edge
+    if (hoveredEdgeNode_) {
+        renderEdgeOptimized(hoveredEdgeNode_, CADNodeColor(0.0f, 1.0f, 0.0f, 0.8f));
+    }
+    
+    // Render all selected edges
+    for (TreeNode* node : selectedEdgeNodes_) {
+        if (node != hoveredEdgeNode_) { // Don't render twice if hovered and selected
+            renderEdgeOptimized(node, CADNodeColor(1.0f, 1.0f, 0.0f, 0.9f));
+        }
+    }
+}
+
 // Helper: Unproject screen point to world ray, matching new camera system
 static void screenToWorldRay(const QPoint& pos, int width, int height, const QVector3D& cameraPos, const QQuaternion& cameraRot, float cameraZoom, gp_Pnt& rayOrigin, gp_Dir& rayDir)
 {
@@ -841,7 +1180,7 @@ bool CadOpenGLWidget::pickElementAt(const QPoint& pos, QVector3D* outIntersectio
     cacheTimer.start();
     buildFaceCache();
     qint64 cacheTime = cacheTimer.nsecsElapsed();
-    if (g_frameCount % 60 == 0) {
+    if (m_frameCount % 60 == 0) {
         qDebug() << "[Profile] Face cache build took:" << cacheTime / 1000000.0 << "ms";
     }
     
@@ -852,7 +1191,7 @@ bool CadOpenGLWidget::pickElementAt(const QPoint& pos, QVector3D* outIntersectio
     screenToWorldRay(pos, width(), height(), m_cameraPos, m_cameraRot, m_cameraZoom, rayOrigin, rayDir);
     gp_Lin ray(rayOrigin, rayDir);
     qint64 rayTime = rayTimer.nsecsElapsed();
-    if (g_frameCount % 60 == 0) {
+    if (m_frameCount % 60 == 0) {
         qDebug() << "[Profile] Ray setup took:" << rayTime / 1000000.0 << "ms";
     }
     
@@ -881,39 +1220,214 @@ bool CadOpenGLWidget::pickElementAt(const QPoint& pos, QVector3D* outIntersectio
         }
     }
     qint64 intersectTime = intersectTimer.nsecsElapsed();
-    if (g_frameCount % 60 == 0) {
+    if (m_frameCount % 60 == 0) {
         qDebug() << "[Profile] Intersection testing took:" << intersectTime / 1000000.0 << "ms (tested" << faceCache_.size() << "faces)";
     }
-    if (pickedFace && pickedFace->node) {
-        TreeNode* node = pickedFace->node;
-        selectedFace_ = TopoDS::Face(node->getFace().Located(node->loc));
-        selectedFaceNode_ = node;
-        if (g_frameCount % 60 == 0) {
-            qDebug() << "[Ray] Selected face at TShape address:" << (void*)selectedFace_.TShape().get();
-        }
-        emit facePicked(node); // Emit signal on click
-        if (outIntersection && found) {
-            *outIntersection = QVector3D(pickedPoint.X(), pickedPoint.Y(), pickedPoint.Z());
-        }
+            if (pickedFace && pickedFace->node) {
+            TreeNode* node = pickedFace->node;
+            selectedFace_ = TopoDS::Face(node->getFace().Located(node->loc));
+            selectedFaceNode_ = node;
+            if (m_frameCount % 60 == 0) {
+                qDebug() << "[Ray] Selected face at TShape address:" << (void*)selectedFace_.TShape().get();
+            }
+            // Don't emit signal here - let the mouse press handler manage selection
+            if (outIntersection && found) {
+                *outIntersection = QVector3D(pickedPoint.X(), pickedPoint.Y(), pickedPoint.Z());
+            }
         qint64 totalPickTime = pickTimer.nsecsElapsed();
-        if (g_frameCount % 60 == 0) {
+        if (m_frameCount % 60 == 0) {
             qDebug() << "[Profile] Total pickElementAt time:" << totalPickTime / 1000000.0 << "ms";
         }
         update();
         return true;
     } else {
         selectedFaceNode_ = nullptr;
-        if (g_frameCount % 60 == 0) {
+        if (m_frameCount % 60 == 0) {
             qDebug() << "No face selected (ray)";
         }
         qint64 totalPickTime = pickTimer.nsecsElapsed();
-        if (g_frameCount % 60 == 0) {
+        if (m_frameCount % 60 == 0) {
             qDebug() << "[Profile] Total pickElementAt time (no hit):" << totalPickTime / 1000000.0 << "ms";
         }
         update();
         return false;
     }
 } 
+
+// Edge picking function
+bool CadOpenGLWidget::pickEdgeAt(const QPoint& pos, QVector3D* outIntersection) {
+    QElapsedTimer pickTimer;
+    pickTimer.start();
+    
+    selectedEdge_.Nullify();
+    selectedEdgeNode_ = nullptr;
+    if (!rootNode_) return false;
+    
+    QElapsedTimer cacheTimer;
+    cacheTimer.start();
+    buildEdgeCache();
+    qint64 cacheTime = cacheTimer.nsecsElapsed();
+    if (m_frameCount % 60 == 0) {
+        qDebug() << "[Profile] Edge cache build took:" << cacheTime / 1000000.0 << "ms";
+    }
+    
+    QElapsedTimer rayTimer;
+    rayTimer.start();
+    gp_Pnt rayOrigin;
+    gp_Dir rayDir;
+    screenToWorldRay(pos, width(), height(), m_cameraPos, m_cameraRot, m_cameraZoom, rayOrigin, rayDir);
+    gp_Lin ray(rayOrigin, rayDir);
+    qint64 rayTime = rayTimer.nsecsElapsed();
+    if (m_frameCount % 60 == 0) {
+        qDebug() << "[Profile] Ray setup took:" << rayTime / 1000000.0 << "ms";
+    }
+    
+    QElapsedTimer intersectTimer;
+    intersectTimer.start();
+    double minDist = 1e9;
+    EdgeInstance* pickedEdge = nullptr;
+    gp_Pnt pickedPoint;
+    bool found = false;
+    for (auto& inst : edgeCache_) {
+        TreeNode* node = inst.node;
+        if (!node || !node->hasEdge()) continue;
+        TopoDS_Edge edge = TopoDS::Edge(node->getEdge().Located(node->loc));
+        
+        // Find closest point on edge to ray
+        Standard_Real first, last;
+        TopLoc_Location locCopy;
+        Handle(Geom_Curve) curve = BRep_Tool::Curve(edge, locCopy, first, last);
+        if (curve.IsNull()) continue;
+        
+        // Sample points along the curve and find closest to ray
+        int numSamples = 50;
+        for (int i = 0; i <= numSamples; ++i) {
+            Standard_Real t = first + (last - first) * i / numSamples;
+            gp_Pnt curvePoint;
+            try {
+                curve->D0(t, curvePoint);
+                // Apply the node's transformation to the curve point
+                if (!node->loc.IsIdentity()) {
+                    curvePoint.Transform(node->loc.Transformation());
+                }
+                double dist = ray.Distance(curvePoint);
+                if (dist < minDist && dist < 10.0) { // Within 10 units of ray
+                    minDist = dist;
+                    pickedEdge = &inst;
+                    pickedPoint = curvePoint;
+                    found = true;
+                }
+            } catch (const Standard_Failure&) {
+                continue;
+            }
+        }
+    }
+    qint64 intersectTime = intersectTimer.nsecsElapsed();
+    if (m_frameCount % 60 == 0) {
+        qDebug() << "[Profile] Edge intersection testing took:" << intersectTime / 1000000.0 << "ms (tested" << edgeCache_.size() << "edges)";
+    }
+    
+            if (pickedEdge && pickedEdge->node) {
+            TreeNode* node = pickedEdge->node;
+            selectedEdge_ = TopoDS::Edge(node->getEdge().Located(node->loc));
+            selectedEdgeNode_ = node;
+            if (m_frameCount % 60 == 0) {
+                qDebug() << "[Ray] Selected edge at TShape address:" << (void*)selectedEdge_.TShape().get();
+            }
+            // Don't emit signal here - let the mouse press handler manage selection
+            if (outIntersection && found) {
+                *outIntersection = QVector3D(pickedPoint.X(), pickedPoint.Y(), pickedPoint.Z());
+            }
+        qint64 totalPickTime = pickTimer.nsecsElapsed();
+        if (m_frameCount % 60 == 0) {
+            qDebug() << "[Profile] Total pickEdgeAt time:" << totalPickTime / 1000000.0 << "ms";
+        }
+        update();
+        return true;
+    } else {
+        selectedEdgeNode_ = nullptr;
+        if (m_frameCount % 60 == 0) {
+            qDebug() << "No edge selected (ray)";
+        }
+        qint64 totalPickTime = pickTimer.nsecsElapsed();
+        if (m_frameCount % 60 == 0) {
+            qDebug() << "[Profile] Total pickEdgeAt time (no hit):" << totalPickTime / 1000000.0 << "ms";
+        }
+        update();
+        return false;
+    }
+}
+
+// Picking function for pivot setting that doesn't change selection
+bool CadOpenGLWidget::pickElementAtForPivot(const QPoint& pos, QVector3D* outIntersection) {
+    QElapsedTimer pickTimer;
+    pickTimer.start();
+    
+    if (!rootNode_) return false;
+    
+    QElapsedTimer cacheTimer;
+    cacheTimer.start();
+    buildFaceCache();
+    qint64 cacheTime = cacheTimer.nsecsElapsed();
+    if (m_frameCount % 60 == 0) {
+        qDebug() << "[Profile] Face cache build took:" << cacheTime / 1000000.0 << "ms";
+    }
+    
+    QElapsedTimer rayTimer;
+    rayTimer.start();
+    gp_Pnt rayOrigin;
+    gp_Dir rayDir;
+    screenToWorldRay(pos, width(), height(), m_cameraPos, m_cameraRot, m_cameraZoom, rayOrigin, rayDir);
+    gp_Lin ray(rayOrigin, rayDir);
+    qint64 rayTime = rayTimer.nsecsElapsed();
+    if (m_frameCount % 60 == 0) {
+        qDebug() << "[Profile] Ray setup took:" << rayTime / 1000000.0 << "ms";
+    }
+    
+    QElapsedTimer intersectTimer;
+    intersectTimer.start();
+    double minDist = 1e9;
+    FaceInstance* pickedFace = nullptr;
+    gp_Pnt pickedPoint;
+    bool found = false;
+    for (auto& inst : faceCache_) {
+        TreeNode* node = inst.node;
+        if (!node || !node->hasFace()) continue;
+        TopoDS_Face face = TopoDS::Face(node->getFace().Located(node->loc));
+        BRepIntCurveSurface_Inter intersector;
+        intersector.Init(face, ray, 1e-6);
+        while (intersector.More()) {
+            gp_Pnt ipt = intersector.Pnt();
+            double dist = rayOrigin.Distance(ipt);
+            if (dist < minDist) {
+                minDist = dist;
+                pickedFace = &inst;
+                pickedPoint = ipt;
+                found = true;
+            }
+            intersector.Next();
+        }
+    }
+    qint64 intersectTime = intersectTimer.nsecsElapsed();
+    if (m_frameCount % 60 == 0) {
+        qDebug() << "[Profile] Intersection testing took:" << intersectTime / 1000000.0 << "ms (tested" << faceCache_.size() << "faces)";
+    }
+    
+    if (found && outIntersection) {
+        *outIntersection = QVector3D(pickedPoint.X(), pickedPoint.Y(), pickedPoint.Z());
+        qint64 totalPickTime = pickTimer.nsecsElapsed();
+        if (m_frameCount % 60 == 0) {
+            qDebug() << "[Profile] Total pickElementAtForPivot time:" << totalPickTime / 1000000.0 << "ms";
+        }
+        return true;
+    } else {
+        qint64 totalPickTime = pickTimer.nsecsElapsed();
+        if (m_frameCount % 60 == 0) {
+            qDebug() << "[Profile] Total pickElementAtForPivot time (no hit):" << totalPickTime / 1000000.0 << "ms";
+        }
+        return false;
+    }
+}
 
 void CadOpenGLWidget::pickHoveredFaceAt(const QPoint& pos) {
     // Keep hover picking working for camera controls
@@ -952,8 +1466,75 @@ void CadOpenGLWidget::pickHoveredFaceAt(const QPoint& pos) {
     }
     
     qint64 totalHoverTime = hoverTimer.nsecsElapsed();
-    if (g_frameCount % 60 == 0) {
+    if (m_frameCount % 60 == 0) {
         qDebug() << "[Profile] pickHoveredFaceAt time:" << totalHoverTime / 1000000.0 << "ms";
+    }
+}
+
+void CadOpenGLWidget::pickHoveredEdgeAt(const QPoint& pos) {
+    QElapsedTimer hoverTimer;
+    hoverTimer.start();
+    
+    hoveredEdge_.Nullify();
+    hoveredEdgeNode_ = nullptr;
+    if (!rootNode_) return;
+    
+    // Only build edge cache if not already built (performance optimization)
+    static int lastEdgeCacheFrame = -1;
+    if (lastEdgeCacheFrame != m_frameCount) {
+        buildEdgeCache();
+        lastEdgeCacheFrame = m_frameCount;
+    }
+    
+    gp_Pnt rayOrigin;
+    gp_Dir rayDir;
+    screenToWorldRay(pos, width(), height(), m_cameraPos, m_cameraRot, m_cameraZoom, rayOrigin, rayDir);
+    gp_Lin ray(rayOrigin, rayDir);
+    double minDist = 1e9;
+    EdgeInstance* pickedEdge = nullptr;
+    
+    for (auto& inst : edgeCache_) {
+        TreeNode* node = inst.node;
+        if (!node || !node->hasEdge()) continue;
+        TopoDS_Edge edge = TopoDS::Edge(node->getEdge().Located(node->loc));
+        
+        // Find closest point on edge to ray
+        Standard_Real first, last;
+        TopLoc_Location locCopy;
+        Handle(Geom_Curve) curve = BRep_Tool::Curve(edge, locCopy, first, last);
+        if (curve.IsNull()) continue;
+        
+        // Sample points along the curve and find closest to ray (optimized for hover)
+        int numSamples = 20; // Reduced samples for hover performance
+        for (int i = 0; i <= numSamples; ++i) {
+            Standard_Real t = first + (last - first) * i / numSamples;
+            gp_Pnt curvePoint;
+            try {
+                curve->D0(t, curvePoint);
+                // Apply the node's transformation to the curve point
+                if (!node->loc.IsIdentity()) {
+                    curvePoint.Transform(node->loc.Transformation());
+                }
+                double dist = ray.Distance(curvePoint);
+                if (dist < minDist && dist < 15.0) { // Slightly larger threshold for hover
+                    minDist = dist;
+                    pickedEdge = &inst;
+                }
+            } catch (const Standard_Failure&) {
+                continue;
+            }
+        }
+    }
+    
+    if (pickedEdge && pickedEdge->node) {
+        TreeNode* node = pickedEdge->node;
+        hoveredEdge_ = TopoDS::Edge(node->getEdge().Located(node->loc));
+        hoveredEdgeNode_ = node;
+    }
+    
+    qint64 totalHoverTime = hoverTimer.nsecsElapsed();
+    if (m_frameCount % 60 == 0) {
+        qDebug() << "[Profile] pickHoveredEdgeAt time:" << totalHoverTime / 1000000.0 << "ms";
     }
 } 
 
@@ -993,28 +1574,158 @@ void CadOpenGLWidget::buildFaceCache() {
     for (auto& child : rootNode_->children) traverse(child.get());
     
     qint64 cacheTime = cacheTimer.nsecsElapsed();
-    if (g_frameCount % 60 == 0) {
+    if (m_frameCount % 60 == 0) {
         qDebug() << "[Profile] buildFaceCache took:" << cacheTime / 1000000.0 << "ms (cached" << faceCache_.size() << "faces)";
+    }
+}
+
+void CadOpenGLWidget::buildEdgeCache() {
+    QElapsedTimer cacheTimer;
+    cacheTimer.start();
+    
+    edgeCache_.clear();
+    if (!rootNode_) return;
+    
+    // Optimize edge cache building by pre-allocating and using more efficient traversal
+    std::function<void(TreeNode*)> traverse;
+    traverse = [&](TreeNode* node) {
+        if (!node || !node->visible) return;
+        if (node->type == TopAbs_EDGE && node->hasEdge()) {
+            edgeCache_.push_back(EdgeInstance{node});
+        } else if (node->type == TopAbs_SOLID || node->type == TopAbs_SHELL || node->type == TopAbs_COMPOUND) {
+            // Only add parent nodes for picking if they have significant geometry
+            TopoDS_Shape shape = node->shapeData.shape;
+            if (!shape.IsNull()) {
+                // Count edges to determine if this node is worth caching
+                int edgeCount = 0;
+                for (TopExp_Explorer exp(shape, TopAbs_EDGE); exp.More(); exp.Next()) {
+                    edgeCount++;
+                    if (edgeCount > 10) break; // Limit edge counting for performance
+                }
+                if (edgeCount > 0) {
+                    edgeCache_.push_back(EdgeInstance{node});
+                }
+            }
+        }
+        for (auto& child : node->children) {
+            traverse(child.get());
+        }
+    };
+    for (auto& child : rootNode_->children) traverse(child.get());
+    
+    qint64 cacheTime = cacheTimer.nsecsElapsed();
+    if (m_frameCount % 60 == 0) {
+        qDebug() << "[Profile] buildEdgeCache took:" << cacheTime / 1000000.0 << "ms (cached" << edgeCache_.size() << "edges)";
     }
 } 
 
 // Add this slot for tree selection
+void CadOpenGLWidget::setSelectionMode(SelectionMode mode) {
+    m_selectionMode = mode;
+    // Clear current selection when changing modes
+    clearSelection();
+    // Clear hover states when changing modes
+    hoveredFace_.Nullify();
+    hoveredFaceNode_ = nullptr;
+    hoveredEdge_.Nullify();
+    hoveredEdgeNode_ = nullptr;
+    update();
+}
+
 void CadOpenGLWidget::setSelectedNode(TreeNode* node) {
-    selectedFaceNode_ = nullptr;
-    selectedEdge_ = TopoDS_Edge();
+    qDebug() << "[MultiSelect] setSelectedNode called with node:" << node << "current faces:" << selectedFaceNodes_.size();
+    clearSelection();
     if (!node) {
         update();
         return;
     }
     if (node->type == TopAbs_FACE && node->hasFace()) {
+        selectedFaceNodes_.push_back(node);
         selectedFaceNode_ = node;
+        selectedFace_ = TopoDS::Face(node->getFace().Located(node->loc));
+        qDebug() << "[MultiSelect] setSelectedNode added face, total:" << selectedFaceNodes_.size();
     } else if (node->type == TopAbs_EDGE && node->hasEdge()) {
-        // If you want to support edge highlighting, set selectedEdgeNode_ here (not implemented in this code)
-        // selectedEdgeNode_ = node;
-        // For now, just clear face selection
-        selectedFaceNode_ = nullptr;
-    } else {
-        selectedFaceNode_ = nullptr;
+        selectedEdgeNodes_.push_back(node);
+        selectedEdgeNode_ = node;
+        selectedEdge_ = TopoDS::Edge(node->getEdge().Located(node->loc));
+        qDebug() << "[MultiSelect] setSelectedNode added edge, total:" << selectedEdgeNodes_.size();
+    }
+    update();
+}
+
+void CadOpenGLWidget::clearSelection() {
+    selectedFaceNodes_.clear();
+    selectedEdgeNodes_.clear();
+    selectedFaceNode_ = nullptr;
+    selectedEdgeNode_ = nullptr;
+    selectedFace_.Nullify();
+    selectedEdge_.Nullify();
+}
+
+void CadOpenGLWidget::addToSelection(TreeNode* node) {
+    if (!node) return;
+    
+    if (node->type == TopAbs_FACE && node->hasFace()) {
+        // Check if already selected
+        auto it = std::find(selectedFaceNodes_.begin(), selectedFaceNodes_.end(), node);
+        if (it != selectedFaceNodes_.end()) {
+            // Remove from selection
+            selectedFaceNodes_.erase(it);
+            if (selectedFaceNode_ == node) {
+                selectedFaceNode_ = selectedFaceNodes_.empty() ? nullptr : selectedFaceNodes_.back();
+                selectedFace_ = selectedFaceNode_ ? TopoDS::Face(selectedFaceNode_->getFace().Located(selectedFaceNode_->loc)) : TopoDS_Face();
+            }
+            qDebug() << "[MultiSelect] Removed face from selection, total:" << selectedFaceNodes_.size();
+        } else {
+            // Add to selection
+            selectedFaceNodes_.push_back(node);
+            selectedFaceNode_ = node;
+            selectedFace_ = TopoDS::Face(node->getFace().Located(node->loc));
+            qDebug() << "[MultiSelect] Added face to selection, total:" << selectedFaceNodes_.size();
+        }
+    } else if (node->type == TopAbs_EDGE && node->hasEdge()) {
+        // Check if already selected
+        auto it = std::find(selectedEdgeNodes_.begin(), selectedEdgeNodes_.end(), node);
+        if (it != selectedEdgeNodes_.end()) {
+            // Remove from selection
+            selectedEdgeNodes_.erase(it);
+            if (selectedEdgeNode_ == node) {
+                selectedEdgeNode_ = selectedEdgeNodes_.empty() ? nullptr : selectedEdgeNodes_.back();
+                selectedEdge_ = selectedEdgeNode_ ? TopoDS::Edge(selectedEdgeNode_->getEdge().Located(selectedEdgeNode_->loc)) : TopoDS_Edge();
+            }
+            qDebug() << "[MultiSelect] Removed edge from selection, total:" << selectedEdgeNodes_.size();
+        } else {
+            // Add to selection
+            selectedEdgeNodes_.push_back(node);
+            selectedEdgeNode_ = node;
+            selectedEdge_ = TopoDS::Edge(node->getEdge().Located(node->loc));
+            qDebug() << "[MultiSelect] Added edge to selection, total:" << selectedEdgeNodes_.size();
+        }
+    }
+    update();
+}
+
+void CadOpenGLWidget::removeFromSelection(TreeNode* node) {
+    if (!node) return;
+    
+    if (node->type == TopAbs_FACE && node->hasFace()) {
+        auto it = std::find(selectedFaceNodes_.begin(), selectedFaceNodes_.end(), node);
+        if (it != selectedFaceNodes_.end()) {
+            selectedFaceNodes_.erase(it);
+            if (selectedFaceNode_ == node) {
+                selectedFaceNode_ = selectedFaceNodes_.empty() ? nullptr : selectedFaceNodes_.back();
+                selectedFace_ = selectedFaceNode_ ? TopoDS::Face(selectedFaceNode_->getFace().Located(selectedFaceNode_->loc)) : TopoDS_Face();
+            }
+        }
+    } else if (node->type == TopAbs_EDGE && node->hasEdge()) {
+        auto it = std::find(selectedEdgeNodes_.begin(), selectedEdgeNodes_.end(), node);
+        if (it != selectedEdgeNodes_.end()) {
+            selectedEdgeNodes_.erase(it);
+            if (selectedEdgeNode_ == node) {
+                selectedEdgeNode_ = selectedEdgeNodes_.empty() ? nullptr : selectedEdgeNodes_.back();
+                selectedEdge_ = selectedEdgeNode_ ? TopoDS::Edge(selectedEdgeNode_->getEdge().Located(selectedEdgeNode_->loc)) : TopoDS_Edge();
+            }
+        }
     }
     update();
 } 
