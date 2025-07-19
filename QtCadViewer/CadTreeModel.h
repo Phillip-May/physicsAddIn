@@ -17,6 +17,7 @@ public:
     TreeNode* getNode(const QModelIndex& index) const;
     TreeNode* nodeFromIndex(const QModelIndex& index) const;
     TreeNode* getRootNodePointer() const { return m_root.get(); }
+    QModelIndex indexForNode(TreeNode* target) const;
 private:
     std::unique_ptr<TreeNode> m_root;
 }; 

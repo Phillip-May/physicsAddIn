@@ -164,8 +164,7 @@ std::unique_ptr<TreeNode> build_tree_xcaf(const TDF_Label& label,
                    const Handle(XCAFDoc_ShapeTool)& shapeTool,
                    const Handle(XCAFDoc_ColorTool)& colorTool,
                    const CADNodeColor& parentColor,
-                   const TopLoc_Location& parentLoc,
-                   std::vector<ColoredFace>& all_faces)
+                   const TopLoc_Location& parentLoc)
 {
     CADNodeColor color = get_label_color(label, colorTool, parentColor);
     TopoDS_Shape shape = shapeTool->GetShape(label);
@@ -204,14 +203,14 @@ std::unique_ptr<TreeNode> build_tree_xcaf(const TDF_Label& label,
         TDF_Label refLabel;
         if (shapeTool->GetReferredShape(label, refLabel)) {
             TopLoc_Location refLoc = parentLoc * shapeTool->GetLocation(label);
-            auto child = build_tree_xcaf(refLabel, shapeTool, colorTool, color, refLoc, all_faces);
+            auto child = build_tree_xcaf(refLabel, shapeTool, colorTool, color, refLoc);
             if (child) node->children.push_back(std::move(child));
         }
     }
 
     // Recurse into children (for all labels)
     for (TDF_ChildIterator it(label); it.More(); it.Next()) {
-        auto child = build_tree_xcaf(it.Value(), shapeTool, colorTool, color, nodeLoc, all_faces);
+        auto child = build_tree_xcaf(it.Value(), shapeTool, colorTool, color, nodeLoc);
         if (child) node->children.push_back(std::move(child));
     }
     // After node is created and type is set
@@ -315,7 +314,7 @@ int main(int argc, char *argv[])
     root->color = defaultColor;
     root->loc = identityLoc;
     for (Standard_Integer i = 1; i <= roots.Length(); ++i) {
-        auto child = build_tree_xcaf(roots.Value(i), shapeTool, colorTool, defaultColor, identityLoc, faces);
+        auto child = build_tree_xcaf(roots.Value(i), shapeTool, colorTool, defaultColor, identityLoc);
         if (child) root->children.push_back(std::move(child));
     }
     qDebug() << "Total faces collected:" << faces.size();
@@ -347,6 +346,32 @@ int main(int argc, char *argv[])
     splitter->addWidget(viewer);
     // Pass the root node to the viewer for rendering
     viewer->setRootTreeNode(model->getRootNodePointer());
+
+    // Add Reframe button
+    QPushButton* reframeBtn = new QPushButton("Reframe");
+    buttonLayout->addWidget(reframeBtn);
+    QObject::connect(reframeBtn, &QPushButton::clicked, viewer, &CadOpenGLWidget::reframeCamera);
+
+    // Connect face selection in viewer to tree selection
+    QObject::connect(viewer, &CadOpenGLWidget::facePicked, treeView, [=](TreeNode* node) {
+        QModelIndex idx = model->indexForNode(node);
+        if (idx.isValid()) {
+            // Expand all parents so the item is visible
+            QModelIndex parentIdx = idx.parent();
+            while (parentIdx.isValid()) {
+                treeView->expand(parentIdx);
+                parentIdx = parentIdx.parent();
+            }
+            treeView->setCurrentIndex(idx);
+            treeView->scrollTo(idx);
+        }
+    });
+
+    // Connect tree selection to OpenGL widget highlighting
+    QObject::connect(treeView->selectionModel(), &QItemSelectionModel::currentChanged, viewer, [=](const QModelIndex &current, const QModelIndex &/*previous*/){
+        TreeNode* node = model->getNode(current);
+        viewer->setSelectedNode(node);
+    });
 
     // --- XCAF Label Tree View ---
     // Build label tree from XCAF roots
