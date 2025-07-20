@@ -48,26 +48,53 @@ struct ColorBatch {
     ColorBatch(const CADNodeColor& c) : color(c) {}
 };
 
+// Camera state struct for sharing logic
+struct CameraState {
+    QVector3D pos{0,0,0};
+    QQuaternion rot;
+    float zoom = 1.0f;
+    // Pivot interaction
+    QPoint pivotScreenPos;
+    float pivotDepth = 0.0f;
+    bool showPivotSphere = false;
+    QVector3D pivotWorldPos;
+    // Mouse state for click vs drag detection
+    QPoint mousePressPos;
+    bool mousePressed = false;
+    bool mouseDragged = false;
+    // For rotation
+    bool rotating = false;
+    bool firstRotateMove = false;
+    QPoint pivotScreenOnPress;
+    QVector3D cameraPosOnPress;
+    QQuaternion cameraRotOnPress;
+    float cameraZoomOnPress = 0.0f;
+};
+
 class CadOpenGLWidget : public QOpenGLWidget, protected QOpenGLFunctions {
     Q_OBJECT
 public:
     explicit CadOpenGLWidget(QWidget *parent = nullptr);
     ~CadOpenGLWidget();
-    void setRootTreeNode(TreeNode* root);
+    void setRootTreeNode(const CadNode* root);
     void setPivotSphere(const QVector3D& worldPos);
     void clearCache(); // Clear geometry cache to free memory
     int getCacheSize() const; // Get number of cached geometries
     // Selection mode control
     void setSelectionMode(SelectionMode mode);
     SelectionMode getSelectionMode() const { return m_selectionMode; }
+    // Camera state access
+    CameraState getCameraState() const;
+    void setCameraState(const CameraState& state);
     // Add this slot for tree selection
 public slots:
-    void setSelectedNode(TreeNode* node);
+    void setSelectedNode(CadNode* node);
     void clearSelection();
-    void addToSelection(TreeNode* node);
-    void removeFromSelection(TreeNode* node);
+    void addToSelection(CadNode* node);
+    void removeFromSelection(CadNode* node);
     void setCamera(const QVector3D& pos, const QQuaternion& rot, float zoom = 1.0f);
     void reframeCamera();
+    void markCacheDirty(); // Force cache to be rebuilt on next paint
 protected:
     void initializeGL() override;
     void resizeGL(int w, int h) override;
@@ -80,16 +107,9 @@ protected:
     void focusInEvent(QFocusEvent* event) override;
     void focusOutEvent(QFocusEvent* event) override;
 private:
-    TreeNode* rootNode_ = nullptr;
-    // New camera state
-    QVector3D m_cameraPos;      // Camera position in world space
-    QQuaternion m_cameraRot;    // Camera orientation (quaternion)
-    float m_cameraZoom = 1.0f;  // Camera zoom (scaling or dolly factor)
-    // --- Camera pivot interaction ---
-    QPoint m_pivotScreenPos; // Screen position where pivot was set
-    float m_pivotDepth = 0.0f; // Depth from camera to pivot
-    bool m_showPivotSphere = false; // Show sphere at pivot while rotating
-    QVector3D m_pivotWorldPos; // Persistent camera pivot point
+    void setupOpenGLState(); // Unified OpenGL state setup
+    const CadNode* rootNode_ = nullptr;
+    CameraState camera_;
     std::vector<ColorBatch> m_colorBatches;
     std::vector<std::pair<QVector3D, QVector3D>> m_wireframeLines; // Tessellated wireframe lines
     
@@ -98,14 +118,14 @@ private:
     TopoDS_Edge selectedEdge_;
     TopoDS_Face hoveredFace_;
     TopoDS_Edge hoveredEdge_;
-    TreeNode* selectedFaceNode_ = nullptr;
-    TreeNode* hoveredFaceNode_ = nullptr;
-    TreeNode* selectedEdgeNode_ = nullptr;
-    TreeNode* hoveredEdgeNode_ = nullptr;
+    CadNode* selectedFaceNode_ = nullptr;
+    CadNode* hoveredFaceNode_ = nullptr;
+    CadNode* selectedEdgeNode_ = nullptr;
+    CadNode* hoveredEdgeNode_ = nullptr;
     
     // Multi-selection support
-    std::vector<TreeNode*> selectedFaceNodes_;
-    std::vector<TreeNode*> selectedEdgeNodes_;
+    std::vector<CadNode*> selectedFaceNodes_;
+    std::vector<CadNode*> selectedEdgeNodes_;
     
     // Selection mode
     SelectionMode m_selectionMode = SelectionMode::None;
@@ -114,25 +134,20 @@ private:
     QTimer m_renderTimer;
     bool m_windowActive = true;
     
-    // Mouse state for click vs drag detection
-    QPoint m_mousePressPos;
-    bool m_mousePressed = false;
-    bool m_mouseDragged = false;
-
     // Flat cache of all visible faces (per instance)
     struct FaceInstance {
-        TreeNode* node;
+        CadNode* node;
     };
     std::vector<FaceInstance> faceCache_;
     void buildFaceCache();
     
     // Flat cache of all visible edges (per instance)
     struct EdgeInstance {
-        TreeNode* node;
+        CadNode* node;
     };
     std::vector<EdgeInstance> edgeCache_;
     void buildEdgeCache();
-    void traverseAndRender(TreeNode *node, CADNodeColor inheritedColor, bool ancestorsVisible);
+    void traverseAndRender(const CadNode *node, CADNodeColor inheritedColor, bool ancestorsVisible);
     void renderEdge(const TopoDS_Edge &edge, const CADNodeColor &color);
     // Overload: pick and output intersection point (returns true if hit)
     bool pickElementAt(const QPoint& pos, QVector3D* outIntersection = nullptr);
@@ -144,7 +159,7 @@ private:
     void pickHoveredFaceAt(const QPoint& pos);
     // Helper to pick hovered edge
     void pickHoveredEdgeAt(const QPoint& pos);
-    void renderFace(TreeNode* node, const CADNodeColor& color);
+    void renderFace(const CadNode* node, const CADNodeColor& color);
     void drawPivotSphere(); // Draws a sphere at m_center
     QVector3D m_zoomContactPoint; // Last zoom contact point
     bool m_showZoomContactSphere = false;
@@ -159,8 +174,8 @@ private:
     // Optimized rendering functions
     void renderBatchedGeometry();
     void buildColorBatches();
-    void renderFaceOptimized(TreeNode* node, const CADNodeColor& color);
-    void renderEdgeOptimized(TreeNode* node, const CADNodeColor& color);
+    void renderFaceOptimized(const CadNode* node, const CADNodeColor& color);
+    void renderEdgeOptimized(const CadNode* node, const CADNodeColor& color);
     void renderHighlightedEdges();
     CachedGeometry& getOrCreateCachedGeometry(const TopoDS_Face& face);
     
@@ -179,7 +194,8 @@ private:
     int m_totalFaces = 0; // Total faces processed
     int m_skippedFaces = 0; // Faces skipped
     void clearGeometryCache();
+    void drawBoundingBox(const QVector3D& min, const QVector3D& max, const QVector4D& color);
 signals:
-    void facePicked(TreeNode* node);
-    void edgePicked(TreeNode* node);
+    void facePicked(CadNode* node);
+    void edgePicked(CadNode* node);
 };

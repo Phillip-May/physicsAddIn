@@ -7,6 +7,7 @@
 #include <QtGui/QColor>
 #include <TopAbs_ShapeEnum.hxx>
 #include <TopoDS_Edge.hxx>
+#include <memory>
 
 // Define a simple RGBA color struct
 struct CADNodeColor {
@@ -52,11 +53,11 @@ union CADNodeData {
 };
 
 // Tree node for XCAF structure
-struct TreeNode {
+struct CadNode {
     std::string name;
     CADNodeColor color;
     TopLoc_Location loc;
-    std::vector<std::unique_ptr<TreeNode>> children;
+    std::vector<std::shared_ptr<CadNode>> children; // Changed to shared_ptr
     TopAbs_ShapeEnum type;
     
     // Union data for specific shape types
@@ -64,10 +65,10 @@ struct TreeNode {
     bool visible = true; // Add visibility flag, default true
     
     // Constructor
-    TreeNode() : type(TopAbs_SHAPE), shapeData() {}
+    CadNode() : type(TopAbs_SHAPE), shapeData() {}
     
     // Destructor
-    ~TreeNode() {
+    ~CadNode() {
         // The union will be automatically cleaned up
     }
     

@@ -43,6 +43,7 @@
 static void screenToWorldRay(const QPoint& pos, int width, int height, const QVector3D& cameraPos, const QQuaternion& cameraRot, float cameraZoom, gp_Pnt& rayOrigin, gp_Dir& rayDir);
 QPoint CadOpenGLWidget_projectWorldToScreen(const QVector3D& world, int width, int height, const QVector3D& cameraPos, const QQuaternion& cameraRot, float cameraZoom);
 static QVector3D unprojectScreenToWorld(const QPoint& screenPos, float depth, int width, int height, const QVector3D& cameraPos, const QQuaternion& cameraRot, float cameraZoom);
+static void accumulateBoundingBox(const CadNode* node, Bnd_Box& bbox);
 
 // Function to clear geometry cache
 void CadOpenGLWidget::clearGeometryCache() {
@@ -89,25 +90,24 @@ CadOpenGLWidget::~CadOpenGLWidget() {
 // Camera state
 static QPoint g_lastMousePos;
 
-void CadOpenGLWidget::initializeGL()
-{
+void CadOpenGLWidget::setupOpenGLState() {
     initializeOpenGLFunctions();
-    
-    // Set up OpenGL state once
     glEnable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE); // Disable backface culling for CAD models (often have thin walls)
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glDisable(GL_LIGHTING);
     glClearColor(0.1f, 0.1f, 0.15f, 1.0f);
-    
+}
+
+void CadOpenGLWidget::initializeGL()
+{
+    setupOpenGLState();
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
     double aspect = double(width()) / double(height() ? height() : 1);
     gluPerspective(45.0, aspect, 1.0, 1e9);
     glMatrixMode(GL_MODELVIEW);
-    
-    // Initialize color batches
     m_colorBatches.clear();
 }
 
@@ -146,22 +146,22 @@ CachedGeometry& CadOpenGLWidget::getOrCreateCachedGeometry(const TopoDS_Face& fa
     
     // Adjust precision based on camera distance
     QVector3D faceCenter((xmin + xmax) * 0.5, (ymin + ymax) * 0.5, (zmin + zmax) * 0.5);
-    QVector3D toCamera = faceCenter - m_cameraPos;
+    QVector3D toCamera = faceCenter - camera_.pos;
     float distanceSquared = toCamera.x() * toCamera.x() + toCamera.y() * toCamera.y() + toCamera.z() * toCamera.z();
-    float distanceFactor = std::min<float>(4.0, std::max<float>(0.2, distanceSquared / (m_cameraZoom * m_cameraZoom)));
+    float distanceFactor = std::min<float>(4.0, std::max<float>(0.2, distanceSquared / (camera_.zoom * camera_.zoom)));
     
     double precision = basePrecision * distanceFactor;
     
-    // Skip only very small faces
-    if (faceSize < 0.001) {
+    // Skip only extremely small faces (be more permissive)
+    if (faceSize < 0.0001) {
         m_skippedFaces++;
-        qDebug() << "Skipping face due to small size:" << faceSize << "at center" << faceCenter;
+        qDebug() << "Skipping face due to extremely small size:" << faceSize << "at center" << faceCenter;
         cache.markInvalid();
         return cache;
     }
 
-    // Use moderate precision reduction
-    precision *= 1.5; // 1.5x coarser for performance
+    // Use moderate precision reduction (less aggressive)
+    precision *= 1.2; // 1.2x coarser for performance (was 1.5)
     
     BRepMesh_IncrementalMesh mesher(face, precision);
     TopLoc_Location locCopy;
@@ -218,7 +218,9 @@ CachedGeometry& CadOpenGLWidget::getOrCreateCachedGeometry(const TopoDS_Face& fa
         }
         
         if (!vertices.empty()) {
-            qDebug () << "VertCount: " << vertices.size();
+            if (m_frameCount % 60 == 0) {
+                qDebug() << "[Cache] Created geometry for face, vertices:" << vertices.size() << "triangles:" << triangleCount << "at center" << faceCenter;
+            }
             // Create display list for legacy OpenGL
             cache.displayList = glGenLists(1);
             if (cache.displayList != 0) { // Check if display list creation succeeded
@@ -257,7 +259,16 @@ CachedGeometry& CadOpenGLWidget::getOrCreateCachedGeometry(const TopoDS_Face& fa
 
 // Optimized batch rendering function
 void CadOpenGLWidget::renderBatchedGeometry() {
-    if (!rootNode_) return;
+    if (!rootNode_) {
+        if (m_frameCount % 120 == 0) {
+            qDebug() << "[Render] No root node available";
+        }
+        return;
+    }
+    
+    if (m_frameCount % 120 == 0) {
+        qDebug() << "[Render] Rendering geometry, root children:" << rootNode_->children.size();
+    }
     
     // Use the original traversal approach but with optimized face rendering
     for (const auto& child : rootNode_->children) {
@@ -274,7 +285,7 @@ void CadOpenGLWidget::buildColorBatches() {
 }
 
 // Update traverseAndRender to use extremely optimized rendering
-void CadOpenGLWidget::traverseAndRender(TreeNode* node, CADNodeColor inheritedColor, bool /*ancestorsVisible*/) {
+void CadOpenGLWidget::traverseAndRender(const CadNode* node, CADNodeColor inheritedColor, bool /*ancestorsVisible*/) {
     if (!node) return;
     if (node->visible) {
         CADNodeColor nodeColor = (node->color.a >= 0.0f) ? node->color : inheritedColor;
@@ -304,7 +315,11 @@ void CadOpenGLWidget::traverseAndRender(TreeNode* node, CADNodeColor inheritedCo
                     // Use basic frustum culling for better performance
                     if (isInFrustum(node->getFace(), node->loc)) {
                         renderFaceOptimized(node, nodeColor);
+                    } else if (m_frameCount % 120 == 0) {
+                        qDebug() << "[Render] Face culled by frustum:" << node;
                     }
+                } else if (m_frameCount % 120 == 0) {
+                    qDebug() << "[Render] Face node has no face data:" << node;
                 }
                 break;
             case TopAbs_EDGE:
@@ -328,7 +343,7 @@ void CadOpenGLWidget::traverseAndRender(TreeNode* node, CADNodeColor inheritedCo
 }
 
 // Optimized face rendering using cached geometry with wireframe overlay
-void CadOpenGLWidget::renderFaceOptimized(TreeNode* node, const CADNodeColor& color) {
+void CadOpenGLWidget::renderFaceOptimized(const CadNode* node, const CADNodeColor& color) {
     if (!node || !node->hasFace()) return;
     
     const TopoDS_Face& face = node->getFace();
@@ -343,7 +358,7 @@ void CadOpenGLWidget::renderFaceOptimized(TreeNode* node, const CADNodeColor& co
     // Check if this face is being hovered over
     bool isHovered = false;
     if (m_selectionMode == SelectionMode::Faces && hoveredFaceNode_) {
-        // Compare TreeNode pointers to check if this is the hovered face
+        // Compare CadNode pointers to check if this is the hovered face
         if (node == hoveredFaceNode_) {
             isHovered = true;
         }
@@ -429,9 +444,9 @@ void CadOpenGLWidget::paintGL() {
     
     // New camera transform: apply zoom, then rotation, then translation
     QMatrix4x4 view;
-    view.translate(0, 0, -m_cameraZoom);
-    view.rotate(m_cameraRot.conjugated());
-    view.translate(-m_cameraPos);
+    view.translate(0, 0, -camera_.zoom);
+    view.rotate(camera_.rot.conjugated());
+    view.translate(-camera_.pos);
     glMultMatrixf(view.constData());
 
     // Skip frustum updates for maximum performance
@@ -451,8 +466,9 @@ void CadOpenGLWidget::paintGL() {
         m_cacheDirty = false;
     }
     
+    // Render the main CAD geometry
     renderBatchedGeometry();
-    
+        
     // Render highlighted edges only (performance optimized)
     if (m_selectionMode == SelectionMode::Edges && (hoveredEdgeNode_ || !selectedEdgeNodes_.empty())) {
         renderHighlightedEdges();
@@ -466,16 +482,12 @@ void CadOpenGLWidget::paintGL() {
     // Log cache statistics (very infrequently to minimize overhead)
     if (m_frameCount % 1200 == 0) { // Log every 20 seconds
         qDebug() << "[Cache] Geometry cache size:" << m_geometryCache.size() << "entries";
+        qDebug() << "[Camera] Pos:" << camera_.pos << "Zoom:" << camera_.zoom << "Rot:" << camera_.rot;
     }
-    
-    // Log face processing statistics every 300 frames (5 seconds at 60fps)
-    if (m_frameCount % 300 == 0) {
-        qDebug() << "[Face Stats] Total faces processed:" << m_totalFaces << "Skipped:" << m_skippedFaces << "Success rate:" << (m_totalFaces > 0 ? (100.0 * (m_totalFaces - m_skippedFaces) / m_totalFaces) : 0) << "%";
-    }
-    
+        
     // Keep camera controls working by not disabling pivot sphere
     // Draw pivot sphere if enabled
-    if (m_showPivotSphere) {
+    if (camera_.showPivotSphere) {
         drawPivotSphere();
     }
 
@@ -492,6 +504,15 @@ void CadOpenGLWidget::paintGL() {
     
     qint64 totalPaintTime = paintTimer.nsecsElapsed();
     //qDebug() << "[Profile] Total optimized paintGL time:" << totalPaintTime / 1000000.0 << "ms";
+
+    // Draw the scene bounding box
+    Bnd_Box bbox;
+    accumulateBoundingBox(rootNode_, bbox);
+    if (!bbox.IsVoid()) {
+        Standard_Real xmin, ymin, zmin, xmax, ymax, zmax;
+        bbox.Get(xmin, ymin, zmin, xmax, ymax, zmax);
+        drawBoundingBox(QVector3D(xmin, ymin, zmin), QVector3D(xmax, ymax, zmax), QVector4D(1.0f, 0.2f, 0.2f, 0.4f));
+    }
 }
 
 void CadOpenGLWidget::mousePressEvent(QMouseEvent* event) {
@@ -499,13 +520,13 @@ void CadOpenGLWidget::mousePressEvent(QMouseEvent* event) {
     
     if (event->button() == Qt::LeftButton) {
         // Store press position for click detection
-        m_mousePressPos = event->pos();
-        m_mousePressed = true;
-        m_mouseDragged = false;
+        camera_.mousePressPos = event->pos();
+        camera_.mousePressed = true;
+        camera_.mouseDragged = false;
     } else if (event->button() == Qt::MiddleButton) {
         // Middle mouse button for selection based on current mode
         QVector3D hitPoint;
-        TreeNode* pickedNode = nullptr;
+        CadNode* pickedNode = nullptr;
         
         if (m_selectionMode == SelectionMode::Faces) {
             if (pickElementAt(event->pos(), &hitPoint)) {
@@ -553,17 +574,17 @@ void CadOpenGLWidget::mousePressEvent(QMouseEvent* event) {
         // Use a separate picking function that doesn't change selection
         if (pickElementAtForPivot(event->pos(), &hitPoint)) {
             // Only update the pivot position and show the sphere, do NOT move or recenter the camera
-            m_pivotWorldPos = hitPoint;
+            camera_.pivotWorldPos = hitPoint;
             setPivotSphere(hitPoint);
         }
         // Start rotation state
         m_rotating = true;
         m_firstRotateMove = true;
-        m_cameraPosOnPress = m_cameraPos;
-        m_cameraRotOnPress = m_cameraRot;
-        m_cameraZoomOnPress = m_cameraZoom;
+        m_cameraPosOnPress = camera_.pos;
+        m_cameraRotOnPress = camera_.rot;
+        m_cameraZoomOnPress = camera_.zoom;
         m_pivotScreenOnPress = CadOpenGLWidget_projectWorldToScreen(
-            m_pivotWorldPos, width(), height(), m_cameraPos, m_cameraRot, m_cameraZoom);
+            camera_.pivotWorldPos, width(), height(), camera_.pos, camera_.rot, camera_.zoom);
     }
     // Do NOT call pickElementAt(event->pos()) again here, as it may change selection and cause a jump
 }
@@ -571,27 +592,27 @@ void CadOpenGLWidget::mousePressEvent(QMouseEvent* event) {
 void CadOpenGLWidget::mouseMoveEvent(QMouseEvent* event) {
     int dx = event->x() - g_lastMousePos.x();
     int dy = event->y() - g_lastMousePos.y();
-    QVector3D newCameraPos = m_cameraPos;
-    QQuaternion newCameraRot = m_cameraRot;
-    float newCameraZoom = m_cameraZoom;
+    QVector3D newCameraPos = camera_.pos;
+    QQuaternion newCameraRot = camera_.rot;
+    float newCameraZoom = camera_.zoom;
     bool cameraChanged = false;
     
     // Check if mouse has moved enough to be considered a drag
-    if (m_mousePressed && !m_mouseDragged) {
-        int dragDistance = (event->pos() - m_mousePressPos).manhattanLength();
+    if (camera_.mousePressed && !camera_.mouseDragged) {
+        int dragDistance = (event->pos() - camera_.mousePressPos).manhattanLength();
         if (dragDistance > 3) { // 3 pixel threshold for drag detection
-            m_mouseDragged = true;
+            camera_.mouseDragged = true;
         }
     }
     
     if (event->buttons() & Qt::LeftButton) {
         // Pan: move both camera and pivot in local X/Y
-        float panSpeed = m_cameraZoom * 0.002f;
-        QVector3D right = m_cameraRot.rotatedVector(QVector3D(1, 0, 0));
-        QVector3D up = m_cameraRot.rotatedVector(QVector3D(0, 1, 0));
+        float panSpeed = camera_.zoom * 0.002f;
+        QVector3D right = camera_.rot.rotatedVector(QVector3D(1, 0, 0));
+        QVector3D up = camera_.rot.rotatedVector(QVector3D(0, 1, 0));
         QVector3D pan = -right * dx * panSpeed + up * dy * panSpeed;
         newCameraPos += pan;
-        m_pivotWorldPos += pan;
+        camera_.pivotWorldPos += pan;
         cameraChanged = true;
     } else if (event->buttons() & Qt::RightButton) {
         // --- Precise fix: Keep pivot at same screen position during rotation using unprojection ---
@@ -602,23 +623,23 @@ void CadOpenGLWidget::mouseMoveEvent(QMouseEvent* event) {
         if (m_firstRotateMove) {
             // Use the stored values from mouse press for the first move
             oldScreenPos = m_pivotScreenOnPress;
-            cameraPosForOld = m_cameraPosOnPress;
-            cameraRotForOld = m_cameraRotOnPress;
-            cameraZoomForOld = m_cameraZoomOnPress;
+            cameraPosForOld = camera_.pos;
+            cameraRotForOld = camera_.rot;
+            cameraZoomForOld = camera_.zoom;
             m_firstRotateMove = false;
         } else {
             oldScreenPos = CadOpenGLWidget_projectWorldToScreen(
-                m_pivotWorldPos, width(), height(), m_cameraPos, m_cameraRot, m_cameraZoom);
-            cameraPosForOld = m_cameraPos;
-            cameraRotForOld = m_cameraRot;
-            cameraZoomForOld = m_cameraZoom;
+                camera_.pivotWorldPos, width(), height(), camera_.pos, camera_.rot, camera_.zoom);
+            cameraPosForOld = camera_.pos;
+            cameraRotForOld = camera_.rot;
+            cameraZoomForOld = camera_.zoom;
         }
         // 2. Compute pivot depth in camera space (distance from camera to pivot)
         QMatrix4x4 view;
         view.translate(0, 0, -cameraZoomForOld);
         view.rotate(cameraRotForOld.conjugated());
         view.translate(-cameraPosForOld);
-        QVector3D camSpace = view.map(m_pivotWorldPos);
+        QVector3D camSpace = view.map(camera_.pivotWorldPos);
         float pivotDepth = -camSpace.z();
         // 3. Apply incremental rotation to camera position and orientation (orbit around pivot)
         float angleX = dy * 0.5f;
@@ -626,26 +647,26 @@ void CadOpenGLWidget::mouseMoveEvent(QMouseEvent* event) {
         QQuaternion rotX = QQuaternion::fromAxisAndAngle(1, 0, 0, angleX);
         QQuaternion rotZ = QQuaternion::fromAxisAndAngle(0, 0, 1, angleZ);
         QQuaternion incrementalRot = rotZ * rotX;
-        QVector3D camToPivot = cameraPosForOld - m_pivotWorldPos;
+        QVector3D camToPivot = cameraPosForOld - camera_.pivotWorldPos;
         QVector3D newCamToPivot = incrementalRot.rotatedVector(camToPivot);
-        newCameraPos = m_pivotWorldPos + newCamToPivot;
+        newCameraPos = camera_.pivotWorldPos + newCamToPivot;
         newCameraRot = incrementalRot * cameraRotForOld;
         // 4. Project pivot to screen after rotation
         QPoint newScreenPos = CadOpenGLWidget_projectWorldToScreen(
-            m_pivotWorldPos, width(), height(), newCameraPos, newCameraRot, m_cameraZoom);
+            camera_.pivotWorldPos, width(), height(), newCameraPos, newCameraRot, camera_.zoom);
         // 5. Unproject old and new screen positions at the pivot's depth
-        QVector3D worldAtOldScreen = unprojectScreenToWorld(oldScreenPos, pivotDepth, width(), height(), newCameraPos, newCameraRot, m_cameraZoom);
-        QVector3D worldAtNewScreen = unprojectScreenToWorld(newScreenPos, pivotDepth, width(), height(), newCameraPos, newCameraRot, m_cameraZoom);
+        QVector3D worldAtOldScreen = unprojectScreenToWorld(oldScreenPos, pivotDepth, width(), height(), newCameraPos, newCameraRot, camera_.zoom);
+        QVector3D worldAtNewScreen = unprojectScreenToWorld(newScreenPos, pivotDepth, width(), height(), newCameraPos, newCameraRot, camera_.zoom);
         // 6. Compute offset
         QVector3D offset = worldAtOldScreen - worldAtNewScreen;
         // 7. Apply offset to camera position and pivot
         newCameraPos += offset;
-        m_pivotWorldPos += offset;
+        camera_.pivotWorldPos += offset;
         cameraChanged = true;
     }
     
     if (cameraChanged) {
-        setCamera(newCameraPos, newCameraRot, m_cameraZoom);
+        setCamera(newCameraPos, newCameraRot, camera_.zoom);
     }
     
     g_lastMousePos = event->pos();
@@ -678,10 +699,10 @@ void CadOpenGLWidget::mouseMoveEvent(QMouseEvent* event) {
 void CadOpenGLWidget::mouseReleaseEvent(QMouseEvent* event) {
     if (event->button() == Qt::LeftButton) {
         // Check if this was a click (not a drag)
-        if (m_mousePressed && !m_mouseDragged) {
+        if (camera_.mousePressed && !camera_.mouseDragged) {
             // This was a click in place - handle selection
             QVector3D hitPoint;
-            TreeNode* pickedNode = nullptr;
+            CadNode* pickedNode = nullptr;
             
             if (m_selectionMode == SelectionMode::Faces) {
                 if (pickElementAt(event->pos(), &hitPoint)) {
@@ -726,10 +747,10 @@ void CadOpenGLWidget::mouseReleaseEvent(QMouseEvent* event) {
         }
         
         // Reset mouse state
-        m_mousePressed = false;
-        m_mouseDragged = false;
+        camera_.mousePressed = false;
+        camera_.mouseDragged = false;
     } else if (event->button() == Qt::RightButton) {
-        m_showPivotSphere = false;
+        camera_.showPivotSphere = false;
         m_rotating = false;
         m_firstRotateMove = false;
         update();
@@ -806,19 +827,19 @@ void CadOpenGLWidget::wheelEvent(QWheelEvent* event) {
     
     if (pickElementAtForPivot(mousePos, &intersection)) {
         // Zoom to point: adjust camera position to keep intersection under cursor
-        QVector3D viewDir = m_cameraRot.rotatedVector(QVector3D(0, 0, -1));
-        float newCameraZoom = m_cameraZoom - zoomDelta;
+        QVector3D viewDir = camera_.rot.rotatedVector(QVector3D(0, 0, -1));
+        float newCameraZoom = camera_.zoom - zoomDelta;
         
         // Calculate how much the camera needs to move to keep the point under cursor
-        QVector3D camToPoint = intersection - m_cameraPos;
+        QVector3D camToPoint = intersection - camera_.pos;
         float currentDist = camToPoint.length();
-        float zoomRatio = newCameraZoom / m_cameraZoom;
+        float zoomRatio = newCameraZoom / camera_.zoom;
         float newDist = currentDist * zoomRatio;
         
         // Move camera position to maintain the point under cursor
         QVector3D newCameraPos = intersection - (camToPoint.normalized() * newDist);
         
-        setCamera(newCameraPos, m_cameraRot, newCameraZoom);
+        setCamera(newCameraPos, camera_.rot, newCameraZoom);
         
         // Show zoom contact sphere
         m_zoomContactPoint = intersection;
@@ -832,15 +853,15 @@ void CadOpenGLWidget::wheelEvent(QWheelEvent* event) {
         m_zoomContactTimer.start(1000); // 1 second
     } else {
         // Fallback: simple zoom (dolly)
-        float newCameraZoom = m_cameraZoom - zoomDelta;
-        setCamera(m_cameraPos, m_cameraRot, newCameraZoom);
+        float newCameraZoom = camera_.zoom - zoomDelta;
+        setCamera(camera_.pos, camera_.rot, newCameraZoom);
     }
 }
 
 
-void CadOpenGLWidget::setRootTreeNode(TreeNode* root) {
+void CadOpenGLWidget::setRootTreeNode(const CadNode* root) {
     rootNode_ = root;
-    m_cacheDirty = true; // Mark cache as dirty when root changes
+    markCacheDirty();
     update();
 }
 
@@ -857,9 +878,9 @@ int CadOpenGLWidget::getCacheSize() const {
 void CadOpenGLWidget::updateFrustumPlanes() {
     // Get current view matrix
     QMatrix4x4 view;
-    view.translate(0, 0, -m_cameraZoom);
-    view.rotate(m_cameraRot.conjugated());
-    view.translate(-m_cameraPos);
+    view.translate(0, 0, -camera_.zoom);
+    view.rotate(camera_.rot.conjugated());
+    view.translate(-camera_.pos);
     
     // Get projection matrix
     QMatrix4x4 proj;
@@ -904,20 +925,20 @@ bool CadOpenGLWidget::isInFrustum(const TopoDS_Face& face, const TopLoc_Location
     Standard_Real xmin, ymin, zmin, xmax, ymax, zmax;
     bbox.Get(xmin, ymin, zmin, xmax, ymax, zmax);
     
-    // Moderate size-based culling
+    // Moderate size-based culling (more permissive)
     double faceSize = std::max(std::max(xmax-xmin, ymax-ymin), zmax-zmin);
-    if (faceSize < 0.0001) return false; // Skip very small faces
+    if (faceSize < 0.00001) return false; // Skip only extremely small faces (was 0.0001)
     
     // Moderate distance-based culling
     QVector3D faceCenter((xmin + xmax) * 0.5, (ymin + ymax) * 0.5, (zmin + zmax) * 0.5);
-    QVector3D toCamera = faceCenter - m_cameraPos;
+    QVector3D toCamera = faceCenter - camera_.pos;
     float distanceSquared = toCamera.x() * toCamera.x() + toCamera.y() * toCamera.y() + toCamera.z() * toCamera.z();
     
     // Use reasonable distance threshold
-    float maxDistanceSquared = m_cameraZoom * m_cameraZoom * 100.0f; // 100x zoom squared
+    float maxDistanceSquared = camera_.zoom * camera_.zoom * 100.0f; // 100x zoom squared
     
     // For close viewing, be more permissive
-    if (m_cameraZoom < 100.0f) {
+    if (camera_.zoom < 100.0f) {
         maxDistanceSquared = std::max(maxDistanceSquared, 100000.0f); // 100k units squared for close viewing
     }
     
@@ -928,8 +949,8 @@ bool CadOpenGLWidget::isInFrustum(const TopoDS_Face& face, const TopLoc_Location
     return true;
 }
 
-// Overload: Render a face using a TreeNode (applies node's transform)
-void CadOpenGLWidget::renderFace(TreeNode* node, const CADNodeColor& color) {
+// Overload: Render a face using a CadNode (applies node's transform)
+void CadOpenGLWidget::renderFace(const CadNode* node, const CADNodeColor& color) {
     if (!node || !node->hasFace()) return;
     const TopoDS_Face& face = node->getFace();
     if (face.IsNull()) {
@@ -1043,7 +1064,7 @@ void CadOpenGLWidget::renderEdge(const TopoDS_Edge& edge, const CADNodeColor& co
 } 
 
 // Optimized edge rendering for highlighted edges only
-void CadOpenGLWidget::renderEdgeOptimized(TreeNode* node, const CADNodeColor& color) {
+void CadOpenGLWidget::renderEdgeOptimized(const CadNode* node, const CADNodeColor& color) {
     if (!node || !node->hasEdge()) return;
     
     const TopoDS_Edge& edge = node->getEdge();
@@ -1127,7 +1148,7 @@ void CadOpenGLWidget::renderHighlightedEdges() {
     }
     
     // Render all selected edges
-    for (TreeNode* node : selectedEdgeNodes_) {
+    for (CadNode* node : selectedEdgeNodes_) {
         if (node != hoveredEdgeNode_) { // Don't render twice if hovered and selected
             renderEdgeOptimized(node, CADNodeColor(1.0f, 1.0f, 0.0f, 0.9f));
         }
@@ -1188,7 +1209,7 @@ bool CadOpenGLWidget::pickElementAt(const QPoint& pos, QVector3D* outIntersectio
     rayTimer.start();
     gp_Pnt rayOrigin;
     gp_Dir rayDir;
-    screenToWorldRay(pos, width(), height(), m_cameraPos, m_cameraRot, m_cameraZoom, rayOrigin, rayDir);
+    screenToWorldRay(pos, width(), height(), camera_.pos, camera_.rot, camera_.zoom, rayOrigin, rayDir);
     gp_Lin ray(rayOrigin, rayDir);
     qint64 rayTime = rayTimer.nsecsElapsed();
     if (m_frameCount % 60 == 0) {
@@ -1202,7 +1223,7 @@ bool CadOpenGLWidget::pickElementAt(const QPoint& pos, QVector3D* outIntersectio
     gp_Pnt pickedPoint;
     bool found = false;
     for (auto& inst : faceCache_) {
-        TreeNode* node = inst.node;
+        CadNode* node = inst.node;
         if (!node || !node->hasFace()) continue;
         TopoDS_Face face = TopoDS::Face(node->getFace().Located(node->loc));
         BRepIntCurveSurface_Inter intersector;
@@ -1224,7 +1245,7 @@ bool CadOpenGLWidget::pickElementAt(const QPoint& pos, QVector3D* outIntersectio
         qDebug() << "[Profile] Intersection testing took:" << intersectTime / 1000000.0 << "ms (tested" << faceCache_.size() << "faces)";
     }
             if (pickedFace && pickedFace->node) {
-            TreeNode* node = pickedFace->node;
+            CadNode* node = pickedFace->node;
             selectedFace_ = TopoDS::Face(node->getFace().Located(node->loc));
             selectedFaceNode_ = node;
             if (m_frameCount % 60 == 0) {
@@ -1275,7 +1296,7 @@ bool CadOpenGLWidget::pickEdgeAt(const QPoint& pos, QVector3D* outIntersection) 
     rayTimer.start();
     gp_Pnt rayOrigin;
     gp_Dir rayDir;
-    screenToWorldRay(pos, width(), height(), m_cameraPos, m_cameraRot, m_cameraZoom, rayOrigin, rayDir);
+    screenToWorldRay(pos, width(), height(), camera_.pos, camera_.rot, camera_.zoom, rayOrigin, rayDir);
     gp_Lin ray(rayOrigin, rayDir);
     qint64 rayTime = rayTimer.nsecsElapsed();
     if (m_frameCount % 60 == 0) {
@@ -1289,7 +1310,7 @@ bool CadOpenGLWidget::pickEdgeAt(const QPoint& pos, QVector3D* outIntersection) 
     gp_Pnt pickedPoint;
     bool found = false;
     for (auto& inst : edgeCache_) {
-        TreeNode* node = inst.node;
+        CadNode* node = inst.node;
         if (!node || !node->hasEdge()) continue;
         TopoDS_Edge edge = TopoDS::Edge(node->getEdge().Located(node->loc));
         
@@ -1328,7 +1349,7 @@ bool CadOpenGLWidget::pickEdgeAt(const QPoint& pos, QVector3D* outIntersection) 
     }
     
             if (pickedEdge && pickedEdge->node) {
-            TreeNode* node = pickedEdge->node;
+            CadNode* node = pickedEdge->node;
             selectedEdge_ = TopoDS::Edge(node->getEdge().Located(node->loc));
             selectedEdgeNode_ = node;
             if (m_frameCount % 60 == 0) {
@@ -1377,7 +1398,7 @@ bool CadOpenGLWidget::pickElementAtForPivot(const QPoint& pos, QVector3D* outInt
     rayTimer.start();
     gp_Pnt rayOrigin;
     gp_Dir rayDir;
-    screenToWorldRay(pos, width(), height(), m_cameraPos, m_cameraRot, m_cameraZoom, rayOrigin, rayDir);
+    screenToWorldRay(pos, width(), height(), camera_.pos, camera_.rot, camera_.zoom, rayOrigin, rayDir);
     gp_Lin ray(rayOrigin, rayDir);
     qint64 rayTime = rayTimer.nsecsElapsed();
     if (m_frameCount % 60 == 0) {
@@ -1391,7 +1412,7 @@ bool CadOpenGLWidget::pickElementAtForPivot(const QPoint& pos, QVector3D* outInt
     gp_Pnt pickedPoint;
     bool found = false;
     for (auto& inst : faceCache_) {
-        TreeNode* node = inst.node;
+        CadNode* node = inst.node;
         if (!node || !node->hasFace()) continue;
         TopoDS_Face face = TopoDS::Face(node->getFace().Located(node->loc));
         BRepIntCurveSurface_Inter intersector;
@@ -1439,12 +1460,12 @@ void CadOpenGLWidget::pickHoveredFaceAt(const QPoint& pos) {
     buildFaceCache();
     gp_Pnt rayOrigin;
     gp_Dir rayDir;
-    screenToWorldRay(pos, width(), height(), m_cameraPos, m_cameraRot, m_cameraZoom, rayOrigin, rayDir);
+    screenToWorldRay(pos, width(), height(), camera_.pos, camera_.rot, camera_.zoom, rayOrigin, rayDir);
     gp_Lin ray(rayOrigin, rayDir);
     double minDist = 1e9;
     FaceInstance* pickedFace = nullptr;
     for (auto& inst : faceCache_) {
-        TreeNode* node = inst.node;
+        CadNode* node = inst.node;
         if (!node || !node->hasFace()) continue;
         TopoDS_Face face = TopoDS::Face(node->getFace().Located(node->loc));
         BRepIntCurveSurface_Inter intersector;
@@ -1460,7 +1481,7 @@ void CadOpenGLWidget::pickHoveredFaceAt(const QPoint& pos) {
         }
     }
     if (pickedFace && pickedFace->node) {
-        TreeNode* node = pickedFace->node;
+        CadNode* node = pickedFace->node;
         hoveredFace_ = TopoDS::Face(node->getFace().Located(node->loc));
         hoveredFaceNode_ = node; // Store the picked node
     }
@@ -1488,13 +1509,13 @@ void CadOpenGLWidget::pickHoveredEdgeAt(const QPoint& pos) {
     
     gp_Pnt rayOrigin;
     gp_Dir rayDir;
-    screenToWorldRay(pos, width(), height(), m_cameraPos, m_cameraRot, m_cameraZoom, rayOrigin, rayDir);
+    screenToWorldRay(pos, width(), height(), camera_.pos, camera_.rot, camera_.zoom, rayOrigin, rayDir);
     gp_Lin ray(rayOrigin, rayDir);
     double minDist = 1e9;
     EdgeInstance* pickedEdge = nullptr;
     
     for (auto& inst : edgeCache_) {
-        TreeNode* node = inst.node;
+        CadNode* node = inst.node;
         if (!node || !node->hasEdge()) continue;
         TopoDS_Edge edge = TopoDS::Edge(node->getEdge().Located(node->loc));
         
@@ -1527,7 +1548,7 @@ void CadOpenGLWidget::pickHoveredEdgeAt(const QPoint& pos) {
     }
     
     if (pickedEdge && pickedEdge->node) {
-        TreeNode* node = pickedEdge->node;
+        CadNode* node = pickedEdge->node;
         hoveredEdge_ = TopoDS::Edge(node->getEdge().Located(node->loc));
         hoveredEdgeNode_ = node;
     }
@@ -1547,8 +1568,8 @@ void CadOpenGLWidget::buildFaceCache() {
     if (!rootNode_) return;
     
     // Optimize face cache building by pre-allocating and using more efficient traversal
-    std::function<void(TreeNode*)> traverse;
-    traverse = [&](TreeNode* node) {
+    std::function<void(CadNode*)> traverse;
+    traverse = [&](CadNode* node) {
         if (!node || !node->visible) return;
         if (node->type == TopAbs_FACE && node->hasFace()) {
             faceCache_.push_back(FaceInstance{node});
@@ -1587,8 +1608,8 @@ void CadOpenGLWidget::buildEdgeCache() {
     if (!rootNode_) return;
     
     // Optimize edge cache building by pre-allocating and using more efficient traversal
-    std::function<void(TreeNode*)> traverse;
-    traverse = [&](TreeNode* node) {
+    std::function<void(CadNode*)> traverse;
+    traverse = [&](CadNode* node) {
         if (!node || !node->visible) return;
         if (node->type == TopAbs_EDGE && node->hasEdge()) {
             edgeCache_.push_back(EdgeInstance{node});
@@ -1632,7 +1653,7 @@ void CadOpenGLWidget::setSelectionMode(SelectionMode mode) {
     update();
 }
 
-void CadOpenGLWidget::setSelectedNode(TreeNode* node) {
+void CadOpenGLWidget::setSelectedNode(CadNode* node) {
     qDebug() << "[MultiSelect] setSelectedNode called with node:" << node << "current faces:" << selectedFaceNodes_.size();
     clearSelection();
     if (!node) {
@@ -1643,12 +1664,10 @@ void CadOpenGLWidget::setSelectedNode(TreeNode* node) {
         selectedFaceNodes_.push_back(node);
         selectedFaceNode_ = node;
         selectedFace_ = TopoDS::Face(node->getFace().Located(node->loc));
-        qDebug() << "[MultiSelect] setSelectedNode added face, total:" << selectedFaceNodes_.size();
     } else if (node->type == TopAbs_EDGE && node->hasEdge()) {
         selectedEdgeNodes_.push_back(node);
         selectedEdgeNode_ = node;
         selectedEdge_ = TopoDS::Edge(node->getEdge().Located(node->loc));
-        qDebug() << "[MultiSelect] setSelectedNode added edge, total:" << selectedEdgeNodes_.size();
     }
     update();
 }
@@ -1662,7 +1681,7 @@ void CadOpenGLWidget::clearSelection() {
     selectedEdge_.Nullify();
 }
 
-void CadOpenGLWidget::addToSelection(TreeNode* node) {
+void CadOpenGLWidget::addToSelection(CadNode* node) {
     if (!node) return;
     
     if (node->type == TopAbs_FACE && node->hasFace()) {
@@ -1675,13 +1694,11 @@ void CadOpenGLWidget::addToSelection(TreeNode* node) {
                 selectedFaceNode_ = selectedFaceNodes_.empty() ? nullptr : selectedFaceNodes_.back();
                 selectedFace_ = selectedFaceNode_ ? TopoDS::Face(selectedFaceNode_->getFace().Located(selectedFaceNode_->loc)) : TopoDS_Face();
             }
-            qDebug() << "[MultiSelect] Removed face from selection, total:" << selectedFaceNodes_.size();
         } else {
             // Add to selection
             selectedFaceNodes_.push_back(node);
             selectedFaceNode_ = node;
             selectedFace_ = TopoDS::Face(node->getFace().Located(node->loc));
-            qDebug() << "[MultiSelect] Added face to selection, total:" << selectedFaceNodes_.size();
         }
     } else if (node->type == TopAbs_EDGE && node->hasEdge()) {
         // Check if already selected
@@ -1693,19 +1710,17 @@ void CadOpenGLWidget::addToSelection(TreeNode* node) {
                 selectedEdgeNode_ = selectedEdgeNodes_.empty() ? nullptr : selectedEdgeNodes_.back();
                 selectedEdge_ = selectedEdgeNode_ ? TopoDS::Edge(selectedEdgeNode_->getEdge().Located(selectedEdgeNode_->loc)) : TopoDS_Edge();
             }
-            qDebug() << "[MultiSelect] Removed edge from selection, total:" << selectedEdgeNodes_.size();
         } else {
             // Add to selection
             selectedEdgeNodes_.push_back(node);
             selectedEdgeNode_ = node;
             selectedEdge_ = TopoDS::Edge(node->getEdge().Located(node->loc));
-            qDebug() << "[MultiSelect] Added edge to selection, total:" << selectedEdgeNodes_.size();
         }
     }
     update();
 }
 
-void CadOpenGLWidget::removeFromSelection(TreeNode* node) {
+void CadOpenGLWidget::removeFromSelection(CadNode* node) {
     if (!node) return;
     
     if (node->type == TopAbs_FACE && node->hasFace()) {
@@ -1753,7 +1768,7 @@ static QPoint worldToScreen(const QVector3D& world, int width, int height, float
 
 void CadOpenGLWidget::drawPivotSphere() {
     glPushMatrix();
-    glTranslatef(m_pivotWorldPos.x(), m_pivotWorldPos.y(), m_pivotWorldPos.z());
+    glTranslatef(camera_.pivotWorldPos.x(), camera_.pivotWorldPos.y(), camera_.pivotWorldPos.z());
     glColor4f(1.0f, 0.2f, 0.2f, 0.8f); // Red, semi-transparent
     GLUquadric* quad = gluNewQuadric();
     gluSphere(quad, 150.0, 16, 8); // Increased radius from 5.0 to 15.0
@@ -1762,42 +1777,142 @@ void CadOpenGLWidget::drawPivotSphere() {
 } 
 
 void CadOpenGLWidget::setCamera(const QVector3D& pos, const QQuaternion& rot, float zoom) {
-    m_cameraPos = pos;
-    m_cameraRot = rot;
-    m_cameraZoom = zoom;
+    camera_.pos = pos;
+    camera_.rot = rot;
+    camera_.zoom = zoom;
     update();
 } 
 
 void CadOpenGLWidget::setPivotSphere(const QVector3D& worldPos) {
-    m_pivotWorldPos = worldPos;
-    m_showPivotSphere = true;
+    camera_.pivotWorldPos = worldPos;
+    camera_.showPivotSphere = true;
     update();
 } 
 
+// Helper to recursively accumulate bounding box for a node and its children
+static void accumulateBoundingBox(const CadNode* node, Bnd_Box& bbox) {
+    if (!node) return;
+    if (node->type == TopAbs_FACE && node->hasFace()) {
+        TopoDS_Face locatedFace = TopoDS::Face(node->getFace().Located(node->loc));
+        BRepBndLib::Add(locatedFace, bbox);
+    }
+    for (const auto& child : node->children) {
+        if (child) accumulateBoundingBox(child.get(), bbox);
+    }
+}
+
 void CadOpenGLWidget::reframeCamera() {
     if (!rootNode_) return;
-    // Compute bounding box of all geometry
+
+    // 1. Compute bounding box
     Bnd_Box bbox;
-    std::function<void(TreeNode*)> traverse;
-    traverse = [&](TreeNode* node) {
-        if (!node) return;
-        if (node->type == TopAbs_FACE && node->hasFace()) {
-            TopoDS_Face face = node->getFace();
-            BRepBndLib::Add(face, bbox);
-        }
-        for (const auto& child : node->children) traverse(child.get());
-    };
-    for (const auto& child : rootNode_->children) traverse(child.get());
+    accumulateBoundingBox(rootNode_, bbox);
     if (bbox.IsVoid()) return;
+
     Standard_Real xmin, ymin, zmin, xmax, ymax, zmax;
     bbox.Get(xmin, ymin, zmin, xmax, ymax, zmax);
     QVector3D center((xmin + xmax) * 0.5, (ymin + ymax) * 0.5, (zmin + zmax) * 0.5);
-    double diag = std::sqrt((xmax - xmin)*(xmax - xmin) + (ymax - ymin)*(ymax - ymin) + (zmax - zmin)*(zmax - zmin));
-    float zoom = float(diag / (2.0 * std::tan(45.0 * M_PI / 360.0))); // fit in 45 deg fov
-    QVector3D camPos = center + QVector3D(0, 0, zoom);
-    QQuaternion camRot; // identity, looking down -Z
-    setCamera(camPos, camRot, zoom);
-} 
+
+    // 2. Get all 8 corners of the bounding box
+    QVector<QVector3D> corners = {
+        {float(xmin), float(ymin), float(zmin)},
+        {float(xmin), float(ymin), float(zmax)},
+        {float(xmin), float(ymax), float(zmin)},
+        {float(xmin), float(ymax), float(zmax)},
+        {float(xmax), float(ymin), float(zmin)},
+        {float(xmax), float(ymin), float(zmax)},
+        {float(xmax), float(ymax), float(zmin)},
+        {float(xmax), float(ymax), float(zmax)}
+    };
+
+    // 3. Transform corners to camera local space (view space)
+    QMatrix4x4 view;
+    view.rotate(camera_.rot.conjugated());
+    view.translate(-center); // Center the model
+
+    float maxX = 0, maxY = 0;
+    for (const auto& c : corners) {
+        QVector3D v = view.map(c);
+        maxX = std::max(maxX, std::abs(v.x()));
+        maxY = std::max(maxY, std::abs(v.y()));
+    }
+
+    // 4. Compute required distance to fit the bounding box in view
+    float fovY = 45.0f * M_PI / 180.0f;
+    float aspect = float(width()) / float(height() ? height() : 1);
+    float halfFovY = fovY / 2.0f;
+    float halfFovX = atan(tan(halfFovY) * aspect);
+
+    float distY = maxY / tan(halfFovY);
+    float distX = maxX / tan(halfFovX);
+    float requiredDist = std::max(distX, distY);
+    requiredDist *= 1.1f; // Add a margin
+
+    // 5. Set camera position along current view direction
+    QVector3D viewDir = camera_.rot.rotatedVector(QVector3D(0, 0, -1));
+    QVector3D newCamPos = center - viewDir * requiredDist;
+
+    camera_.pos = newCamPos;
+    camera_.zoom = requiredDist;
+    camera_.pivotWorldPos = center;
+
+    update();
+}
+
+CameraState CadOpenGLWidget::getCameraState() const {
+    return camera_;
+}
+void CadOpenGLWidget::setCameraState(const CameraState& state) {
+    camera_ = state;
+    update();
+}
+
+void CadOpenGLWidget::markCacheDirty() {
+    m_cacheDirty = true;
+    update();
+}
+
+// Helper: Draw a wireframe bounding box given min/max coordinates
+void CadOpenGLWidget::drawBoundingBox(const QVector3D& min, const QVector3D& max, const QVector4D& color) {
+    glPushAttrib(GL_ENABLE_BIT | GL_LINE_BIT | GL_COLOR_BUFFER_BIT);
+    glDisable(GL_LIGHTING);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glColor4f(color.x(), color.y(), color.z(), color.w());
+    glLineWidth(2.0f);
+    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+
+    glBegin(GL_LINES);
+    // 8 corners
+    QVector3D c[8] = {
+        {min.x(), min.y(), min.z()},
+        {min.x(), min.y(), max.z()},
+        {min.x(), max.y(), min.z()},
+        {min.x(), max.y(), max.z()},
+        {max.x(), min.y(), min.z()},
+        {max.x(), min.y(), max.z()},
+        {max.x(), max.y(), min.z()},
+        {max.x(), max.y(), max.z()}
+    };
+    // 12 edges
+    int edges[12][2] = {
+        {0,1},{0,2},{0,4},
+        {1,3},{1,5},
+        {2,3},{2,6},
+        {3,7},
+        {4,5},{4,6},
+        {5,7},
+        {6,7}
+    };
+    for (int i = 0; i < 12; ++i) {
+        glVertex3f(c[edges[i][0]].x(), c[edges[i][0]].y(), c[edges[i][0]].z());
+        glVertex3f(c[edges[i][1]].x(), c[edges[i][1]].y(), c[edges[i][1]].z());
+    }
+    glEnd();
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    glLineWidth(1.0f);
+    glPopAttrib();
+}
 
 
 

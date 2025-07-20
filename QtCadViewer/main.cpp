@@ -17,11 +17,14 @@
 #include <QSet>
 #include <QHash>
 #include <TDF_ChildIterator.hxx>
+#include <TDF_AttributeIterator.hxx>
 #include <TDataStd_TreeNode.hxx>
+#include <TDF_RelocationTable.hxx>
 
 #include "CadNode.h"
 #include "XCAFLabelTreeModel.h"
 #include "CadOpenGLWidget.h" // For SelectionMode enum
+#include "CustomModelTreeModel.h"
 
 // Helper to recursively build XCAFLabelNode tree with sub-assembly detection
 std::unique_ptr<XCAFLabelNode> buildLabelTree(const TDF_Label& label, const Handle(XCAFDoc_ShapeTool)& shapeTool = nullptr) {
@@ -146,6 +149,15 @@ std::unique_ptr<XCAFLabelNode> buildLabelTreeWithReferences(const TDF_Label& lab
 #include <Bnd_Box.hxx>
 #include <BRep_Tool.hxx>
 #include <Geom_Surface.hxx>
+#include <STEPCAFControl_Writer.hxx>
+#include <IGESCAFControl_Writer.hxx>
+#include <BinDrivers.hxx>
+#include <XmlDrivers.hxx>
+#include <PCDM_StoreStatus.hxx>
+#include <QFileInfo>
+#include <QDir>
+#include <BinXCAFDrivers.hxx>
+#include <XmlXCAFDrivers.hxx>
 
 // qHash overload for TDF_Label to allow use in QSet/QHash
 #include <TDF_Label.hxx>
@@ -204,15 +216,52 @@ CADNodeColor getEffectiveFaceColor(const TopoDS_Face& face,
 
 
 
-// Helper: Extract color from XCAF label, fallback to parent color
+// Enhanced color extraction that traverses up the label hierarchy
 CADNodeColor get_label_color(const TDF_Label& label, const Handle(XCAFDoc_ColorTool)& colorTool, const CADNodeColor& parentColor) {
     Quantity_Color occColor;
+    
+    // First try to get color from the current label
     if (colorTool->GetColor(label, XCAFDoc_ColorSurf, occColor) ||
         colorTool->GetColor(label, XCAFDoc_ColorGen, occColor) ||
         colorTool->GetColor(label, XCAFDoc_ColorCurv, occColor)) {
         return CADNodeColor(occColor.Red(), occColor.Green(), occColor.Blue());
     }
+    
+    // If no color found, traverse up the label tree to find inherited color
+    TDF_Label current = label;
+    while (!current.IsNull()) {
+        current = current.Father();
+        if (!current.IsNull()) {
+            if (colorTool->GetColor(current, XCAFDoc_ColorGen, occColor) ||
+                colorTool->GetColor(current, XCAFDoc_ColorSurf, occColor) ||
+                colorTool->GetColor(current, XCAFDoc_ColorCurv, occColor)) {
+                return CADNodeColor(occColor.Red(), occColor.Green(), occColor.Blue());
+            }
+        }
+    }
+    
+    // If still no color found, return the provided parent color
     return parentColor;
+}
+
+// Enhanced color extraction for specific shape types
+CADNodeColor get_shape_color(const TopoDS_Shape& shape, 
+                           const TDF_Label& label,
+                           const Handle(XCAFDoc_ShapeTool)& shapeTool,
+                           const Handle(XCAFDoc_ColorTool)& colorTool,
+                           const CADNodeColor& parentColor) {
+    if (shape.IsNull()) {
+        return get_label_color(label, colorTool, parentColor);
+    }
+    
+    // For faces, use the sophisticated face color extraction
+    if (shape.ShapeType() == TopAbs_FACE) {
+        TopoDS_Face face = TopoDS::Face(shape);
+        return getEffectiveFaceColor(face, shapeTool, colorTool);
+    }
+    
+    // For other shapes, use the enhanced label color extraction
+    return get_label_color(label, colorTool, parentColor);
 }
 
 // Helper: recursively check if a label or any of its descendants is a sub-assembly (compound)
@@ -293,14 +342,24 @@ TopLoc_Location getEffectiveTransform(const TDF_Label& label,
 }
 
 // Improved tree building function for STEP 214 compatibility
-std::unique_ptr<TreeNode> build_tree_xcaf(const TDF_Label& label,
+std::shared_ptr<CadNode> build_tree_xcaf(const TDF_Label& label,
                    const Handle(XCAFDoc_ShapeTool)& shapeTool,
                    const Handle(XCAFDoc_ColorTool)& colorTool,
                    const CADNodeColor& parentColor,
                    const TopLoc_Location& parentLoc)
 {
-    CADNodeColor color = get_label_color(label, colorTool, parentColor);
     TopoDS_Shape shape = shapeTool->GetShape(label);
+    CADNodeColor color = get_shape_color(shape, label, shapeTool, colorTool, parentColor);
+    
+    // Debug color propagation for important nodes
+    if (!shape.IsNull() && (shape.ShapeType() == TopAbs_SOLID || shape.ShapeType() == TopAbs_COMPOUND)) {
+        qDebug() << "Label" << label.Tag() << "color: RGB(" << color.r << "," << color.g << "," << color.b << ")";
+        if (color.r == parentColor.r && color.g == parentColor.g && color.b == parentColor.b) {
+            qDebug() << "  -> Inherited from parent";
+        } else {
+            qDebug() << "  -> Own color";
+        }
+    }
     
     // Skip edge shapes entirely
     if (!shape.IsNull() && shape.ShapeType() == TopAbs_EDGE) {
@@ -318,7 +377,7 @@ std::unique_ptr<TreeNode> build_tree_xcaf(const TDF_Label& label,
     // Get effective transform for this node
     TopLoc_Location nodeLoc = getEffectiveTransform(label, shapeTool, parentLoc);
     
-    auto node = std::make_unique<TreeNode>();
+    auto node = std::make_shared<CadNode>();
     node->color = color;
     node->loc = nodeLoc;
     
@@ -386,11 +445,15 @@ std::unique_ptr<TreeNode> build_tree_xcaf(const TDF_Label& label,
         if (shapeTool->GetReferredShape(label, refLabel)) {
             qDebug() << "Following reference from label" << label.Tag() << "to" << refLabel.Tag();
             TopLoc_Location refLoc = nodeLoc; // Use the effective transform
+            
+            // For references, we want to preserve the color from the reference label
+            // but also allow the referred shape to have its own colors
+            // So we pass the current color as the parent color for inheritance
             auto child = build_tree_xcaf(refLabel, shapeTool, colorTool, color, refLoc);
             if (child) {
                 // Mark this as a reference node in the name
                 child->name = QString("REF->%1 | %2").arg(refLabel.Tag()).arg(QString::fromStdString(child->name)).toStdString();
-                node->children.push_back(std::move(child));
+                node->children.push_back(child);
             }
         }
     }
@@ -398,7 +461,7 @@ std::unique_ptr<TreeNode> build_tree_xcaf(const TDF_Label& label,
     // Recurse into children (for all labels)
     for (TDF_ChildIterator it(label); it.More(); it.Next()) {
         auto child = build_tree_xcaf(it.Value(), shapeTool, colorTool, color, nodeLoc);
-        if (child) node->children.push_back(std::move(child));
+        if (child) node->children.push_back(child);
     }
     
     // After node is created and type is set
@@ -421,18 +484,19 @@ std::unique_ptr<TreeNode> build_tree_xcaf(const TDF_Label& label,
         // Add faces and edges if this solid doesn't have other solid children
         // Note: We removed the isCompoundAssembly check to allow faces on solids within compounds
         if (!hasSolidChildren) {
-            // Add face children
+            // Add face children with proper color extraction
             int faceIdx = 0;
             int faceCount = 0;
             for (TopExp_Explorer exp(shape, TopAbs_FACE); exp.More(); exp.Next(), ++faceIdx) {
-                TopoDS_Shape face = exp.Current();
-                auto faceNode = std::make_unique<TreeNode>();
+                TopoDS_Face face = TopoDS::Face(exp.Current());
+                auto faceNode = std::make_shared<CadNode>();
                 faceNode->type = TopAbs_FACE;
                 faceNode->shapeData.shape = face;
-                faceNode->color = color;
+                // Use the enhanced color extraction for faces
+                faceNode->color = get_shape_color(face, label, shapeTool, colorTool, color);
                 faceNode->loc = nodeLoc;
                 faceNode->name = QString("Face %1 of %2").arg(faceIdx).arg(QString::fromStdString(node->name)).toStdString();
-                node->children.push_back(std::move(faceNode));
+                node->children.push_back(faceNode);
                 faceCount++;
             }
             
@@ -441,13 +505,13 @@ std::unique_ptr<TreeNode> build_tree_xcaf(const TDF_Label& label,
             int edgeCount = 0;
             for (TopExp_Explorer exp(shape, TopAbs_EDGE); exp.More(); exp.Next(), ++edgeIdx) {
                 TopoDS_Shape edge = exp.Current();
-                auto edgeNode = std::make_unique<TreeNode>();
+                auto edgeNode = std::make_shared<CadNode>();
                 edgeNode->type = TopAbs_EDGE;
                 edgeNode->shapeData.shape = edge;
                 edgeNode->color = color;
                 edgeNode->loc = nodeLoc;
                 edgeNode->name = QString("Edge %1 of %2").arg(edgeIdx).arg(QString::fromStdString(node->name)).toStdString();
-                node->children.push_back(std::move(edgeNode));
+                node->children.push_back(edgeNode);
                 edgeCount++;
             }
             
@@ -458,10 +522,103 @@ std::unique_ptr<TreeNode> build_tree_xcaf(const TDF_Label& label,
     return node;
 }
 
+// Serialization functions for XCAF data
+bool saveXCAFToSTEP(const Handle(TDocStd_Document)& doc, const QString& filename) {
+    try {
+        STEPCAFControl_Writer writer;
+        writer.SetColorMode(true);
+        writer.SetNameMode(true);
+        writer.SetLayerMode(true);
+        
+        if (writer.Transfer(doc, STEPControl_AsIs)) {
+            IFSelect_ReturnStatus status = writer.Write(filename.toStdString().c_str());
+            if (status == IFSelect_RetDone) {
+                qDebug() << "Successfully saved XCAF data to STEP file:" << filename;
+                return true;
+            } else {
+                qDebug() << "Failed to write STEP file. Status:" << status;
+                return false;
+            }
+        } else {
+            qDebug() << "Failed to transfer document to STEP writer";
+            return false;
+        }
+    } catch (const Standard_Failure& e) {
+        qDebug() << "Exception during STEP save:" << e.GetMessageString();
+        return false;
+    }
+}
+
+bool saveXCAFToBinary(const Handle(TDocStd_Document)& doc, const QString& filename) {
+    try {
+        Handle(TDocStd_Application) app = Handle(TDocStd_Application)::DownCast(doc->Application());
+        if (app.IsNull()) {
+            qDebug() << "Failed to get TDocStd_Application from document";
+            return false;
+        }
+        BinXCAFDrivers::DefineFormat(app); // Use XCAF-specific driver
+        PCDM_StoreStatus status = app->SaveAs(doc, TCollection_ExtendedString(filename.toStdString().c_str()));
+        if (status == PCDM_SS_OK) {
+            qDebug() << "Successfully saved XCAF data to binary file:" << filename;
+            return true;
+        } else {
+            qDebug() << "Failed to save binary file. Status:" << status;
+            return false;
+        }
+    } catch (const Standard_Failure& e) {
+        qDebug() << "Exception during binary save:" << e.GetMessageString();
+        return false;
+    }
+}
+
+void compareFileSizes(const QString& baseName) {
+    QFileInfo stepFile(baseName + ".step");
+    QFileInfo binaryFile(baseName + ".bin");
+    QFileInfo xmlFile(baseName + ".xml");
+    
+    qDebug() << "\n=== FILE SIZE COMPARISON ===";
+    
+    if (stepFile.exists()) {
+        qDebug() << "STEP file:" << stepFile.fileName() << "-" << stepFile.size() << "bytes";
+    }
+    
+    if (binaryFile.exists()) {
+        qDebug() << "Binary file:" << binaryFile.fileName() << "-" << binaryFile.size() << "bytes";
+    }
+    
+    if (xmlFile.exists()) {
+        qDebug() << "XML file:" << xmlFile.fileName() << "-" << xmlFile.size() << "bytes";
+    }
+    
+    // Calculate ratios
+    if (stepFile.exists() && binaryFile.exists()) {
+        double ratio = (double)stepFile.size() / binaryFile.size();
+        qDebug() << "STEP/Binary ratio:" << QString::number(ratio, 'f', 2) << "x";
+    }
+    
+    if (xmlFile.exists() && binaryFile.exists()) {
+        double ratio = (double)xmlFile.size() / binaryFile.size();
+        qDebug() << "XML/Binary ratio:" << QString::number(ratio, 'f', 2) << "x";
+    }
+    
+    qDebug() << "=== END COMPARISON ===\n";
+}
+
 // Qt model for the tree view
 #include <QAbstractItemModel>
 #include <QMenu>
 #include <QAction>
+
+// Helper to collect all face nodes under a given node
+static void collectFaceNodes(CadNode* node, std::vector<CadNode*>& out) {
+    if (!node) return;
+    if (node->type == TopAbs_FACE && node->visible) {
+        out.push_back(node);
+    }
+    for (const auto& child : node->children) {
+        if (child) collectFaceNodes(child.get(), out);
+    }
+}
 
 int main(int argc, char *argv[])
 {
@@ -480,7 +637,7 @@ int main(int argc, char *argv[])
     // OCC: Load STEP file into XCAF document
     Handle(XCAFApp_Application) appOCC = XCAFApp_Application::GetApplication();
     Handle(TDocStd_Document) doc;
-    appOCC->NewDocument("MDTV-XCAF", doc);
+    appOCC->NewDocument("BinXCAF", doc);
     STEPCAFControl_Reader reader;
     reader.SetColorMode(true);
     reader.SetNameMode(true);
@@ -514,7 +671,7 @@ int main(int argc, char *argv[])
     
     qDebug() << "Found" << roots.Length() << "free shapes in STEP file";
     
-    auto root = std::make_unique<TreeNode>();
+    auto root = std::make_unique<CadNode>();
     root->name = "Root";
     root->color = defaultColor;
     root->loc = identityLoc;
@@ -525,7 +682,7 @@ int main(int argc, char *argv[])
         
         auto child = build_tree_xcaf(rootLabel, shapeTool, colorTool, defaultColor, identityLoc);
         if (child) {
-            root->children.push_back(std::move(child));
+            root->children.push_back(child);
             qDebug() << "Successfully added root shape" << i << "to tree";
         } else {
             qDebug() << "Failed to build tree for root shape" << i;
@@ -564,7 +721,7 @@ int main(int argc, char *argv[])
                     qDebug() << "Found additional assembly at label" << label.Tag() << "with" << refChildCount << "references";
                     auto assemblyChild = build_tree_xcaf(label, shapeTool, colorTool, defaultColor, identityLoc);
                     if (assemblyChild) {
-                        root->children.push_back(std::move(assemblyChild));
+                        root->children.push_back(assemblyChild);
                     }
                 }
             }
@@ -582,6 +739,9 @@ int main(int argc, char *argv[])
     qDebug() << "Total faces collected:" << faces.size();
 
     // Central widget and splitter
+    // Outer splitter: custom model tree (left) and CAD/XCAF tabs (right)
+    QSplitter *outerSplitter = new QSplitter(Qt::Horizontal);
+    // Inner splitter: tab widget and OpenGL viewer
     QSplitter *splitter = new QSplitter(Qt::Horizontal);
 
     // Layout: buttons above splitter
@@ -590,10 +750,24 @@ int main(int argc, char *argv[])
     QHBoxLayout *buttonLayout = new QHBoxLayout;
     buttonLayout->addStretch();
     vLayout->addLayout(buttonLayout);
-    vLayout->addWidget(splitter);
+    vLayout->addWidget(outerSplitter);
     vLayout->setContentsMargins(0,0,0,0);
     centralWidget->setLayout(vLayout);
     mainWindow.setCentralWidget(centralWidget);
+
+    // --- Custom Model Tree ---
+    // Create persistent root node for the custom model
+    std::shared_ptr<CadNode> customModelRoot = std::make_shared<CadNode>();
+    customModelRoot->name = "Custom Model Root";
+    CustomModelTreeModel* customModel = new CustomModelTreeModel(customModelRoot);
+    QTreeView* customModelTreeView = new QTreeView;
+    customModelTreeView->setModel(customModel);
+    customModelTreeView->setHeaderHidden(false);
+    customModelTreeView->setMinimumWidth(220);
+    outerSplitter->addWidget(customModelTreeView);
+
+    // --- CAD/XCAF Tabs and OpenGL Viewer ---
+    outerSplitter->addWidget(splitter);
 
     // Create tab widget for the left side
     QTabWidget *tabWidget = new QTabWidget;
@@ -608,11 +782,38 @@ int main(int argc, char *argv[])
     treeView->setSelectionMode(QAbstractItemView::ExtendedSelection); // Allow multi-selection
     tabWidget->addTab(treeView, "CAD Tree");
 
-    // Add OpenGL widget for geometry display
+    // --- 3D View Tabs ---
+    QTabWidget* viewTabWidget = new QTabWidget;
+    splitter->addWidget(viewTabWidget);
+
+    // Full model OpenGL widget
     CadOpenGLWidget *viewer = new CadOpenGLWidget;
-    splitter->addWidget(viewer);
-    // Pass the root node to the viewer for rendering
     viewer->setRootTreeNode(model->getRootNodePointer());
+    viewer->update();
+    viewTabWidget->addTab(viewer, "Full Model");
+
+    // Custom model part OpenGL widget
+    CadOpenGLWidget *customPartViewer = new CadOpenGLWidget;
+    customPartViewer->setRootTreeNode(customModel->getRootNodePointer());
+    viewTabWidget->addTab(customPartViewer, "Custom Model Part");
+
+    // Update custom part viewer when selection changes
+    auto updateCustomPartViewer = [&]() {
+        std::vector<CadNode*> faceNodes;
+        // Collect all selected nodes' faces
+        QModelIndexList selectedIndexes = customModelTreeView->selectionModel()->selectedIndexes();
+        for (const QModelIndex& idx : selectedIndexes) {
+            CadNode* node = static_cast<CadNode*>(idx.internalPointer());
+            if (node) collectFaceNodes(node, faceNodes);
+        }
+        //customPartViewer->setCustomNodes(faceNodes); // Uncomment if setCustomNodes is implemented
+        customPartViewer->markCacheDirty();
+    };
+
+    // Connect custom model tree selection to customPartViewer
+    QObject::connect(customModelTreeView->selectionModel(), &QItemSelectionModel::selectionChanged, customPartViewer, [=](const QItemSelection &selected, const QItemSelection &/*deselected*/) {
+        updateCustomPartViewer();
+    });
     
     // Force the viewer to update and render the geometry
     viewer->update();
@@ -654,10 +855,47 @@ int main(int argc, char *argv[])
     // Add Reframe button
     QPushButton* reframeBtn = new QPushButton("Reframe");
     buttonLayout->addWidget(reframeBtn);
-    QObject::connect(reframeBtn, &QPushButton::clicked, viewer, &CadOpenGLWidget::reframeCamera);
-
+    QObject::connect(reframeBtn, &QPushButton::clicked, [=]() {
+        int idx = viewTabWidget->currentIndex();
+        if (idx == 0) {
+            qDebug() << "Reframe main";
+            viewer->reframeCamera();
+        } else if (idx == 1) {
+            qDebug() << "Reframe sub";
+            customPartViewer->reframeCamera();
+        }
+    });
+    
+    // Add serialization buttons
+    QPushButton* saveStepBtn = new QPushButton("Save STEP");
+    QPushButton* saveBinaryBtn = new QPushButton("Save Binary");
+    
+    buttonLayout->addWidget(saveStepBtn);
+    buttonLayout->addWidget(saveBinaryBtn);
+    
+    // Connect serialization buttons
+    QObject::connect(saveStepBtn, &QPushButton::clicked, [=]() {
+        QString baseName = QFileInfo(stepFile).baseName();
+        QString outputPath = QDir::currentPath() + QDir::separator() + baseName + "_serialized.step";
+        if (saveXCAFToSTEP(doc, outputPath)) {
+            QMessageBox::information(nullptr, "Success", "XCAF data saved to STEP file:\n" + outputPath);
+        } else {
+            QMessageBox::warning(nullptr, "Error", "Failed to save XCAF data to STEP file");
+        }
+    });
+    
+    QObject::connect(saveBinaryBtn, &QPushButton::clicked, [=]() {
+        QString baseName = QFileInfo(stepFile).baseName();
+        QString outputPath = QDir::currentPath() + QDir::separator() + baseName + "_serialized.bin";
+        if (saveXCAFToBinary(doc, outputPath)) {
+            QMessageBox::information(nullptr, "Success", "XCAF data saved to binary file:\n" + outputPath);
+        } else {
+            QMessageBox::warning(nullptr, "Error", "Failed to save XCAF data to binary file");
+        }
+    });
+    
     // Connect face selection in viewer to tree selection
-    QObject::connect(viewer, &CadOpenGLWidget::facePicked, treeView, [=](TreeNode* node) {
+    QObject::connect(viewer, &CadOpenGLWidget::facePicked, treeView, [=](CadNode* node) {
         QModelIndex idx = model->indexForNode(node);
         if (idx.isValid()) {
             // Expand all parents so the item is visible
@@ -672,7 +910,7 @@ int main(int argc, char *argv[])
     });
     
     // Connect edge selection in viewer to tree selection
-    QObject::connect(viewer, &CadOpenGLWidget::edgePicked, treeView, [=](TreeNode* node) {
+    QObject::connect(viewer, &CadOpenGLWidget::edgePicked, treeView, [=](CadNode* node) {
         QModelIndex idx = model->indexForNode(node);
         if (idx.isValid()) {
             // Expand all parents so the item is visible
@@ -691,18 +929,18 @@ int main(int argc, char *argv[])
         // Clear current selection first
         viewer->clearSelection();
         
-        // Add all selected items and their descendants to the multi-selection
-        QModelIndexList selectedIndexes = selected.indexes();
-        QSet<TreeNode*> allNodesToSelect;
+        // Use the full current selection, not just the newly selected indexes
+        QModelIndexList selectedIndexes = treeView->selectionModel()->selectedIndexes();
+        QSet<CadNode*> allNodesToSelect;
         
         for (const QModelIndex& index : selectedIndexes) {
-            TreeNode* node = model->getNode(index);
+            CadNode* node = model->getNode(index);
             if (node) {
                 // Add the selected node
                 allNodesToSelect.insert(node);
                 
                 // Add all descendants recursively
-                std::function<void(TreeNode*)> addDescendants = [&](TreeNode* currentNode) {
+                std::function<void(CadNode*)> addDescendants = [&](CadNode* currentNode) {
                     for (const auto& child : currentNode->children) {
                         if (child) {
                             allNodesToSelect.insert(child.get());
@@ -715,7 +953,7 @@ int main(int argc, char *argv[])
         }
         
         // Add all collected nodes to the selection
-        for (TreeNode* node : allNodesToSelect) {
+        for (CadNode* node : allNodesToSelect) {
             viewer->addToSelection(node);
         }
     });
@@ -805,12 +1043,24 @@ int main(int argc, char *argv[])
         QModelIndex idx = treeView->indexAt(pos);
         if (!idx.isValid()) return;
         
-        TreeNode* node = model->getNode(idx);
+        CadNode* node = model->getNode(idx);
         if (!node) return;
         
         QMenu menu;
         QAction* showAction = menu.addAction("Show");
         QAction* hideAction = menu.addAction("Hide");
+        
+        // --- Custom Model Part Add Actions ---
+        menu.addSeparator();
+        QAction* addCarriageAction = menu.addAction("Add as Carriage (Custom Model)");
+        QAction* addStartSegAction = menu.addAction("Add as Start Segment (Custom Model)");
+        QAction* addEndSegAction = menu.addAction("Add as End Segment (Custom Model)");
+        QAction* addMiddleSegAction = menu.addAction("Add as Middle Segment (Custom Model)");
+        // Clear actions
+        QAction* clearCarriageAction = menu.addAction("Clear Carriage (Custom Model)");
+        QAction* clearStartSegAction = menu.addAction("Clear Start Segment (Custom Model)");
+        QAction* clearEndSegAction = menu.addAction("Clear End Segment (Custom Model)");
+        QAction* clearMiddleSegAction = menu.addAction("Clear Middle Segment (Custom Model)");
         
         // Add debug info option for solids and faces
         QAction* debugAction = nullptr;
@@ -822,12 +1072,192 @@ int main(int argc, char *argv[])
             menu.addSeparator();
             debugFaceAction = menu.addAction("Debug Face Info");
         }
+
+        // --- Unselect by Color ---
+        QAction* unselectByColorAction = menu.addAction("Unselect All by Color");
+        QObject::connect(unselectByColorAction, &QAction::triggered, treeView, [=]() {
+            // Gather all selected nodes and their colors
+            QModelIndexList selectedIndexes = treeView->selectionModel()->selectedIndexes();
+            if (selectedIndexes.empty()) return;
+            QMap<QString, QList<QModelIndex>> colorToIndexes;
+            QMap<QString, QColor> colorKeyToColor;
+            for (const QModelIndex& selIdx : selectedIndexes) {
+                CadNode* n = model->getNode(selIdx);
+                if (n) {
+                    QColor color = n->color.toQColor();
+                    QString colorKey = color.name(QColor::HexArgb);
+                    colorToIndexes[colorKey].append(selIdx);
+                    colorKeyToColor[colorKey] = color;
+                }
+            }
+            if (colorToIndexes.isEmpty()) return;
+            if (colorToIndexes.size() == 1) {
+                // Only one color, unselect all
+                QList<QModelIndex> toUnselect = colorToIndexes.first();
+                QItemSelectionModel* selModel = treeView->selectionModel();
+                for (const QModelIndex& idx : toUnselect) {
+                    selModel->select(idx, QItemSelectionModel::Deselect);
+                }
+            } else {
+                // Multiple colors, show a submenu to pick
+                QMenu colorMenu;
+                QMap<QAction*, QString> actionToColorKey;
+                for (auto it = colorToIndexes.begin(); it != colorToIndexes.end(); ++it) {
+                    QString colorKey = it.key();
+                    QColor color = colorKeyToColor[colorKey];
+                    QString label = QString("Unselect color: ") + color.name(QColor::HexArgb) + QString(" (%1)").arg(it.value().size());
+                    QAction* colorAct = colorMenu.addAction(label);
+                    QPixmap pix(16, 16);
+                    pix.fill(color);
+                    colorAct->setIcon(QIcon(pix));
+                    actionToColorKey[colorAct] = colorKey;
+                }
+                QAction* chosen = colorMenu.exec(QCursor::pos());
+                if (chosen && actionToColorKey.contains(chosen)) {
+                    QString chosenColorKey = actionToColorKey[chosen];
+                    QList<QModelIndex> toUnselect = colorToIndexes[chosenColorKey];
+                    QItemSelectionModel* selModel = treeView->selectionModel();
+                    for (const QModelIndex& idx : toUnselect) {
+                        selModel->select(idx, QItemSelectionModel::Deselect);
+                    }
+                }
+            }
+        });
+        
+        // --- Custom Model Add Logic ---
+        auto getSelectedNodes = [&]() -> std::vector<CadNode*> {
+            QModelIndexList selectedIndexes = treeView->selectionModel()->selectedIndexes();
+            std::vector<CadNode*> nodes;
+            for (const QModelIndex& selIdx : selectedIndexes) {
+                CadNode* n = model->getNode(selIdx);
+                if (n) nodes.push_back(n);
+            }
+            return nodes;
+        };
+        QObject::connect(addCarriageAction, &QAction::triggered, treeView, [=]() {
+            auto nodes = getSelectedNodes();
+            if (nodes.empty()) return;
+            std::shared_ptr<CadNode> newPart = std::make_shared<CadNode>();
+            newPart->name = "Carriage";
+            newPart->loc = nodes[0]->loc;
+            newPart->color = nodes[0]->color;
+            newPart->type = TopAbs_COMPOUND; // Assuming a compound for a part
+            newPart->shapeData.shape = TopoDS_Compound(); // Placeholder for compound
+            // Add selected nodes as children of the part node
+            for (CadNode* n : nodes) {
+                if (n) newPart->children.push_back(std::make_shared<CadNode>(*n));
+            }
+            customModelRoot->children.push_back(newPart);
+            customModel->layoutChanged(); // Notify model of structure change
+            customPartViewer->setRootTreeNode(customModel->getRootNodePointer()); // Update viewer's root node
+            updateCustomPartViewer();
+        });
+        QObject::connect(addStartSegAction, &QAction::triggered, treeView, [=]() {
+            auto nodes = getSelectedNodes();
+            if (nodes.empty()) return;
+            std::shared_ptr<CadNode> newPart = std::make_shared<CadNode>();
+            newPart->name = "Start Segment";
+            newPart->loc = nodes[0]->loc;
+            newPart->color = nodes[0]->color;
+            newPart->type = TopAbs_COMPOUND; // Assuming a compound for a part
+            newPart->shapeData.shape = TopoDS_Compound(); // Placeholder for compound
+            for (CadNode* n : nodes) {
+                if (n) newPart->children.push_back(std::make_shared<CadNode>(*n));
+            }
+            customModelRoot->children.push_back(newPart);
+            customModel->layoutChanged(); // Notify model of structure change
+            customPartViewer->setRootTreeNode(customModel->getRootNodePointer()); // Update viewer's root node
+            updateCustomPartViewer();
+        });
+        QObject::connect(addEndSegAction, &QAction::triggered, treeView, [=]() {
+            auto nodes = getSelectedNodes();
+            if (nodes.empty()) return;
+            std::shared_ptr<CadNode> newPart = std::make_shared<CadNode>();
+            newPart->name = "End Segment";
+            newPart->loc = nodes[0]->loc;
+            newPart->color = nodes[0]->color;
+            newPart->type = TopAbs_COMPOUND; // Assuming a compound for a part
+            newPart->shapeData.shape = TopoDS_Compound(); // Placeholder for compound
+            for (CadNode* n : nodes) {
+                if (n) newPart->children.push_back(std::make_shared<CadNode>(*n));
+            }
+            customModelRoot->children.push_back(newPart);
+            customModel->layoutChanged(); // Notify model of structure change
+            customPartViewer->setRootTreeNode(customModel->getRootNodePointer()); // Update viewer's root node
+            updateCustomPartViewer();
+        });
+        QObject::connect(addMiddleSegAction, &QAction::triggered, treeView, [=]() {
+            auto nodes = getSelectedNodes();
+            if (nodes.empty()) return;
+            std::shared_ptr<CadNode> newPart = std::make_shared<CadNode>();
+            newPart->name = "Middle Segment";
+            newPart->loc = nodes[0]->loc;
+            newPart->color = nodes[0]->color;
+            newPart->type = TopAbs_COMPOUND; // Assuming a compound for a part
+            newPart->shapeData.shape = TopoDS_Compound(); // Placeholder for compound
+            for (CadNode* n : nodes) {
+                if (n) newPart->children.push_back(std::make_shared<CadNode>(*n));
+            }
+            customModelRoot->children.push_back(newPart);
+            customModel->layoutChanged(); // Notify model of structure change
+            customPartViewer->setRootTreeNode(customModel->getRootNodePointer()); // Update viewer's root node
+            updateCustomPartViewer();
+        });
+        // --- Custom Model Clear Logic ---
+        QObject::connect(clearCarriageAction, &QAction::triggered, treeView, [=]() {
+            auto& children = customModelRoot->children;
+            children.erase(
+                std::remove_if(children.begin(), children.end(),
+                               [](const std::shared_ptr<CadNode>& node) {
+                                   return node->name == "Carriage";
+                               }),
+                children.end());
+            customModel->layoutChanged(); // Notify model of structure change
+            customPartViewer->setRootTreeNode(customModel->getRootNodePointer()); // Update viewer's root node
+            updateCustomPartViewer();
+        });
+        QObject::connect(clearStartSegAction, &QAction::triggered, treeView, [=]() {
+            auto& children = customModelRoot->children;
+            children.erase(
+                std::remove_if(children.begin(), children.end(),
+                               [](const std::shared_ptr<CadNode>& node) {
+                                   return node->name == "Start Segment";
+                               }),
+                children.end());
+            customModel->layoutChanged(); // Notify model of structure change
+            customPartViewer->setRootTreeNode(customModel->getRootNodePointer()); // Update viewer's root node
+            updateCustomPartViewer();
+        });
+        QObject::connect(clearEndSegAction, &QAction::triggered, treeView, [=]() {
+            auto& children = customModelRoot->children;
+            children.erase(
+                std::remove_if(children.begin(), children.end(),
+                               [](const std::shared_ptr<CadNode>& node) {
+                                   return node->name == "End Segment";
+                               }),
+                children.end());
+            customModel->layoutChanged(); // Notify model of structure change
+            customPartViewer->setRootTreeNode(customModel->getRootNodePointer()); // Update viewer's root node
+            updateCustomPartViewer();
+        });
+        QObject::connect(clearMiddleSegAction, &QAction::triggered, treeView, [=]() {
+            auto& children = customModelRoot->children;
+            children.erase(
+                std::remove_if(children.begin(), children.end(),
+                               [](const std::shared_ptr<CadNode>& node) {
+                                   return node->name == "Middle Segment";
+                               }),
+                children.end());
+            customModel->layoutChanged(); // Notify model of structure change
+            customPartViewer->setRootTreeNode(customModel->getRootNodePointer()); // Update viewer's root node
+            updateCustomPartViewer();
+        });
         
         QObject::connect(showAction, &QAction::triggered, treeView, [=]() {
             auto selection = treeView->selectionModel()->selectedIndexes();
-            QSet<TreeNode*> affected;
+            QSet<CadNode*> affected;
             for (const QModelIndex& selIdx : selection) {
-                TreeNode* n = model->getNode(selIdx);
+                CadNode* n = model->getNode(selIdx);
                 if (n && !affected.contains(n)) {
                     n->setVisibleRecursive(true);
                     affected.insert(n);
@@ -839,9 +1269,9 @@ int main(int argc, char *argv[])
         
         QObject::connect(hideAction, &QAction::triggered, treeView, [=]() {
             auto selection = treeView->selectionModel()->selectedIndexes();
-            QSet<TreeNode*> affected;
+            QSet<CadNode*> affected;
             for (const QModelIndex& selIdx : selection) {
-                TreeNode* n = model->getNode(selIdx);
+                CadNode* n = model->getNode(selIdx);
                 if (n && !affected.contains(n)) {
                     n->setVisibleRecursive(false);
                     affected.insert(n);
@@ -854,7 +1284,7 @@ int main(int argc, char *argv[])
         // Debug info action for solids
         if (debugAction) {
             QObject::connect(debugAction, &QAction::triggered, treeView, [=]() {
-                TreeNode* solidNode = model->getNode(idx);
+                CadNode* solidNode = model->getNode(idx);
                 if (!solidNode || solidNode->type != TopAbs_SOLID) return;
                 
                 qDebug() << "=== SOLID DEBUG INFO ===";
@@ -899,7 +1329,7 @@ int main(int argc, char *argv[])
                 
                 // Check parent info
                 if (idx.parent().isValid()) {
-                    TreeNode* parentNode = model->getNode(idx.parent());
+                    CadNode* parentNode = model->getNode(idx.parent());
                     if (parentNode) {
                         qDebug() << "Parent type:" << shapeTypeToString(parentNode->type);
                         qDebug() << "Parent name:" << QString::fromStdString(parentNode->name);
@@ -919,7 +1349,7 @@ int main(int argc, char *argv[])
         // Debug info action for faces
         if (debugFaceAction) {
             QObject::connect(debugFaceAction, &QAction::triggered, treeView, [=]() {
-                TreeNode* faceNode = model->getNode(idx);
+                CadNode* faceNode = model->getNode(idx);
                 if (!faceNode || faceNode->type != TopAbs_FACE) return;
                 
                 qDebug() << "=== FACE DEBUG INFO ===";
@@ -1040,7 +1470,7 @@ int main(int argc, char *argv[])
                 
                 // Check parent info
                 if (idx.parent().isValid()) {
-                    TreeNode* parentNode = model->getNode(idx.parent());
+                    CadNode* parentNode = model->getNode(idx.parent());
                     if (parentNode) {
                         qDebug() << "Parent type:" << shapeTypeToString(parentNode->type);
                         qDebug() << "Parent name:" << QString::fromStdString(parentNode->name);

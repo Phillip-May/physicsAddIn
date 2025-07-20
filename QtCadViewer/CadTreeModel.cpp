@@ -2,7 +2,7 @@
 
 #include <CadNode.h>
 
-CadTreeModel::CadTreeModel(std::unique_ptr<TreeNode> root, QObject* parent)
+CadTreeModel::CadTreeModel(std::unique_ptr<CadNode> root, QObject* parent)
     : QAbstractItemModel(parent), m_root(std::move(root)) {}
 
 QModelIndex CadTreeModel::index(int row, int column, const QModelIndex& parent) const {
@@ -13,13 +13,13 @@ QModelIndex CadTreeModel::index(int row, int column, const QModelIndex& parent) 
 }
 
 QModelIndex CadTreeModel::parent(const QModelIndex& index) const {
-    TreeNode* childNode = getNode(index);
+    CadNode* childNode = getNode(index);
     if (!childNode || childNode == m_root.get())
         return QModelIndex();
     // Recursively search for the parent and its row
-    std::function<QModelIndex(TreeNode*, const QModelIndex&)> findParent = [&](TreeNode* parent, const QModelIndex& parentIdx) -> QModelIndex {
+    std::function<QModelIndex(CadNode*, const QModelIndex&)> findParent = [&](CadNode* parent, const QModelIndex& parentIdx) -> QModelIndex {
         for (int row = 0; row < static_cast<int>(parent->children.size()); ++row) {
-            TreeNode* child = parent->children[row].get();
+            CadNode* child = parent->children[row].get();
             if (child == childNode) {
                 // Return the index of the parent node (as a child of its own parent)
                 return parentIdx;
@@ -59,21 +59,21 @@ Qt::ItemFlags CadTreeModel::flags(const QModelIndex& index) const {
     return Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsUserCheckable;
 }
 
-TreeNode* CadTreeModel::getNode(const QModelIndex& index) const {
+CadNode* CadTreeModel::getNode(const QModelIndex& index) const {
     if (!index.isValid()) return m_root.get();
-    return static_cast<TreeNode*>(index.internalPointer());
+    return static_cast<CadNode*>(index.internalPointer());
 }
 
-TreeNode* CadTreeModel::nodeFromIndex(const QModelIndex& index) const {
+CadNode* CadTreeModel::nodeFromIndex(const QModelIndex& index) const {
     if (!index.isValid()) return m_root.get();
-    return static_cast<TreeNode*>(index.internalPointer());
+    return static_cast<CadNode*>(index.internalPointer());
 }
 
-QModelIndex CadTreeModel::indexForNode(TreeNode* target) const {
-    std::function<QModelIndex(TreeNode*, const QModelIndex&)> find = [&](TreeNode* node, const QModelIndex& parent) -> QModelIndex {
+QModelIndex CadTreeModel::indexForNode(CadNode* target) const {
+    std::function<QModelIndex(CadNode*, const QModelIndex&)> find = [&](CadNode* node, const QModelIndex& parent) -> QModelIndex {
         if (node == target) return parent;
         for (int row = 0; row < static_cast<int>(node->children.size()); ++row) {
-            TreeNode* child = node->children[row].get();
+            CadNode* child = node->children[row].get();
             QModelIndex idx = index(row, 0, parent);
             QModelIndex found = find(child, idx);
             if (found.isValid()) return found;
