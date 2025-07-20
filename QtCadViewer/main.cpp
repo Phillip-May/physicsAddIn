@@ -380,14 +380,13 @@ std::shared_ptr<CadNode> build_tree_xcaf(const TDF_Label& label,
     auto node = std::make_shared<CadNode>();
     node->color = color;
     node->loc = nodeLoc;
+    node->type = CadNodeType::XCAF;
+    auto xData = std::make_shared<XCAFNodeData>();
+    xData->shape = shape;
+    xData->type = !shape.IsNull() ? shape.ShapeType() : TopAbs_SHAPE;
+    node->data = xData;
     
-    if (!shape.IsNull()) {
-        node->type = shape.ShapeType();
-    } else {
-        node->type = TopAbs_SHAPE;
-    }
-    
-    QString typeName = shapeTypeToString(node->type);
+    QString typeName = shapeTypeToString(xData->type);
     
     // Enhanced assembly detection and handling
     bool isCompoundAssembly = false;
@@ -466,7 +465,8 @@ std::shared_ptr<CadNode> build_tree_xcaf(const TDF_Label& label,
     
     // After node is created and type is set
     if (!shape.IsNull()) {
-        node->shapeData.shape = shape;
+        xData->shape = shape;
+        xData->type = shape.ShapeType();
     }
     
     // Add face/edge children for solids that don't have other solid children
@@ -475,7 +475,8 @@ std::shared_ptr<CadNode> build_tree_xcaf(const TDF_Label& label,
         // Check if any existing children are solids (to avoid intermediate solids)
         bool hasSolidChildren = false;
         for (const auto& child : node->children) {
-            if (child->type == TopAbs_SOLID) {
+            auto childXCAF = child->asXCAF();
+            if (childXCAF && childXCAF->type == TopAbs_SOLID) {
                 hasSolidChildren = true;
                 break;
             }
@@ -490,8 +491,11 @@ std::shared_ptr<CadNode> build_tree_xcaf(const TDF_Label& label,
             for (TopExp_Explorer exp(shape, TopAbs_FACE); exp.More(); exp.Next(), ++faceIdx) {
                 TopoDS_Face face = TopoDS::Face(exp.Current());
                 auto faceNode = std::make_shared<CadNode>();
-                faceNode->type = TopAbs_FACE;
-                faceNode->shapeData.shape = face;
+                faceNode->type = CadNodeType::XCAF;
+                auto faceData = std::make_shared<XCAFNodeData>();
+                faceData->shape = face;
+                faceData->type = TopAbs_FACE;
+                faceNode->data = faceData;
                 // Use the enhanced color extraction for faces
                 faceNode->color = get_shape_color(face, label, shapeTool, colorTool, color);
                 faceNode->loc = nodeLoc;
@@ -506,8 +510,11 @@ std::shared_ptr<CadNode> build_tree_xcaf(const TDF_Label& label,
             for (TopExp_Explorer exp(shape, TopAbs_EDGE); exp.More(); exp.Next(), ++edgeIdx) {
                 TopoDS_Shape edge = exp.Current();
                 auto edgeNode = std::make_shared<CadNode>();
-                edgeNode->type = TopAbs_EDGE;
-                edgeNode->shapeData.shape = edge;
+                edgeNode->type = CadNodeType::XCAF;
+                auto edgeData = std::make_shared<XCAFNodeData>();
+                edgeData->shape = edge;
+                edgeData->type = TopAbs_EDGE;
+                edgeNode->data = edgeData;
                 edgeNode->color = color;
                 edgeNode->loc = nodeLoc;
                 edgeNode->name = QString("Edge %1 of %2").arg(edgeIdx).arg(QString::fromStdString(node->name)).toStdString();
@@ -669,7 +676,9 @@ void connectTreeAndViewer(QTreeView* tree, CadOpenGLWidget* viewer, ModelType* m
 // Helper to collect all face nodes under a given node
 static void collectFaceNodes(CadNode* node, std::vector<CadNode*>& out) {
     if (!node) return;
-    if (node->type == TopAbs_FACE && node->visible) {
+    XCAFNodeData* xData = node->asXCAF();
+    if (!xData) return;
+    if (xData->type == TopAbs_FACE && node->visible) {
         out.push_back(node);
     }
     for (const auto& child : node->children) {
@@ -1060,6 +1069,8 @@ int main(int argc, char *argv[])
         
         CadNode* node = model->getNode(idx);
         if (!node) return;
+        XCAFNodeData* xData = node->asXCAF();
+        if (!xData) return;
         
         QMenu menu;
         QAction* showAction = menu.addAction("Show");
@@ -1080,10 +1091,10 @@ int main(int argc, char *argv[])
         // Add debug info option for solids and faces
         QAction* debugAction = nullptr;
         QAction* debugFaceAction = nullptr;
-        if (node->type == TopAbs_SOLID) {
+        if (xData->type == TopAbs_SOLID) {
             menu.addSeparator();
             debugAction = menu.addAction("Debug Solid Info");
-        } else if (node->type == TopAbs_FACE) {
+        } else if (xData->type == TopAbs_FACE) {
             menu.addSeparator();
             debugFaceAction = menu.addAction("Debug Face Info");
         }
@@ -1156,8 +1167,9 @@ int main(int argc, char *argv[])
             newPart->name = "Carriage";
             newPart->loc = nodes[0]->loc;
             newPart->color = nodes[0]->color;
-            newPart->type = TopAbs_COMPOUND; // Assuming a compound for a part
-            newPart->shapeData.shape = TopoDS_Compound(); // Placeholder for compound
+            newPart->type = CadNodeType::Custom;
+            auto customData = std::make_shared<CustomNodeData>();
+            newPart->data = customData;
             // Add selected nodes as children of the part node
             for (CadNode* n : nodes) {
                 if (n) newPart->children.push_back(std::make_shared<CadNode>(*n));
@@ -1174,8 +1186,9 @@ int main(int argc, char *argv[])
             newPart->name = "Start Segment";
             newPart->loc = nodes[0]->loc;
             newPart->color = nodes[0]->color;
-            newPart->type = TopAbs_COMPOUND; // Assuming a compound for a part
-            newPart->shapeData.shape = TopoDS_Compound(); // Placeholder for compound
+            newPart->type = CadNodeType::Custom;
+            auto customData = std::make_shared<CustomNodeData>();
+            newPart->data = customData;
             for (CadNode* n : nodes) {
                 if (n) newPart->children.push_back(std::make_shared<CadNode>(*n));
             }
@@ -1191,8 +1204,9 @@ int main(int argc, char *argv[])
             newPart->name = "End Segment";
             newPart->loc = nodes[0]->loc;
             newPart->color = nodes[0]->color;
-            newPart->type = TopAbs_COMPOUND; // Assuming a compound for a part
-            newPart->shapeData.shape = TopoDS_Compound(); // Placeholder for compound
+            newPart->type = CadNodeType::Custom;
+            auto customData = std::make_shared<CustomNodeData>();
+            newPart->data = customData;
             for (CadNode* n : nodes) {
                 if (n) newPart->children.push_back(std::make_shared<CadNode>(*n));
             }
@@ -1208,8 +1222,9 @@ int main(int argc, char *argv[])
             newPart->name = "Middle Segment";
             newPart->loc = nodes[0]->loc;
             newPart->color = nodes[0]->color;
-            newPart->type = TopAbs_COMPOUND; // Assuming a compound for a part
-            newPart->shapeData.shape = TopoDS_Compound(); // Placeholder for compound
+            newPart->type = CadNodeType::Custom;
+            auto customData = std::make_shared<CustomNodeData>();
+            newPart->data = customData;
             for (CadNode* n : nodes) {
                 if (n) newPart->children.push_back(std::make_shared<CadNode>(*n));
             }
@@ -1300,18 +1315,21 @@ int main(int argc, char *argv[])
         if (debugAction) {
             QObject::connect(debugAction, &QAction::triggered, treeView, [=]() {
                 CadNode* solidNode = model->getNode(idx);
-                if (!solidNode || solidNode->type != TopAbs_SOLID) return;
+                XCAFNodeData* solidNodeXData = solidNode->asXCAF();
+
+
+                if (!solidNode || xData->type != TopAbs_SOLID) return;
                 
                 qDebug() << "=== SOLID DEBUG INFO ===";
                 qDebug() << "Node name:" << QString::fromStdString(solidNode->name);
-                qDebug() << "Node type:" << shapeTypeToString(solidNode->type);
-                qDebug() << "Has shape:" << !solidNode->shapeData.shape.IsNull();
+                qDebug() << "Node type:" << shapeTypeToString(xData->type);
+                qDebug() << "Has shape:" << !xData->shape.IsNull();
                 qDebug() << "Visible:" << solidNode->visible;
                 qDebug() << "Color:" << solidNode->color.r << solidNode->color.g << solidNode->color.b << solidNode->color.a;
                 
                 // Check if solid has faces
-                if (!solidNode->shapeData.shape.IsNull()) {
-                    TopoDS_Shape shape = solidNode->shapeData.shape;
+                if (!solidNodeXData->shape.IsNull()) {
+                    TopoDS_Shape shape = solidNodeXData->shape;
                     int faceCount = 0;
                     int edgeCount = 0;
                     for (TopExp_Explorer exp(shape, TopAbs_FACE); exp.More(); exp.Next()) faceCount++;
@@ -1331,8 +1349,8 @@ int main(int argc, char *argv[])
                     int treeFaceCount = 0;
                     int treeEdgeCount = 0;
                     for (const auto& child : solidNode->children) {
-                        if (child->type == TopAbs_FACE) treeFaceCount++;
-                        if (child->type == TopAbs_EDGE) treeEdgeCount++;
+                        if (xData->type == TopAbs_FACE) treeFaceCount++;
+                        if (xData->type == TopAbs_EDGE) treeEdgeCount++;
                     }
                     qDebug() << "Tree has" << treeFaceCount << "faces and" << treeEdgeCount << "edges";
                     
@@ -1346,7 +1364,6 @@ int main(int argc, char *argv[])
                 if (idx.parent().isValid()) {
                     CadNode* parentNode = model->getNode(idx.parent());
                     if (parentNode) {
-                        qDebug() << "Parent type:" << shapeTypeToString(parentNode->type);
                         qDebug() << "Parent name:" << QString::fromStdString(parentNode->name);
                         qDebug() << "Parent has" << parentNode->children.size() << "children";
                     }
@@ -1365,18 +1382,20 @@ int main(int argc, char *argv[])
         if (debugFaceAction) {
             QObject::connect(debugFaceAction, &QAction::triggered, treeView, [=]() {
                 CadNode* faceNode = model->getNode(idx);
-                if (!faceNode || faceNode->type != TopAbs_FACE) return;
+                XCAFNodeData* faceNodeXData = node->asXCAF();
+
+                if (!faceNode || faceNodeXData->type != TopAbs_FACE) return;
                 
                 qDebug() << "=== FACE DEBUG INFO ===";
                 qDebug() << "Node name:" << QString::fromStdString(faceNode->name);
-                qDebug() << "Node type:" << shapeTypeToString(faceNode->type);
-                qDebug() << "Has shape:" << !faceNode->shapeData.shape.IsNull();
+                qDebug() << "Node type:" << shapeTypeToString(faceNodeXData->type);
+                qDebug() << "Has shape:" << !faceNodeXData->shape.IsNull();
                 qDebug() << "Visible:" << faceNode->visible;
                 qDebug() << "Color:" << faceNode->color.r << faceNode->color.g << faceNode->color.b << faceNode->color.a;
                 
                 // Check face geometry
-                if (!faceNode->shapeData.shape.IsNull()) {
-                    TopoDS_Face face = TopoDS::Face(faceNode->shapeData.shape);
+                if (!faceNodeXData->shape.IsNull()) {
+                    TopoDS_Face face = TopoDS::Face(faceNodeXData->shape);
                     
                     // Check bounding box
                     Bnd_Box bbox;
@@ -1487,7 +1506,6 @@ int main(int argc, char *argv[])
                 if (idx.parent().isValid()) {
                     CadNode* parentNode = model->getNode(idx.parent());
                     if (parentNode) {
-                        qDebug() << "Parent type:" << shapeTypeToString(parentNode->type);
                         qDebug() << "Parent name:" << QString::fromStdString(parentNode->name);
                         qDebug() << "Parent has" << parentNode->children.size() << "children";
                     }

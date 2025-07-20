@@ -159,7 +159,7 @@ private:
     void pickHoveredFaceAt(const QPoint& pos);
     // Helper to pick hovered edge
     void pickHoveredEdgeAt(const QPoint& pos);
-    void renderFace(const CadNode* node, const CADNodeColor& color);
+    void renderFace(const XCAFNodeData* node, const CADNodeColor& color);
     void drawPivotSphere(); // Draws a sphere at m_center
     QVector3D m_zoomContactPoint; // Last zoom contact point
     bool m_showZoomContactSphere = false;
@@ -174,7 +174,7 @@ private:
     // Optimized rendering functions
     void renderBatchedGeometry();
     void buildColorBatches();
-    void renderFaceOptimized(const CadNode* node, const CADNodeColor& color);
+    void renderFaceOptimized(const CadNode* xData, const CADNodeColor& color);
     void renderEdgeOptimized(const CadNode* node, const CADNodeColor& color);
     void renderHighlightedEdges();
     CachedGeometry& getOrCreateCachedGeometry(const TopoDS_Face& face);

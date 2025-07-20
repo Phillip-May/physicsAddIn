@@ -7,6 +7,7 @@
 #include <QtGui/QColor>
 #include <TopAbs_ShapeEnum.hxx>
 #include <TopoDS_Edge.hxx>
+#include <TopoDS.hxx>
 #include <memory>
 
 // Define a simple RGBA color struct
@@ -52,65 +53,72 @@ union CADNodeData {
     }
 };
 
-// Tree node for XCAF structure
+// 1. Node type enum
+enum class CadNodeType {
+    Unknown = 0, // Default type, must be explicitly set
+    XCAF,
+    Custom,
+    Rail,
+    Turnable,
+    // ... add more as needed
+};
+
+// 2. Base class for node-specific data
+struct CadNodeDataBase {
+    virtual ~CadNodeDataBase() = default;
+};
+
+// 3. XCAF-specific data
+struct XCAFNodeData : public CadNodeDataBase {
+    TopAbs_ShapeEnum type = TopAbs_SHAPE;
+    TopoDS_Shape shape;
+    // Optionally: TopoDS_Face, TopoDS_Edge, etc.
+    // Add more XCAF-specific fields as needed
+
+    // Utility functions
+    bool hasFace() const { return type == TopAbs_FACE && !shape.IsNull(); }
+    bool hasEdge() const { return type == TopAbs_EDGE && !shape.IsNull(); }
+    TopoDS_Face getFace() const { return (type == TopAbs_FACE) ? TopoDS::Face(shape) : TopoDS_Face(); }
+    TopoDS_Edge getEdge() const { return (type == TopAbs_EDGE) ? TopoDS::Edge(shape) : TopoDS_Edge(); }
+};
+
+// 4. Custom node data (example)
+struct CustomNodeData : public CadNodeDataBase {
+    // Add custom fields here
+    int customProperty = 0;
+    // ...
+};
+
+// 5. The generic CadNode struct
 struct CadNode {
     std::string name;
     CADNodeColor color;
     TopLoc_Location loc;
-    std::vector<std::shared_ptr<CadNode>> children; // Changed to shared_ptr
-    TopAbs_ShapeEnum type;
-    
-    // Union data for specific shape types
-    CADNodeData shapeData;
-    bool visible = true; // Add visibility flag, default true
-    
-    // Constructor
-    CadNode() : type(TopAbs_SHAPE), shapeData() {}
-    
-    // Destructor
-    ~CadNode() {
-        // The union will be automatically cleaned up
+    std::vector<std::shared_ptr<CadNode>> children;
+    bool visible = true;
+
+    CadNodeType type = CadNodeType::Unknown; // Must be set explicitly
+    std::shared_ptr<CadNodeDataBase> data; // Holds type-specific data
+
+    // Helper to get XCAF data safely
+    XCAFNodeData* asXCAF() {
+        return type == CadNodeType::XCAF ? static_cast<XCAFNodeData*>(data.get()) : nullptr;
     }
-    
-    // Helper methods to safely access shape data
-    bool hasFace() const {
-        return type == TopAbs_FACE;
-    }
-    
-    bool hasEdge() const {
-        return type == TopAbs_EDGE;
-    }
-    
-    TopoDS_Face getFace() const {
-        if (hasFace()) {
-            return shapeData.face;
-        }
-        return TopoDS_Face(); // Return null face
-    }
-    
-    TopoDS_Edge getEdge() const {
-        if (hasEdge()) {
-            return shapeData.edge;
-        }
-        return TopoDS_Edge(); // Return null edge
-    }
-    
-    void setFace(const TopoDS_Face& face) {
-        type = TopAbs_FACE;
-        shapeData.face = face;
-    }
-    
-    void setEdge(const TopoDS_Edge& edge) {
-        type = TopAbs_EDGE;
-        shapeData.edge = edge;
-    }
-    
-    // Clear shape data
-    void clearShapeData() {
-        type = TopAbs_SHAPE;
-        shapeData = CADNodeData();
+    const XCAFNodeData* asXCAF() const {
+        return type == CadNodeType::XCAF ? static_cast<const XCAFNodeData*>(data.get()) : nullptr;
     }
 
+    // Helper to get Custom data safely
+    CustomNodeData* asCustom() {
+        return type == CadNodeType::Custom ? static_cast<CustomNodeData*>(data.get()) : nullptr;
+    }
+    const CustomNodeData* asCustom() const {
+        return type == CadNodeType::Custom ? static_cast<const CustomNodeData*>(data.get()) : nullptr;
+    }
+
+    // ... add more helpers for other node types as needed
+
+    // Visibility helper
     void setVisibleRecursive(bool vis) {
         visible = vis;
         for (auto& child : children) {

@@ -309,31 +309,34 @@ void CadOpenGLWidget::traverseAndRender(const CadNode* node, CADNodeColor inheri
             glMultMatrixd(matrix);
         }
 
-        switch (node->type) {
-            case TopAbs_FACE:
-                if (node->hasFace()) {
-                    // Use basic frustum culling for better performance
-                    if (isInFrustum(node->getFace(), node->loc)) {
-                        renderFaceOptimized(node, nodeColor);
-                    } else if (m_frameCount % 120 == 0) {
-                        qDebug() << "[Render] Face culled by frustum:" << node;
-                    }
-                } else if (m_frameCount % 120 == 0) {
-                    qDebug() << "[Render] Face node has no face data:" << node;
+        // Only render XCAF nodes as geometry
+        if (node->type == CadNodeType::XCAF) {
+            const XCAFNodeData* xData = node->asXCAF();
+            if (xData) {
+                switch (xData->type) {
+                    case TopAbs_FACE:
+                        if (!xData->shape.IsNull() && xData->type == TopAbs_FACE) {
+                            if (isInFrustum(TopoDS::Face(xData->shape), node->loc)) {
+                                renderFaceOptimized(node, nodeColor);
+                            } else if (m_frameCount % 120 == 0) {
+                                qDebug() << "[Render] Face culled by frustum:" << node;
+                            }
+                        } else if (m_frameCount % 120 == 0) {
+                            qDebug() << "[Render] Face node has no face data:" << node;
+                        }
+                        break;
+                    case TopAbs_EDGE:
+                        // Skip edge rendering for performance - only render highlighted edges separately
+                        break;
+                    default:
+                        break;
                 }
-                break;
-            case TopAbs_EDGE:
-                // Skip edge rendering for performance - only render highlighted edges separately
-                break;
-            default:
-                break;
+            }
         }
-        
         if (needsTransform) {
             glPopMatrix();
         }
     }
-    
     // Always traverse children for visibility
     for (const auto& child : node->children) {
         if (child) {
@@ -344,22 +347,19 @@ void CadOpenGLWidget::traverseAndRender(const CadNode* node, CADNodeColor inheri
 
 // Optimized face rendering using cached geometry with wireframe overlay
 void CadOpenGLWidget::renderFaceOptimized(const CadNode* node, const CADNodeColor& color) {
-    if (!node || !node->hasFace()) return;
-    
-    const TopoDS_Face& face = node->getFace();
+    if (!node) return;
+    const XCAFNodeData* xData = node->asXCAF();
+    if (!xData || !xData->hasFace()) return;
+    const TopoDS_Face& face = TopoDS::Face(xData->shape);
     if (face.IsNull()) return;
-    
     CachedGeometry& cache = getOrCreateCachedGeometry(face);
-    if (!cache.isValid()) {
-        // Skip rendering for invalid geometry
-        return;
-    }
+    if (!cache.isValid()) return;
     
     // Check if this face is being hovered over
     bool isHovered = false;
     if (m_selectionMode == SelectionMode::Faces && hoveredFaceNode_) {
         // Compare CadNode pointers to check if this is the hovered face
-        if (node == hoveredFaceNode_) {
+        if (xData == hoveredFaceNode_->asXCAF()) {
             isHovered = true;
         }
     }
@@ -372,7 +372,7 @@ void CadOpenGLWidget::renderFaceOptimized(const CadNode* node, const CADNodeColo
         if (it != selectedFaceNodes_.end()) {
             isSelected = true;
                     if (m_frameCount % 60 == 0) {
-            qDebug() << "[MultiSelect] Rendering selected face, total selected:" << selectedFaceNodes_.size() << "node:" << node;
+            qDebug() << "[MultiSelect] Rendering selected face, total selected:" << selectedFaceNodes_.size() << "node:" << xData;
         }
         }
     }
@@ -552,20 +552,23 @@ void CadOpenGLWidget::mousePressEvent(QMouseEvent* event) {
             } else {
                 // Regular click: clear selection and select single item
                 clearSelection();
-                if (m_selectionMode == SelectionMode::Faces) {
-                    selectedFaceNodes_.push_back(pickedNode);
-                    selectedFaceNode_ = pickedNode;
-                    selectedFace_ = TopoDS::Face(pickedNode->getFace().Located(pickedNode->loc));
-                    qDebug() << "[MultiSelect] Regular click selected face, total:" << selectedFaceNodes_.size();
-                    emit facePicked(pickedNode); // Emit signal for tree view update
-                } else if (m_selectionMode == SelectionMode::Edges) {
-                    selectedEdgeNodes_.push_back(pickedNode);
-                    selectedEdgeNode_ = pickedNode;
-                    selectedEdge_ = TopoDS::Edge(pickedNode->getEdge().Located(pickedNode->loc));
-                    qDebug() << "[MultiSelect] Regular click selected edge, total:" << selectedEdgeNodes_.size();
-                    emit edgePicked(pickedNode); // Emit signal for tree view update
+                XCAFNodeData* pickedData = pickedNode->asXCAF();
+                if (pickedData) {
+                    if (m_selectionMode == SelectionMode::Faces) {
+                        selectedFaceNodes_.push_back(pickedNode);
+                        selectedFaceNode_ = pickedNode;
+                        selectedFace_ = TopoDS::Face(pickedData->getFace().Located(pickedNode->loc));
+                        qDebug() << "[MultiSelect] Regular click selected face, total:" << selectedFaceNodes_.size();
+                        emit facePicked(pickedNode); // Emit signal for tree view update
+                    } else if (m_selectionMode == SelectionMode::Edges) {
+                        selectedEdgeNodes_.push_back(pickedNode);
+                        selectedEdgeNode_ = pickedNode;
+                        selectedEdge_ = TopoDS::Edge(pickedData->getEdge().Located(pickedNode->loc));
+                        qDebug() << "[MultiSelect] Regular click selected edge, total:" << selectedEdgeNodes_.size();
+                        emit edgePicked(pickedNode); // Emit signal for tree view update
+                    }
+                    update();
                 }
-                update();
             }
         }
         // No selection for SelectionMode::None
@@ -715,7 +718,8 @@ void CadOpenGLWidget::mouseReleaseEvent(QMouseEvent* event) {
             }
             
             // Handle multi-selection with Ctrl+click
-            if (pickedNode) {
+            XCAFNodeData* pickedData = pickedNode->asXCAF();
+            if (pickedData) {
                 if (event->modifiers() & Qt::ControlModifier) {
                     // Ctrl+click: add/remove from selection
                     if (m_selectionMode == SelectionMode::Faces) {
@@ -731,13 +735,13 @@ void CadOpenGLWidget::mouseReleaseEvent(QMouseEvent* event) {
                     if (m_selectionMode == SelectionMode::Faces) {
                         selectedFaceNodes_.push_back(pickedNode);
                         selectedFaceNode_ = pickedNode;
-                        selectedFace_ = TopoDS::Face(pickedNode->getFace().Located(pickedNode->loc));
+                        selectedFace_ = TopoDS::Face(pickedData->getFace().Located(pickedNode->loc));
                         qDebug() << "[MultiSelect] Left click selected face, total:" << selectedFaceNodes_.size();
                         emit facePicked(pickedNode); // Only emit signal for single selection
                     } else if (m_selectionMode == SelectionMode::Edges) {
                         selectedEdgeNodes_.push_back(pickedNode);
                         selectedEdgeNode_ = pickedNode;
-                        selectedEdge_ = TopoDS::Edge(pickedNode->getEdge().Located(pickedNode->loc));
+                        selectedEdge_ = TopoDS::Edge(pickedData->getEdge().Located(pickedNode->loc));
                         qDebug() << "[MultiSelect] Left click selected edge, total:" << selectedEdgeNodes_.size();
                         emit edgePicked(pickedNode); // Only emit signal for single selection
                     }
@@ -949,8 +953,7 @@ bool CadOpenGLWidget::isInFrustum(const TopoDS_Face& face, const TopLoc_Location
     return true;
 }
 
-// Overload: Render a face using a CadNode (applies node's transform)
-void CadOpenGLWidget::renderFace(const CadNode* node, const CADNodeColor& color) {
+void CadOpenGLWidget::renderFace(const XCAFNodeData* node, const CADNodeColor& color) {
     if (!node || !node->hasFace()) return;
     const TopoDS_Face& face = node->getFace();
     if (face.IsNull()) {
@@ -1065,16 +1068,15 @@ void CadOpenGLWidget::renderEdge(const TopoDS_Edge& edge, const CADNodeColor& co
 
 // Optimized edge rendering for highlighted edges only
 void CadOpenGLWidget::renderEdgeOptimized(const CadNode* node, const CADNodeColor& color) {
-    if (!node || !node->hasEdge()) return;
-    
-    const TopoDS_Edge& edge = node->getEdge();
+    const XCAFNodeData* xData = node->asXCAF();
+    if (!xData || !xData->hasEdge()) return;
+    const TopoDS_Edge& edge = TopoDS::Edge(xData->shape);
     if (edge.IsNull()) return;
     
     // Apply node transformation if needed
     bool needsTransform = !node->loc.IsIdentity();
     if (needsTransform) {
-        const TopLoc_Location& fullLoc = node->loc;
-        const gp_Trsf& trsf = fullLoc.Transformation();
+        const gp_Trsf& trsf = node->loc.Transformation();
         const gp_Mat& mat = trsf.VectorialPart();
         const gp_XYZ& trans = trsf.TranslationPart();
         
@@ -1223,9 +1225,10 @@ bool CadOpenGLWidget::pickElementAt(const QPoint& pos, QVector3D* outIntersectio
     gp_Pnt pickedPoint;
     bool found = false;
     for (auto& inst : faceCache_) {
+        XCAFNodeData* xData = inst.node->asXCAF();
         CadNode* node = inst.node;
-        if (!node || !node->hasFace()) continue;
-        TopoDS_Face face = TopoDS::Face(node->getFace().Located(node->loc));
+        if (!node || !xData->hasFace()) continue;
+        TopoDS_Face face = TopoDS::Face(xData->getFace().Located(node->loc));
         BRepIntCurveSurface_Inter intersector;
         intersector.Init(face, ray, 1e-6);
         while (intersector.More()) {
@@ -1244,23 +1247,24 @@ bool CadOpenGLWidget::pickElementAt(const QPoint& pos, QVector3D* outIntersectio
     if (m_frameCount % 60 == 0) {
         qDebug() << "[Profile] Intersection testing took:" << intersectTime / 1000000.0 << "ms (tested" << faceCache_.size() << "faces)";
     }
-            if (pickedFace && pickedFace->node) {
-            CadNode* node = pickedFace->node;
-            selectedFace_ = TopoDS::Face(node->getFace().Located(node->loc));
-            selectedFaceNode_ = node;
-            if (m_frameCount % 60 == 0) {
-                qDebug() << "[Ray] Selected face at TShape address:" << (void*)selectedFace_.TShape().get();
-            }
-            // Don't emit signal here - let the mouse press handler manage selection
-            if (outIntersection && found) {
-                *outIntersection = QVector3D(pickedPoint.X(), pickedPoint.Y(), pickedPoint.Z());
-            }
-        qint64 totalPickTime = pickTimer.nsecsElapsed();
+    if (pickedFace && pickedFace->node) {
+        CadNode* node = pickedFace->node;
+        XCAFNodeData* xData = pickedFace->node->asXCAF();
+        selectedFace_ = TopoDS::Face(xData->getFace().Located(node->loc));
+        selectedFaceNode_ = node;
         if (m_frameCount % 60 == 0) {
-            qDebug() << "[Profile] Total pickElementAt time:" << totalPickTime / 1000000.0 << "ms";
+            qDebug() << "[Ray] Selected face at TShape address:" << (void*)selectedFace_.TShape().get();
         }
-        update();
-        return true;
+        // Don't emit signal here - let the mouse press handler manage selection
+        if (outIntersection && found) {
+            *outIntersection = QVector3D(pickedPoint.X(), pickedPoint.Y(), pickedPoint.Z());
+        }
+    qint64 totalPickTime = pickTimer.nsecsElapsed();
+    if (m_frameCount % 60 == 0) {
+        qDebug() << "[Profile] Total pickElementAt time:" << totalPickTime / 1000000.0 << "ms";
+    }
+    update();
+    return true;
     } else {
         selectedFaceNode_ = nullptr;
         if (m_frameCount % 60 == 0) {
@@ -1311,8 +1315,10 @@ bool CadOpenGLWidget::pickEdgeAt(const QPoint& pos, QVector3D* outIntersection) 
     bool found = false;
     for (auto& inst : edgeCache_) {
         CadNode* node = inst.node;
-        if (!node || !node->hasEdge()) continue;
-        TopoDS_Edge edge = TopoDS::Edge(node->getEdge().Located(node->loc));
+        XCAFNodeData* xData = inst.node->asXCAF();
+
+        if (!xData || !xData->hasEdge()) continue;
+        TopoDS_Edge edge = TopoDS::Edge(xData->getEdge().Located(node->loc));
         
         // Find closest point on edge to ray
         Standard_Real first, last;
@@ -1350,7 +1356,8 @@ bool CadOpenGLWidget::pickEdgeAt(const QPoint& pos, QVector3D* outIntersection) 
     
             if (pickedEdge && pickedEdge->node) {
             CadNode* node = pickedEdge->node;
-            selectedEdge_ = TopoDS::Edge(node->getEdge().Located(node->loc));
+            XCAFNodeData* xData = node->asXCAF();
+            selectedEdge_ = TopoDS::Edge(xData->getEdge().Located(node->loc));
             selectedEdgeNode_ = node;
             if (m_frameCount % 60 == 0) {
                 qDebug() << "[Ray] Selected edge at TShape address:" << (void*)selectedEdge_.TShape().get();
@@ -1413,8 +1420,9 @@ bool CadOpenGLWidget::pickElementAtForPivot(const QPoint& pos, QVector3D* outInt
     bool found = false;
     for (auto& inst : faceCache_) {
         CadNode* node = inst.node;
-        if (!node || !node->hasFace()) continue;
-        TopoDS_Face face = TopoDS::Face(node->getFace().Located(node->loc));
+        XCAFNodeData* xData = node->asXCAF();
+        if (!xData || !xData->hasFace()) continue;
+        TopoDS_Face face = TopoDS::Face(xData->getFace().Located(node->loc));
         BRepIntCurveSurface_Inter intersector;
         intersector.Init(face, ray, 1e-6);
         while (intersector.More()) {
@@ -1466,8 +1474,9 @@ void CadOpenGLWidget::pickHoveredFaceAt(const QPoint& pos) {
     FaceInstance* pickedFace = nullptr;
     for (auto& inst : faceCache_) {
         CadNode* node = inst.node;
-        if (!node || !node->hasFace()) continue;
-        TopoDS_Face face = TopoDS::Face(node->getFace().Located(node->loc));
+        XCAFNodeData* xData = node->asXCAF();
+        if (!node || !xData->hasFace()) continue;
+        TopoDS_Face face = TopoDS::Face(xData->getFace().Located(node->loc));
         BRepIntCurveSurface_Inter intersector;
         intersector.Init(face, ray, 1e-6);
         while (intersector.More()) {
@@ -1482,7 +1491,8 @@ void CadOpenGLWidget::pickHoveredFaceAt(const QPoint& pos) {
     }
     if (pickedFace && pickedFace->node) {
         CadNode* node = pickedFace->node;
-        hoveredFace_ = TopoDS::Face(node->getFace().Located(node->loc));
+        XCAFNodeData* xData = node->asXCAF();
+        hoveredFace_ = TopoDS::Face(xData->getFace().Located(node->loc));
         hoveredFaceNode_ = node; // Store the picked node
     }
     
@@ -1516,8 +1526,9 @@ void CadOpenGLWidget::pickHoveredEdgeAt(const QPoint& pos) {
     
     for (auto& inst : edgeCache_) {
         CadNode* node = inst.node;
-        if (!node || !node->hasEdge()) continue;
-        TopoDS_Edge edge = TopoDS::Edge(node->getEdge().Located(node->loc));
+        XCAFNodeData* xData = node->asXCAF();
+        if (!xData || !xData->hasEdge()) continue;
+        TopoDS_Edge edge = TopoDS::Edge(xData->getEdge().Located(node->loc));
         
         // Find closest point on edge to ray
         Standard_Real first, last;
@@ -1549,7 +1560,8 @@ void CadOpenGLWidget::pickHoveredEdgeAt(const QPoint& pos) {
     
     if (pickedEdge && pickedEdge->node) {
         CadNode* node = pickedEdge->node;
-        hoveredEdge_ = TopoDS::Edge(node->getEdge().Located(node->loc));
+        XCAFNodeData* xData = node->asXCAF();
+        hoveredEdge_ = TopoDS::Edge(xData->getEdge().Located(node->loc));
         hoveredEdgeNode_ = node;
     }
     
@@ -1570,12 +1582,13 @@ void CadOpenGLWidget::buildFaceCache() {
     // Optimize face cache building by pre-allocating and using more efficient traversal
     std::function<void(CadNode*)> traverse;
     traverse = [&](CadNode* node) {
+        XCAFNodeData* xData = node->asXCAF();
         if (!node || !node->visible) return;
-        if (node->type == TopAbs_FACE && node->hasFace()) {
+        if (xData->type == TopAbs_FACE && xData->hasFace()) {
             faceCache_.push_back(FaceInstance{node});
-        } else if (node->type == TopAbs_SOLID || node->type == TopAbs_SHELL || node->type == TopAbs_COMPOUND) {
+        } else if (xData->type == TopAbs_SOLID || xData->type == TopAbs_SHELL || xData->type == TopAbs_COMPOUND) {
             // Only add parent nodes for picking if they have significant geometry
-            TopoDS_Shape shape = node->shapeData.shape;
+            TopoDS_Shape shape = xData->shape;
             if (!shape.IsNull()) {
                 // Count faces to determine if this node is worth caching
                 int faceCount = 0;
@@ -1611,11 +1624,12 @@ void CadOpenGLWidget::buildEdgeCache() {
     std::function<void(CadNode*)> traverse;
     traverse = [&](CadNode* node) {
         if (!node || !node->visible) return;
-        if (node->type == TopAbs_EDGE && node->hasEdge()) {
+        XCAFNodeData* xData = node->asXCAF();
+        if (xData->type == TopAbs_EDGE && xData->hasEdge()) {
             edgeCache_.push_back(EdgeInstance{node});
-        } else if (node->type == TopAbs_SOLID || node->type == TopAbs_SHELL || node->type == TopAbs_COMPOUND) {
+        } else if (xData->type == TopAbs_SOLID || xData->type == TopAbs_SHELL || xData->type == TopAbs_COMPOUND) {
             // Only add parent nodes for picking if they have significant geometry
-            TopoDS_Shape shape = node->shapeData.shape;
+            TopoDS_Shape shape = xData->shape;
             if (!shape.IsNull()) {
                 // Count edges to determine if this node is worth caching
                 int edgeCount = 0;
@@ -1656,18 +1670,19 @@ void CadOpenGLWidget::setSelectionMode(SelectionMode mode) {
 void CadOpenGLWidget::setSelectedNode(CadNode* node) {
     qDebug() << "[MultiSelect] setSelectedNode called with node:" << node << "current faces:" << selectedFaceNodes_.size();
     clearSelection();
-    if (!node) {
+    XCAFNodeData* xData = node->asXCAF();
+    if (!xData) {
         update();
         return;
     }
-    if (node->type == TopAbs_FACE && node->hasFace()) {
+    if (xData->type == TopAbs_FACE && xData->hasFace()) {
         selectedFaceNodes_.push_back(node);
         selectedFaceNode_ = node;
-        selectedFace_ = TopoDS::Face(node->getFace().Located(node->loc));
-    } else if (node->type == TopAbs_EDGE && node->hasEdge()) {
+        selectedFace_ = TopoDS::Face(xData->shape.Located(node->loc));
+    } else if (xData->type == TopAbs_EDGE && xData->hasEdge()) {
         selectedEdgeNodes_.push_back(node);
         selectedEdgeNode_ = node;
-        selectedEdge_ = TopoDS::Edge(node->getEdge().Located(node->loc));
+        selectedEdge_ = TopoDS::Edge(xData->getEdge().Located(node->loc));
     }
     update();
 }
@@ -1683,8 +1698,10 @@ void CadOpenGLWidget::clearSelection() {
 
 void CadOpenGLWidget::addToSelection(CadNode* node) {
     if (!node) return;
+    XCAFNodeData* xData = node->asXCAF();
+    if (!xData) return;
     
-    if (node->type == TopAbs_FACE && node->hasFace()) {
+    if (xData->type == TopAbs_FACE && xData->hasFace()) {
         // Check if already selected
         auto it = std::find(selectedFaceNodes_.begin(), selectedFaceNodes_.end(), node);
         if (it != selectedFaceNodes_.end()) {
@@ -1692,15 +1709,15 @@ void CadOpenGLWidget::addToSelection(CadNode* node) {
             selectedFaceNodes_.erase(it);
             if (selectedFaceNode_ == node) {
                 selectedFaceNode_ = selectedFaceNodes_.empty() ? nullptr : selectedFaceNodes_.back();
-                selectedFace_ = selectedFaceNode_ ? TopoDS::Face(selectedFaceNode_->getFace().Located(selectedFaceNode_->loc)) : TopoDS_Face();
+                selectedFace_ = selectedFaceNode_ ? TopoDS::Face(selectedFaceNode_->asXCAF()->getFace().Located(selectedFaceNode_->loc)) : TopoDS_Face();
             }
         } else {
             // Add to selection
             selectedFaceNodes_.push_back(node);
             selectedFaceNode_ = node;
-            selectedFace_ = TopoDS::Face(node->getFace().Located(node->loc));
+            selectedFace_ = TopoDS::Face(xData->getFace().Located(node->loc));
         }
-    } else if (node->type == TopAbs_EDGE && node->hasEdge()) {
+    } else if (xData->type == TopAbs_EDGE && xData->hasEdge()) {
         // Check if already selected
         auto it = std::find(selectedEdgeNodes_.begin(), selectedEdgeNodes_.end(), node);
         if (it != selectedEdgeNodes_.end()) {
@@ -1708,13 +1725,13 @@ void CadOpenGLWidget::addToSelection(CadNode* node) {
             selectedEdgeNodes_.erase(it);
             if (selectedEdgeNode_ == node) {
                 selectedEdgeNode_ = selectedEdgeNodes_.empty() ? nullptr : selectedEdgeNodes_.back();
-                selectedEdge_ = selectedEdgeNode_ ? TopoDS::Edge(selectedEdgeNode_->getEdge().Located(selectedEdgeNode_->loc)) : TopoDS_Edge();
+                selectedEdge_ = selectedEdgeNode_ ? TopoDS::Edge(selectedEdgeNode_->asXCAF()->getEdge().Located(selectedEdgeNode_->loc)) : TopoDS_Edge();
             }
         } else {
             // Add to selection
             selectedEdgeNodes_.push_back(node);
             selectedEdgeNode_ = node;
-            selectedEdge_ = TopoDS::Edge(node->getEdge().Located(node->loc));
+            selectedEdge_ = TopoDS::Edge(xData->getEdge().Located(node->loc));
         }
     }
     update();
@@ -1722,23 +1739,25 @@ void CadOpenGLWidget::addToSelection(CadNode* node) {
 
 void CadOpenGLWidget::removeFromSelection(CadNode* node) {
     if (!node) return;
+    XCAFNodeData* xData = node->asXCAF();
+    if (!xData) return;
     
-    if (node->type == TopAbs_FACE && node->hasFace()) {
+    if (xData->type == TopAbs_FACE && xData->hasFace()) {
         auto it = std::find(selectedFaceNodes_.begin(), selectedFaceNodes_.end(), node);
         if (it != selectedFaceNodes_.end()) {
             selectedFaceNodes_.erase(it);
             if (selectedFaceNode_ == node) {
                 selectedFaceNode_ = selectedFaceNodes_.empty() ? nullptr : selectedFaceNodes_.back();
-                selectedFace_ = selectedFaceNode_ ? TopoDS::Face(selectedFaceNode_->getFace().Located(selectedFaceNode_->loc)) : TopoDS_Face();
+                selectedFace_ = selectedFaceNode_ ? TopoDS::Face(selectedFaceNode_->asXCAF()->getFace().Located(selectedFaceNode_->loc)) : TopoDS_Face();
             }
         }
-    } else if (node->type == TopAbs_EDGE && node->hasEdge()) {
+    } else if (xData->type == TopAbs_EDGE && xData->hasEdge()) {
         auto it = std::find(selectedEdgeNodes_.begin(), selectedEdgeNodes_.end(), node);
         if (it != selectedEdgeNodes_.end()) {
             selectedEdgeNodes_.erase(it);
             if (selectedEdgeNode_ == node) {
                 selectedEdgeNode_ = selectedEdgeNodes_.empty() ? nullptr : selectedEdgeNodes_.back();
-                selectedEdge_ = selectedEdgeNode_ ? TopoDS::Edge(selectedEdgeNode_->getEdge().Located(selectedEdgeNode_->loc)) : TopoDS_Edge();
+                selectedEdge_ = selectedEdgeNode_ ? TopoDS::Edge(selectedEdgeNode_->asXCAF()->getEdge().Located(selectedEdgeNode_->loc)) : TopoDS_Edge();
             }
         }
     }
@@ -1792,9 +1811,12 @@ void CadOpenGLWidget::setPivotSphere(const QVector3D& worldPos) {
 // Helper to recursively accumulate bounding box for a node and its children
 static void accumulateBoundingBox(const CadNode* node, Bnd_Box& bbox) {
     if (!node) return;
-    if (node->type == TopAbs_FACE && node->hasFace()) {
-        TopoDS_Face locatedFace = TopoDS::Face(node->getFace().Located(node->loc));
-        BRepBndLib::Add(locatedFace, bbox);
+    const XCAFNodeData* xData = node->asXCAF();
+    if (xData) {
+        if (xData->type == TopAbs_FACE && xData->hasFace()) {
+            TopoDS_Face locatedFace = TopoDS::Face(xData->getFace().Located(node->loc));
+            BRepBndLib::Add(locatedFace, bbox);
+        }
     }
     for (const auto& child : node->children) {
         if (child) accumulateBoundingBox(child.get(), bbox);
