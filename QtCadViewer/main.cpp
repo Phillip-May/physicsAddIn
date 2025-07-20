@@ -609,6 +609,63 @@ void compareFileSizes(const QString& baseName) {
 #include <QMenu>
 #include <QAction>
 
+// Generic helper to connect selection between a tree and a viewer
+// ModelType must provide getNode(QModelIndex) and indexForNode(CadNode*)
+template <typename ModelType>
+void connectTreeAndViewer(QTreeView* tree, CadOpenGLWidget* viewer, ModelType* model) {
+    // Tree -> Viewer
+    QObject::connect(tree->selectionModel(), &QItemSelectionModel::selectionChanged, viewer, [=](const QItemSelection &, const QItemSelection &) {
+        viewer->clearSelection();
+        QModelIndexList selectedIndexes = tree->selectionModel()->selectedIndexes();
+        QSet<CadNode*> allNodesToSelect;
+        for (const QModelIndex& index : selectedIndexes) {
+            CadNode* node = const_cast<CadNode*>(model->getNode(index));
+            if (node) {
+                allNodesToSelect.insert(node);
+                // Optionally add descendants
+                std::function<void(CadNode*)> addDescendants = [&](CadNode* currentNode) {
+                    for (const auto& child : currentNode->children) {
+                        if (child) {
+                            allNodesToSelect.insert(child.get());
+                            addDescendants(child.get());
+                        }
+                    }
+                };
+                addDescendants(node);
+            }
+        }
+        for (CadNode* node : allNodesToSelect) {
+            viewer->addToSelection(node);
+        }
+    });
+
+    // Viewer -> Tree
+    QObject::connect(viewer, &CadOpenGLWidget::facePicked, tree, [=](CadNode* node) {
+        QModelIndex idx = model->indexForNode(node);
+        if (idx.isValid()) {
+            QModelIndex parentIdx = idx.parent();
+            while (parentIdx.isValid()) {
+                tree->expand(parentIdx);
+                parentIdx = parentIdx.parent();
+            }
+            tree->setCurrentIndex(idx);
+            tree->scrollTo(idx);
+        }
+    });
+    QObject::connect(viewer, &CadOpenGLWidget::edgePicked, tree, [=](CadNode* node) {
+        QModelIndex idx = model->indexForNode(node);
+        if (idx.isValid()) {
+            QModelIndex parentIdx = idx.parent();
+            while (parentIdx.isValid()) {
+                tree->expand(parentIdx);
+                parentIdx = parentIdx.parent();
+            }
+            tree->setCurrentIndex(idx);
+            tree->scrollTo(idx);
+        }
+    });
+}
+
 // Helper to collect all face nodes under a given node
 static void collectFaceNodes(CadNode* node, std::vector<CadNode*>& out) {
     if (!node) return;
@@ -764,6 +821,7 @@ int main(int argc, char *argv[])
     customModelTreeView->setModel(customModel);
     customModelTreeView->setHeaderHidden(false);
     customModelTreeView->setMinimumWidth(220);
+    customModelTreeView->setSelectionMode(QAbstractItemView::ExtendedSelection); // Allow multi-selection and clear selection by clicking below
     outerSplitter->addWidget(customModelTreeView);
 
     // --- CAD/XCAF Tabs and OpenGL Viewer ---
@@ -797,23 +855,9 @@ int main(int argc, char *argv[])
     customPartViewer->setRootTreeNode(customModel->getRootNodePointer());
     viewTabWidget->addTab(customPartViewer, "Custom Model Part");
 
-    // Update custom part viewer when selection changes
-    auto updateCustomPartViewer = [&]() {
-        std::vector<CadNode*> faceNodes;
-        // Collect all selected nodes' faces
-        QModelIndexList selectedIndexes = customModelTreeView->selectionModel()->selectedIndexes();
-        for (const QModelIndex& idx : selectedIndexes) {
-            CadNode* node = static_cast<CadNode*>(idx.internalPointer());
-            if (node) collectFaceNodes(node, faceNodes);
-        }
-        //customPartViewer->setCustomNodes(faceNodes); // Uncomment if setCustomNodes is implemented
-        customPartViewer->markCacheDirty();
-    };
-
-    // Connect custom model tree selection to customPartViewer
-    QObject::connect(customModelTreeView->selectionModel(), &QItemSelectionModel::selectionChanged, customPartViewer, [=](const QItemSelection &selected, const QItemSelection &/*deselected*/) {
-        updateCustomPartViewer();
-    });
+    // Connect selection for both tree/view pairs
+    connectTreeAndViewer(treeView, viewer, model);
+    connectTreeAndViewer(customModelTreeView, customPartViewer, customModel);
     
     // Force the viewer to update and render the geometry
     viewer->update();
@@ -894,36 +938,6 @@ int main(int argc, char *argv[])
         }
     });
     
-    // Connect face selection in viewer to tree selection
-    QObject::connect(viewer, &CadOpenGLWidget::facePicked, treeView, [=](CadNode* node) {
-        QModelIndex idx = model->indexForNode(node);
-        if (idx.isValid()) {
-            // Expand all parents so the item is visible
-            QModelIndex parentIdx = idx.parent();
-            while (parentIdx.isValid()) {
-                treeView->expand(parentIdx);
-                parentIdx = parentIdx.parent();
-            }
-            treeView->setCurrentIndex(idx);
-            treeView->scrollTo(idx);
-        }
-    });
-    
-    // Connect edge selection in viewer to tree selection
-    QObject::connect(viewer, &CadOpenGLWidget::edgePicked, treeView, [=](CadNode* node) {
-        QModelIndex idx = model->indexForNode(node);
-        if (idx.isValid()) {
-            // Expand all parents so the item is visible
-            QModelIndex parentIdx = idx.parent();
-            while (parentIdx.isValid()) {
-                treeView->expand(parentIdx);
-                parentIdx = parentIdx.parent();
-            }
-            treeView->setCurrentIndex(idx);
-            treeView->scrollTo(idx);
-        }
-    });
-
     // Connect tree selection to OpenGL widget highlighting
     QObject::connect(treeView->selectionModel(), &QItemSelectionModel::selectionChanged, viewer, [=](const QItemSelection &selected, const QItemSelection &/*deselected*/){
         // Clear current selection first
@@ -1033,7 +1047,8 @@ int main(int argc, char *argv[])
     QTreeView* labelTreeView = new QTreeView;
     labelTreeView->setModel(labelModel);
     labelTreeView->setHeaderHidden(false);
-    tabWidget->addTab(labelTreeView, "XCAF Labels (Enhanced)");
+    labelTreeView->setSelectionMode(QAbstractItemView::ExtendedSelection); // Allow multi-selection and clear selection by clicking below
+    tabWidget->addTab(labelTreeView, "XCAF Tree");
     
 
 
@@ -1150,7 +1165,7 @@ int main(int argc, char *argv[])
             customModelRoot->children.push_back(newPart);
             customModel->layoutChanged(); // Notify model of structure change
             customPartViewer->setRootTreeNode(customModel->getRootNodePointer()); // Update viewer's root node
-            updateCustomPartViewer();
+            // updateCustomPartViewer(); // This line is removed as per the edit hint
         });
         QObject::connect(addStartSegAction, &QAction::triggered, treeView, [=]() {
             auto nodes = getSelectedNodes();
@@ -1167,7 +1182,7 @@ int main(int argc, char *argv[])
             customModelRoot->children.push_back(newPart);
             customModel->layoutChanged(); // Notify model of structure change
             customPartViewer->setRootTreeNode(customModel->getRootNodePointer()); // Update viewer's root node
-            updateCustomPartViewer();
+            // updateCustomPartViewer(); // This line is removed as per the edit hint
         });
         QObject::connect(addEndSegAction, &QAction::triggered, treeView, [=]() {
             auto nodes = getSelectedNodes();
@@ -1184,7 +1199,7 @@ int main(int argc, char *argv[])
             customModelRoot->children.push_back(newPart);
             customModel->layoutChanged(); // Notify model of structure change
             customPartViewer->setRootTreeNode(customModel->getRootNodePointer()); // Update viewer's root node
-            updateCustomPartViewer();
+            // updateCustomPartViewer(); // This line is removed as per the edit hint
         });
         QObject::connect(addMiddleSegAction, &QAction::triggered, treeView, [=]() {
             auto nodes = getSelectedNodes();
@@ -1201,7 +1216,7 @@ int main(int argc, char *argv[])
             customModelRoot->children.push_back(newPart);
             customModel->layoutChanged(); // Notify model of structure change
             customPartViewer->setRootTreeNode(customModel->getRootNodePointer()); // Update viewer's root node
-            updateCustomPartViewer();
+            // updateCustomPartViewer(); // This line is removed as per the edit hint
         });
         // --- Custom Model Clear Logic ---
         QObject::connect(clearCarriageAction, &QAction::triggered, treeView, [=]() {
@@ -1214,7 +1229,7 @@ int main(int argc, char *argv[])
                 children.end());
             customModel->layoutChanged(); // Notify model of structure change
             customPartViewer->setRootTreeNode(customModel->getRootNodePointer()); // Update viewer's root node
-            updateCustomPartViewer();
+            // updateCustomPartViewer(); // This line is removed as per the edit hint
         });
         QObject::connect(clearStartSegAction, &QAction::triggered, treeView, [=]() {
             auto& children = customModelRoot->children;
@@ -1226,7 +1241,7 @@ int main(int argc, char *argv[])
                 children.end());
             customModel->layoutChanged(); // Notify model of structure change
             customPartViewer->setRootTreeNode(customModel->getRootNodePointer()); // Update viewer's root node
-            updateCustomPartViewer();
+            // updateCustomPartViewer(); // This line is removed as per the edit hint
         });
         QObject::connect(clearEndSegAction, &QAction::triggered, treeView, [=]() {
             auto& children = customModelRoot->children;
@@ -1238,7 +1253,7 @@ int main(int argc, char *argv[])
                 children.end());
             customModel->layoutChanged(); // Notify model of structure change
             customPartViewer->setRootTreeNode(customModel->getRootNodePointer()); // Update viewer's root node
-            updateCustomPartViewer();
+            // updateCustomPartViewer(); // This line is removed as per the edit hint
         });
         QObject::connect(clearMiddleSegAction, &QAction::triggered, treeView, [=]() {
             auto& children = customModelRoot->children;
@@ -1250,7 +1265,7 @@ int main(int argc, char *argv[])
                 children.end());
             customModel->layoutChanged(); // Notify model of structure change
             customPartViewer->setRootTreeNode(customModel->getRootNodePointer()); // Update viewer's root node
-            updateCustomPartViewer();
+            // updateCustomPartViewer(); // This line is removed as per the edit hint
         });
         
         QObject::connect(showAction, &QAction::triggered, treeView, [=]() {

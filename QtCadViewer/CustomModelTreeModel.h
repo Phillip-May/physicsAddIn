@@ -35,12 +35,13 @@ public:
     // Access root node (raw pointer, const)
     const NodeType* getRootNodePointer() const { return root_.get(); }
 
-private:
-    std::shared_ptr<NodeType> root_;
-    // All tree walking is const/read-only
+    // Make these public for selection sync
     const NodeType* getNode(const QModelIndex& index) const;
     QModelIndex indexForNode(const NodeType* node, int column = 0) const;
     const NodeType* getParentNode(const NodeType* node) const;
+
+private:
+    std::shared_ptr<NodeType> root_;
 };
 
 #ifdef Q_OS_WIN
