@@ -55,9 +55,9 @@ union CADNodeData {
 
 // 1. Node type enum
 enum class CadNodeType {
-    Unknown = 0, // Default type, must be explicitly set
+    Unknown = 0, // Default type, type should always be explicitly set
     XCAF,
-    Custom,
+    Custom, //For components of other CadNodes
     Rail,
     Turnable,
     // ... add more as needed

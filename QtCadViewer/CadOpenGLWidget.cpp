@@ -410,14 +410,15 @@ void CadOpenGLWidget::renderFaceOptimized(const CadNode* node, const CADNodeColo
 void CadOpenGLWidget::paintGL() {
     QElapsedTimer paintTimer;
     paintTimer.start();
-    
+
+
     // Frame skipping for very slow rendering
     m_frameCount++;
     if (m_skipFrames > 0) {
         m_skipFrames--;
         return; // Skip this frame entirely
     }
-    
+        
     // Check if we need to skip frames due to slow performance
     static QElapsedTimer lastFrameTimer;
     static int consecutiveSlowFrames = 0;
@@ -436,6 +437,9 @@ void CadOpenGLWidget::paintGL() {
     }
     lastFrameTimer.start();
     
+    //Used for selection, should probably be moved to some kind of scene
+    //Related tracking for things moving eventually
+
     QOpenGLFunctions* f = QOpenGLContext::currentContext()->functions();
     f->glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glEnable(GL_DEPTH_TEST);
@@ -579,6 +583,8 @@ void CadOpenGLWidget::mousePressEvent(QMouseEvent* event) {
             // Only update the pivot position and show the sphere, do NOT move or recenter the camera
             camera_.pivotWorldPos = hitPoint;
             setPivotSphere(hitPoint);
+        } else {
+            qDebug() << "No hit for pivot point";
         }
         // Start rotation state
         m_rotating = true;
@@ -718,8 +724,9 @@ void CadOpenGLWidget::mouseReleaseEvent(QMouseEvent* event) {
             }
             
             // Handle multi-selection with Ctrl+click
-            XCAFNodeData* pickedData = pickedNode->asXCAF();
-            if (pickedData) {
+            bool isValid = pickedNode && pickedNode->asXCAF();
+            if (isValid) {
+                XCAFNodeData* pickedData = pickedNode->asXCAF();
                 if (event->modifiers() & Qt::ControlModifier) {
                     // Ctrl+click: add/remove from selection
                     if (m_selectionMode == SelectionMode::Faces) {
@@ -933,22 +940,7 @@ bool CadOpenGLWidget::isInFrustum(const TopoDS_Face& face, const TopLoc_Location
     double faceSize = std::max(std::max(xmax-xmin, ymax-ymin), zmax-zmin);
     if (faceSize < 0.00001) return false; // Skip only extremely small faces (was 0.0001)
     
-    // Moderate distance-based culling
-    QVector3D faceCenter((xmin + xmax) * 0.5, (ymin + ymax) * 0.5, (zmin + zmax) * 0.5);
-    QVector3D toCamera = faceCenter - camera_.pos;
-    float distanceSquared = toCamera.x() * toCamera.x() + toCamera.y() * toCamera.y() + toCamera.z() * toCamera.z();
-    
-    // Use reasonable distance threshold
-    float maxDistanceSquared = camera_.zoom * camera_.zoom * 100.0f; // 100x zoom squared
-    
-    // For close viewing, be more permissive
-    if (camera_.zoom < 100.0f) {
-        maxDistanceSquared = std::max(maxDistanceSquared, 100000.0f); // 100k units squared for close viewing
-    }
-    
-    if (distanceSquared > maxDistanceSquared) {
-        return false;
-    }
+    // Removed distance-based culling logic here
     
     return true;
 }
@@ -1201,7 +1193,6 @@ bool CadOpenGLWidget::pickElementAt(const QPoint& pos, QVector3D* outIntersectio
     
     QElapsedTimer cacheTimer;
     cacheTimer.start();
-    buildFaceCache();
     qint64 cacheTime = cacheTimer.nsecsElapsed();
     if (m_frameCount % 60 == 0) {
         qDebug() << "[Profile] Face cache build took:" << cacheTime / 1000000.0 << "ms";
@@ -1392,10 +1383,10 @@ bool CadOpenGLWidget::pickElementAtForPivot(const QPoint& pos, QVector3D* outInt
     pickTimer.start();
     
     if (!rootNode_) return false;
+    buildFaceCache();
     
     QElapsedTimer cacheTimer;
     cacheTimer.start();
-    buildFaceCache();
     qint64 cacheTime = cacheTimer.nsecsElapsed();
     if (m_frameCount % 60 == 0) {
         qDebug() << "[Profile] Face cache build took:" << cacheTime / 1000000.0 << "ms";
@@ -1411,6 +1402,8 @@ bool CadOpenGLWidget::pickElementAtForPivot(const QPoint& pos, QVector3D* outInt
     if (m_frameCount % 60 == 0) {
         qDebug() << "[Profile] Ray setup took:" << rayTime / 1000000.0 << "ms";
     }
+
+    qDebug() << "FaceCache size: " << faceCache_.size();
     
     QElapsedTimer intersectTimer;
     intersectTimer.start();
@@ -1465,7 +1458,6 @@ void CadOpenGLWidget::pickHoveredFaceAt(const QPoint& pos) {
     
     hoveredFace_.Nullify();
     if (!rootNode_) return;
-    buildFaceCache();
     gp_Pnt rayOrigin;
     gp_Dir rayDir;
     screenToWorldRay(pos, width(), height(), camera_.pos, camera_.rot, camera_.zoom, rayOrigin, rayDir);
@@ -1583,21 +1575,23 @@ void CadOpenGLWidget::buildFaceCache() {
     std::function<void(CadNode*)> traverse;
     traverse = [&](CadNode* node) {
         XCAFNodeData* xData = node->asXCAF();
-        if (!node || !node->visible) return;
-        if (xData->type == TopAbs_FACE && xData->hasFace()) {
-            faceCache_.push_back(FaceInstance{node});
-        } else if (xData->type == TopAbs_SOLID || xData->type == TopAbs_SHELL || xData->type == TopAbs_COMPOUND) {
-            // Only add parent nodes for picking if they have significant geometry
-            TopoDS_Shape shape = xData->shape;
-            if (!shape.IsNull()) {
-                // Count faces to determine if this node is worth caching
-                int faceCount = 0;
-                for (TopExp_Explorer exp(shape, TopAbs_FACE); exp.More(); exp.Next()) {
-                    faceCount++;
-                    if (faceCount > 10) break; // Limit face counting for performance
-                }
-                if (faceCount > 0) {
-                    faceCache_.push_back(FaceInstance{node});
+        if (!node) return;
+        if (xData) {
+            if (xData->type == TopAbs_FACE && xData->hasFace()) {
+                faceCache_.push_back(FaceInstance{node});
+            } else if (xData->type == TopAbs_SOLID || xData->type == TopAbs_SHELL || xData->type == TopAbs_COMPOUND) {
+                // Only add parent nodes for picking if they have significant geometry
+                TopoDS_Shape shape = xData->shape;
+                if (!shape.IsNull()) {
+                    // Count faces to determine if this node is worth caching
+                    int faceCount = 0;
+                    for (TopExp_Explorer exp(shape, TopAbs_FACE); exp.More(); exp.Next()) {
+                        faceCount++;
+                        if (faceCount > 10) break; // Limit face counting for performance
+                    }
+                    if (faceCount > 0) {
+                        faceCache_.push_back(FaceInstance{node});
+                    }
                 }
             }
         }
