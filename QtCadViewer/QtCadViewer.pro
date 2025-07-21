@@ -16,6 +16,17 @@ LIBS += -LC:/OpenCASCADE-7.6.0-vc14-64/opencascade-7.6.0/win64/vc14/lib \
 # VHACD Library Integration
 INCLUDEPATH += ../physicsAddIn/v-hacd-4.1.0/include
 
+# CoACD Library Integration
+INCLUDEPATH += ../external/CoACD/public
+LIBS += C:/Users/Admin/Documents/physicsAddIn/external/CoACD/buildMD/Release/coacd.lib \
+    C:/Users/Admin/Documents/physicsAddIn/external/CoACD/buildMD/_deps/boost-build/libs/random/Release/libboost_random-vc142-mt-x64-1_81.lib \
+    C:/Users/Admin/Documents/physicsAddIn/external/CoACD/buildMD/_deps/zlib-build/Release/zlibstatic.lib \
+    C:/Users/Admin/Documents/physicsAddIn/external/CoACD/buildMD/_deps/boost-build/libs/iostreams/Release/libboost_iostreams-vc142-mt-x64-1_81.lib \
+    C:/Users/Admin/Documents/physicsAddIn/external/CoACD/buildMD/msvc_19.29_cxx20_64_md_release/tbb12.lib \
+    C:/Users/Admin/Documents/physicsAddIn/external/CoACD/buildMD/_deps/openvdb-build/openvdb/openvdb/Release/libopenvdb.lib \
+    C:/Users/Admin/Documents/physicsAddIn/external/CoACD/buildMD/_deps/spdlog-build/Release/spdlog.lib
+
+
 SOURCES += \
     main.cpp \
     CadOpenGLWidget.cpp \
@@ -24,6 +35,7 @@ SOURCES += \
     CustomModelTreeModel.cpp
 
 HEADERS += \
+    ../external/CoACD/public/coacd.h \
     CadNode.h \
     CadOpenGLWidget.h \
     CadTreeModel.h \

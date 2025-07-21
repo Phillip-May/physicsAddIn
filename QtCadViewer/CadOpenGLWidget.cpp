@@ -268,7 +268,7 @@ void CadOpenGLWidget::renderBatchedGeometry() {
     }
     
     if (m_frameCount % 120 == 0) {
-        qDebug() << "[Render] Rendering geometry, root children:" << rootNode_->children.size();
+        //qDebug() << "[Render] Rendering geometry, root children:" << rootNode_->children.size();
     }
     
     // Use the original traversal approach but with optimized face rendering

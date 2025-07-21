@@ -1,5 +1,6 @@
 #define ENABLE_VHACD_IMPLEMENTATION 1
 #include "../physicsAddIn/v-hacd-4.1.0/include/VHACD.h"
+#include "../external/CoACD/public/coacd.h"
 #include <QApplication>
 #include <QMainWindow>
 #include <QTreeView>
@@ -26,6 +27,8 @@
 #include <TopoDS.hxx>
 #include <TopoDS_Shape.hxx>
 #include <set>
+#include <QComboBox>
+#include <QCheckBox>
 
 #include "CadNode.h"
 #include "XCAFLabelTreeModel.h"
@@ -803,6 +806,140 @@ static void generateVHACDStub(const QString& nodeName, int resolution, int maxHu
         int percent = static_cast<int>(ratio * 100.0 + 0.5);
         QString biggerSmaller = (ratio > 1.0) ? "bigger" : ((ratio < 1.0) ? "smaller" : "equal");
         qDebug() << QString("[VHACD] Decomposition is %1% of original (%2) (hull/original)")
+                    .arg(percent)
+                    .arg(biggerSmaller);
+    }
+}
+
+static void generateCoACDStub(const QString& nodeName, double concavity, double alpha, double beta, CadNode* node,
+    int maxConvexHull, std::string preprocess, int prepRes, int sampleRes, int mctsNodes, int mctsIter, int mctsDepth,
+    bool pca, bool merge, bool decimate, int maxChVertex, bool extrude, double extrudeMargin, std::string apxMode, int seed) {
+    std::vector<CadNode*> faces;
+    qDebug() << "Node Name: " << node->name.c_str();
+    CadOpenGLWidget::collectFaceNodes(node, faces);
+    qDebug() << "Face count: " << faces.size();
+    int numInputFaces = static_cast<int>(faces.size());
+    std::vector<double> vertices;
+    std::vector<int> triangles;
+    uint32_t vertOffset = 0;
+    // Build mesh from all faces (unchanged)
+    for (CadNode* faceNode : faces) {
+        XCAFNodeData* xData = faceNode->asXCAF();
+        if (!xData || !xData->hasFace()) continue;
+        TopoDS_Face face = xData->getFace();
+        TopLoc_Location loc = faceNode->loc;
+        face = TopoDS::Face(face.Located(loc));
+        BRepMesh_IncrementalMesh mesher(face, 0.5);
+        TopLoc_Location locCopy;
+        Handle(Poly_Triangulation) tri = BRep_Tool::Triangulation(face, locCopy);
+        if (tri.IsNull() || tri->NbTriangles() == 0) continue;
+        std::vector<uint32_t> localIndices(tri->NbNodes());
+        for (int i = 1; i <= tri->NbNodes(); ++i) {
+            gp_Pnt p = tri->Node(i).Transformed(locCopy.Transformation());
+            vertices.push_back(p.X());
+            vertices.push_back(p.Y());
+            vertices.push_back(p.Z());
+            localIndices[i-1] = vertOffset++;
+        }
+        for (int i = tri->Triangles().Lower(); i <= tri->Triangles().Upper(); ++i) {
+            int n1, n2, n3;
+            tri->Triangles()(i).Get(n1, n2, n3);
+            triangles.push_back(localIndices[n1-1]);
+            triangles.push_back(localIndices[n2-1]);
+            triangles.push_back(localIndices[n3-1]);
+        }
+    }
+    // --- Compute original mesh volume (unchanged) ---
+    std::vector<TopoDS_Shape> solids;
+    std::function<void(CadNode*)> collectSolids;
+    collectSolids = [&](CadNode* node) {
+        if (!node) return;
+        XCAFNodeData* xData = node->asXCAF();
+        if (xData && xData->type == TopAbs_SOLID && !xData->shape.IsNull()) {
+            bool alreadyPresent = false;
+            for (const auto& s : solids) {
+                if (s.TShape().get() == xData->shape.TShape().get()) {
+                    alreadyPresent = true;
+                    break;
+                }
+            }
+            if (!alreadyPresent) {
+                solids.push_back(xData->shape);
+            }
+        }
+        for (const auto& child : node->children) {
+            collectSolids(child.get());
+        }
+    };
+    collectSolids(node);
+    double originalVolume = 0.0;
+    for (const auto& solid : solids) {
+        GProp_GProps props;
+        BRepGProp::VolumeProperties(solid, props);
+        originalVolume += props.Mass();
+    }
+    // Convert our data to CoACD Mesh format
+    coacd::Mesh inputMesh;
+    for (size_t i = 0; i < vertices.size(); i += 3) {
+        inputMesh.vertices.push_back({vertices[i], vertices[i+1], vertices[i+2]});
+    }
+    for (size_t i = 0; i < triangles.size(); i += 3) {
+        inputMesh.indices.push_back({triangles[i], triangles[i+1], triangles[i+2]});
+    }
+    // Run CoACD with all parameters
+    std::vector<coacd::Mesh> resultMeshes = coacd::CoACD(
+        inputMesh, concavity, maxConvexHull, preprocess, prepRes, sampleRes, mctsNodes, mctsIter, mctsDepth,
+        pca, merge, decimate, maxChVertex, extrude, extrudeMargin, apxMode, static_cast<unsigned int>(seed)
+    );
+    bool ok = !resultMeshes.empty();
+    PhysicsNodeData* physData = node->asPhysics();
+    physData->hulls.clear();
+    physData->convexHullGenerated = ok;
+    int hullCount = 0;
+    double totalVolume = 0.0;
+    if (ok) {
+        hullCount = static_cast<int>(resultMeshes.size());
+        for (size_t i = 0; i < resultMeshes.size(); ++i) {
+            ConvexHullData hullData;
+            const auto& resultMesh = resultMeshes[i];
+            for (const auto& vertex : resultMesh.vertices) {
+                hullData.vertices.push_back({
+                    static_cast<float>(vertex[0]),
+                    static_cast<float>(vertex[1]),
+                    static_cast<float>(vertex[2])
+                });
+            }
+            for (const auto& triangle : resultMesh.indices) {
+                hullData.indices.push_back({
+                    static_cast<uint32_t>(triangle[0]),
+                    static_cast<uint32_t>(triangle[1]),
+                    static_cast<uint32_t>(triangle[2])
+                });
+            }
+            physData->hulls.push_back(std::move(hullData));
+            double hullVolume = 0.0;
+            for (const auto& triangle : resultMesh.indices) {
+                const auto& v1 = resultMesh.vertices[triangle[0]];
+                const auto& v2 = resultMesh.vertices[triangle[1]];
+                const auto& v3 = resultMesh.vertices[triangle[2]];
+                hullVolume += ((v1[0] * v2[1] * v3[2]) + (v1[1] * v2[2] * v3[0]) + (v1[2] * v2[0] * v3[1]) -
+                              (v3[0] * v2[1] * v1[2]) - (v3[1] * v2[2] * v1[0]) - (v3[2] * v2[0] * v1[1])) / 6.0;
+            }
+            totalVolume += std::abs(hullVolume);
+        }
+    }
+    qDebug() << "[CoACD] Node:" << nodeName
+             << "Input faces:" << numInputFaces
+             << "Input vertices:" << vertices.size() / 3
+             << "Input triangles:" << triangles.size() / 3
+             << "Generated hulls:" << hullCount
+             << "Total hull volume:" << totalVolume
+             << "Success:" << ok;
+    if (originalVolume > 0.0 && totalVolume > 0.0) {
+        double ratio = totalVolume / originalVolume;
+        int percent = static_cast<int>(ratio * 100.0 + 0.5);
+        QString biggerSmaller = (ratio > 1.0) ? "bigger" : ((ratio < 1.0) ? "smaller" : "equal");
+        qDebug() << QString("[CoACD] Decomposition is %1% of original (%2) (hull/original)")
                     .arg(percent)
                     .arg(biggerSmaller);
     }
@@ -1668,6 +1805,8 @@ int main(int argc, char *argv[])
         // Only show for physics nodes
         if (node->type == CadNodeType::Physics) {
             QAction* vhacdAction = menu.addAction("Generate V-HACD");
+            QAction* coacdAction = menu.addAction("Generate CoACD");
+            
             QObject::connect(vhacdAction, &QAction::triggered, customModelTreeView, [=]() {
                 // V-HACD parameter widget (non-blocking)
                 QWidget* vhacdWidget = new QWidget(nullptr);
@@ -1706,6 +1845,169 @@ int main(int argc, char *argv[])
                 vhacdWidget->show();
                 vhacdWidget->activateWindow();
                 vhacdWidget->raise();
+            });
+
+            QObject::connect(coacdAction, &QAction::triggered, customModelTreeView, [=]() {
+                QWidget* coacdWidget = new QWidget(nullptr);
+                coacdWidget->setAttribute(Qt::WA_DeleteOnClose);
+                coacdWidget->setWindowTitle("CoACD Parameters");
+                QFormLayout* form = new QFormLayout;
+
+                QDoubleSpinBox* concavitySpin = new QDoubleSpinBox;
+                concavitySpin->setRange(0.0, 1.0);
+                concavitySpin->setDecimals(3);
+                concavitySpin->setSingleStep(0.01);
+                concavitySpin->setValue(0.05);
+                concavitySpin->setToolTip("Maximum allowed concavity (lower = more accurate, slower)");
+                form->addRow("Concavity", concavitySpin);
+
+                QDoubleSpinBox* alphaSpin = new QDoubleSpinBox;
+                alphaSpin->setRange(0.0, 1.0);
+                alphaSpin->setDecimals(3);
+                alphaSpin->setSingleStep(0.01);
+                alphaSpin->setValue(0.05);
+                alphaSpin->setToolTip("Alpha: balance between concavity and number of hulls");
+                form->addRow("Alpha", alphaSpin);
+
+                QDoubleSpinBox* betaSpin = new QDoubleSpinBox;
+                betaSpin->setRange(0.0, 1.0);
+                betaSpin->setDecimals(3);
+                betaSpin->setSingleStep(0.01);
+                betaSpin->setValue(0.05);
+                betaSpin->setToolTip("Beta: balance between concavity and volume");
+                form->addRow("Beta", betaSpin);
+
+                QSpinBox* maxConvexHullSpin = new QSpinBox;
+                maxConvexHullSpin->setRange(-1, 1024);
+                maxConvexHullSpin->setValue(-1); // Default: unlimited hulls
+                maxConvexHullSpin->setToolTip("Maximum number of convex hulls (-1 = unlimited)");
+                form->addRow("Max Convex Hulls", maxConvexHullSpin);
+
+                QComboBox* preprocessCombo = new QComboBox;
+                preprocessCombo->addItem("auto");
+                preprocessCombo->addItem("on");
+                preprocessCombo->addItem("off");
+                preprocessCombo->setCurrentText("auto");
+                preprocessCombo->setToolTip("Preprocessing: auto/on/off (auto is usually fastest)");
+                form->addRow("Preprocess", preprocessCombo);
+
+                QSpinBox* prepResSpin = new QSpinBox;
+                prepResSpin->setRange(1, 1000);
+                prepResSpin->setValue(20);
+                prepResSpin->setToolTip("Voxel resolution for preprocessing (lower = faster, less detail)");
+                form->addRow("Prep Resolution", prepResSpin);
+
+                QSpinBox* sampleResSpin = new QSpinBox;
+                sampleResSpin->setRange(100, 10000);
+                sampleResSpin->setValue(500);
+                sampleResSpin->setToolTip("Number of surface samples (lower = faster, less detail)");
+                form->addRow("Sample Resolution", sampleResSpin);
+
+                QSpinBox* mctsNodesSpin = new QSpinBox;
+                mctsNodesSpin->setRange(1, 100);
+                mctsNodesSpin->setValue(10);
+                mctsNodesSpin->setToolTip("Number of nodes in MCTS search (lower = faster, less accurate)");
+                form->addRow("MCTS Nodes", mctsNodesSpin);
+
+                QSpinBox* mctsIterSpin = new QSpinBox;
+                mctsIterSpin->setRange(1, 1000);
+                mctsIterSpin->setValue(30);
+                mctsIterSpin->setToolTip("Number of MCTS iterations (lower = faster, less accurate)");
+                form->addRow("MCTS Iterations", mctsIterSpin);
+
+                QSpinBox* mctsDepthSpin = new QSpinBox;
+                mctsDepthSpin->setRange(1, 10);
+                mctsDepthSpin->setValue(3);
+                mctsDepthSpin->setToolTip("Maximum depth of MCTS search tree");
+                form->addRow("MCTS Max Depth", mctsDepthSpin);
+
+                QCheckBox* pcaCheck = new QCheckBox;
+                pcaCheck->setChecked(false);
+                pcaCheck->setToolTip("Enable PCA alignment for input mesh");
+                form->addRow("PCA", pcaCheck);
+
+                QCheckBox* mergeCheck = new QCheckBox;
+                mergeCheck->setChecked(true);
+                mergeCheck->setToolTip("Merge small hulls together after decomposition");
+                form->addRow("Merge", mergeCheck);
+
+                QCheckBox* decimateCheck = new QCheckBox;
+                decimateCheck->setChecked(false);
+                decimateCheck->setToolTip("Decimate (simplify) hulls after decomposition");
+                form->addRow("Decimate", decimateCheck);
+
+                QSpinBox* maxChVertexSpin = new QSpinBox;
+                maxChVertexSpin->setRange(4, 4096);
+                maxChVertexSpin->setValue(128);
+                maxChVertexSpin->setToolTip("Maximum number of vertices per convex hull");
+                form->addRow("Max CH Vertex", maxChVertexSpin);
+
+                QCheckBox* extrudeCheck = new QCheckBox;
+                extrudeCheck->setChecked(false);
+                extrudeCheck->setToolTip("Enable extrusion for thin parts");
+                form->addRow("Extrude", extrudeCheck);
+
+                QDoubleSpinBox* extrudeMarginSpin = new QDoubleSpinBox;
+                extrudeMarginSpin->setRange(0.0, 1.0);
+                extrudeMarginSpin->setDecimals(4);
+                extrudeMarginSpin->setSingleStep(0.001);
+                extrudeMarginSpin->setValue(0.01);
+                extrudeMarginSpin->setToolTip("Margin for extrusion (if enabled)");
+                form->addRow("Extrude Margin", extrudeMarginSpin);
+
+                QComboBox* apxModeCombo = new QComboBox;
+                apxModeCombo->addItem("auto");
+                apxModeCombo->addItem("ch");
+                apxModeCombo->addItem("box");
+                apxModeCombo->setCurrentText("auto");
+                apxModeCombo->setToolTip("Approximation mode: auto, ch = convex hull, box = bounding box");
+                form->addRow("Apx Mode", apxModeCombo);
+
+                QSpinBox* seedSpin = new QSpinBox;
+                seedSpin->setRange(-1, INT_MAX); // Allow -1 for random
+                seedSpin->setValue(-1); // Default: random
+                seedSpin->setToolTip("Random seed for reproducibility (-1 = random)");
+                form->addRow("Seed", seedSpin);
+
+                QPushButton* updateBtn = new QPushButton("Update");
+                QVBoxLayout* vbox = new QVBoxLayout;
+                vbox->addLayout(form);
+                vbox->addWidget(updateBtn);
+                coacdWidget->setLayout(vbox);
+
+                QObject::connect(updateBtn, &QPushButton::clicked, coacdWidget, [=]() {
+                    QString preprocessStr = preprocessCombo->currentText();
+                    std::string preprocess = preprocessStr.toStdString();
+                    std::string apxMode = apxModeCombo->currentText().toStdString();
+                    generateCoACDStub(
+                        QString::fromStdString(node->name),
+                        concavitySpin->value(),
+                        alphaSpin->value(),
+                        betaSpin->value(),
+                        node,
+                        maxConvexHullSpin->value(),
+                        preprocess,
+                        prepResSpin->value(),
+                        sampleResSpin->value(),
+                        mctsNodesSpin->value(),
+                        mctsIterSpin->value(),
+                        mctsDepthSpin->value(),
+                        pcaCheck->isChecked(),
+                        mergeCheck->isChecked(),
+                        decimateCheck->isChecked(),
+                        maxChVertexSpin->value(),
+                        extrudeCheck->isChecked(),
+                        extrudeMarginSpin->value(),
+                        apxMode,
+                        seedSpin->value()
+                    );
+                });
+                coacdWidget->setWindowModality(Qt::NonModal);
+                coacdWidget->setFocusPolicy(Qt::StrongFocus);
+                coacdWidget->resize(400, 600);
+                coacdWidget->show();
+                coacdWidget->activateWindow();
+                coacdWidget->raise();
             });
         }
         if (!menu.isEmpty()) menu.exec(customModelTreeView->viewport()->mapToGlobal(pos));
