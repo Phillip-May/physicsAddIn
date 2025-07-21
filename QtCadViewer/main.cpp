@@ -22,6 +22,7 @@
 #include <TDF_AttributeIterator.hxx>
 #include <TDataStd_TreeNode.hxx>
 #include <TDF_RelocationTable.hxx>
+#include <BRepGProp.hxx>
 
 #include "CadNode.h"
 #include "XCAFLabelTreeModel.h"
@@ -167,6 +168,7 @@ std::unique_ptr<XCAFLabelNode> buildLabelTreeWithReferences(const TDF_Label& lab
 #include <QDir>
 #include <BinXCAFDrivers.hxx>
 #include <XmlXCAFDrivers.hxx>
+#include <GProp_GProps.hxx>
 
 // qHash overload for TDF_Label to allow use in QSet/QHash
 #include <TDF_Label.hxx>
@@ -682,15 +684,12 @@ void connectTreeAndViewer(QTreeView* tree, CadOpenGLWidget* viewer, ModelType* m
     });
 }
 
-// Helper to collect all face nodes under a given node
-static void collectFaceNodes(CadNode* node, std::vector<CadNode*>& out) {
-    if (!node) return;
-    collectFaceNodes(node, out);
-}
 
 static void generateVHACDStub(const QString& nodeName, int resolution, int maxHulls, double minVolume, CadNode* node) {
     std::vector<CadNode*> faces;
-    collectFaceNodes(node, faces);
+    qDebug() << "Node Name: " << node->name.c_str();
+    CadOpenGLWidget::collectFaceNodes(node, faces);
+    qDebug() << "Face count: " << faces.size();
     int numInputFaces = static_cast<int>(faces.size());
     std::vector<VHACD::Vertex> vertices;
     std::vector<VHACD::Triangle> triangles;
@@ -720,6 +719,22 @@ static void generateVHACDStub(const QString& nodeName, int resolution, int maxHu
             triangles.push_back(VHACD::Triangle(localIndices[n1-1], localIndices[n2-1], localIndices[n3-1]));
         }
     }
+    // --- Compute original mesh volume (approximate) ---
+    double originalVolume = 0.0;
+    for (CadNode* faceNode : faces) {
+        XCAFNodeData* xData = faceNode->asXCAF();
+        if (!xData || !xData->hasFace()) continue;
+        TopoDS_Face face = xData->getFace();
+        TopLoc_Location loc = faceNode->loc;
+        face = TopoDS::Face(face.Located(loc));
+        // Use OpenCascade's GProp_GProps to compute face area (not volume, but sum for info)
+        GProp_GProps props;
+        BRepGProp::SurfaceProperties(face, props);
+        originalVolume += props.Mass(); // For a face, this is area, not volume
+    }
+    // Try to get a better volume estimate if all faces belong to a single solid
+    // (Optional: could be improved by traversing up to the solid node and using BRepGProp::VolumeProperties)
+    qDebug() << "[VHACD] Approximated original mesh area (sum of face areas):" << originalVolume;
     // Run VHACD
     VHACD::IVHACD::Parameters params;
     params.m_resolution = resolution;
@@ -758,6 +773,9 @@ static void generateVHACDStub(const QString& nodeName, int resolution, int maxHu
              << "Generated hulls:" << hullCount
              << "Total hull volume:" << totalVolume
              << "Success:" << ok;
+    if (originalVolume > 0.0 && totalVolume > 0.0) {
+        qDebug() << "[VHACD] Ratio hull/original (using area as proxy):" << (totalVolume / originalVolume);
+    }
 }
 
 int main(int argc, char *argv[])
@@ -1256,7 +1274,8 @@ int main(int argc, char *argv[])
             auto nodes = getSelectedNodes();
             if (nodes.empty()) return;
             std::shared_ptr<CadNode> newPart = std::make_shared<CadNode>();
-            newPart->name = "Carriage";
+            newPart->name = QString("Carriage | Type: Physics | Transform: %1")
+                .arg(makeTransformString(nodes[0]->loc)).toStdString();
             newPart->loc = nodes[0]->loc;
             newPart->color = nodes[0]->color;
             newPart->type = CadNodeType::Physics;
@@ -1275,7 +1294,8 @@ int main(int argc, char *argv[])
             auto nodes = getSelectedNodes();
             if (nodes.empty()) return;
             std::shared_ptr<CadNode> newPart = std::make_shared<CadNode>();
-            newPart->name = "Start Segment";
+            newPart->name = QString("Start Segment | Type: Physics | Transform: %1")
+                .arg(makeTransformString(nodes[0]->loc)).toStdString();
             newPart->loc = nodes[0]->loc;
             newPart->color = nodes[0]->color;
             newPart->type = CadNodeType::Physics;
@@ -1293,7 +1313,8 @@ int main(int argc, char *argv[])
             auto nodes = getSelectedNodes();
             if (nodes.empty()) return;
             std::shared_ptr<CadNode> newPart = std::make_shared<CadNode>();
-            newPart->name = "End Segment";
+            newPart->name = QString("End Segment | Type: Physics | Transform: %1")
+                .arg(makeTransformString(nodes[0]->loc)).toStdString();
             newPart->loc = nodes[0]->loc;
             newPart->color = nodes[0]->color;
             newPart->type = CadNodeType::Physics;
@@ -1311,7 +1332,8 @@ int main(int argc, char *argv[])
             auto nodes = getSelectedNodes();
             if (nodes.empty()) return;
             std::shared_ptr<CadNode> newPart = std::make_shared<CadNode>();
-            newPart->name = "Middle Segment";
+            newPart->name = QString("Middle Segment | Type: Physics | Transform: %1")
+                .arg(makeTransformString(nodes[0]->loc)).toStdString();
             newPart->loc = nodes[0]->loc;
             newPart->color = nodes[0]->color;
             newPart->type = CadNodeType::Physics;
@@ -1622,9 +1644,17 @@ int main(int argc, char *argv[])
                 vhacdWidget->setAttribute(Qt::WA_DeleteOnClose);
                 vhacdWidget->setWindowTitle("V-HACD Parameters");
                 QFormLayout* form = new QFormLayout;
-                QSpinBox* resolutionSpin = new QSpinBox; resolutionSpin->setRange(10000, 1000000); resolutionSpin->setValue(100000);
-                QSpinBox* maxHullSpin = new QSpinBox; maxHullSpin->setRange(1, 1024); maxHullSpin->setValue(16);
-                QDoubleSpinBox* minVolumeSpin = new QDoubleSpinBox; minVolumeSpin->setRange(0.0, 0.1); minVolumeSpin->setDecimals(6); minVolumeSpin->setSingleStep(0.0001); minVolumeSpin->setValue(0.0001);
+                QSpinBox* resolutionSpin = new QSpinBox; 
+                resolutionSpin->setRange(1000, 1000000); 
+                resolutionSpin->setValue(10000); // Lower default for faster VHACD
+                QSpinBox* maxHullSpin = new QSpinBox; 
+                maxHullSpin->setRange(1, 1024); 
+                maxHullSpin->setValue(8); // Lower default for faster VHACD
+                QDoubleSpinBox* minVolumeSpin = new QDoubleSpinBox; 
+                minVolumeSpin->setRange(0.0, 0.1); 
+                minVolumeSpin->setDecimals(6); 
+                minVolumeSpin->setSingleStep(0.001); 
+                minVolumeSpin->setValue(0.01); // Less strict for faster VHACD
                 form->addRow("Resolution", resolutionSpin);
                 form->addRow("Max Hulls", maxHullSpin);
                 form->addRow("Min Volume", minVolumeSpin);

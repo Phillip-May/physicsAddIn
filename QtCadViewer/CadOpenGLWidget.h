@@ -10,6 +10,7 @@
 #include <map>
 #include <QQuaternion>
 #include <QTimer>
+#include <vector>
 
 #include "CadNode.h"
 
@@ -87,6 +88,7 @@ public:
     CameraState getCameraState() const;
     void setCameraState(const CameraState& state);
     // Add this slot for tree selection
+    static void collectFaceNodes(CadNode *node, std::vector<CadNode*> &out);
 public slots:
     void clearSelection();
     void addToSelection(CadNode* node);
@@ -198,9 +200,8 @@ private:
     int m_skippedFaces = 0; // Faces skipped
     void clearGeometryCache();
     void drawBoundingBox(const QVector3D& min, const QVector3D& max, const QVector4D& color);
+    void renderConvexHulls(const PhysicsNodeData *physData, const TopLoc_Location &loc);
 signals:
     void facePicked(CadNode* node);
     void edgePicked(CadNode* node);
 };
-
-static void collectFaceNodes(CadNode* node, std::vector<CadNode*>& out);

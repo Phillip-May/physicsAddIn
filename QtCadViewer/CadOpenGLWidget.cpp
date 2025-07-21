@@ -1,4 +1,5 @@
 #include "CadOpenGLWidget.h"
+#include <array>
 #include <BRepMesh_IncrementalMesh.hxx>
 #include <BRep_Tool.hxx>
 #include <Poly_Triangulation.hxx>
@@ -345,6 +346,12 @@ void CadOpenGLWidget::traverseAndRender(const CadNode* node, CADNodeColor inheri
     for (const auto& child : node->children) {
         if (child) {
             traverseAndRender(child.get(), node->color, true);
+        }
+    }
+    if (node->type == CadNodeType::Physics) {
+        const PhysicsNodeData* physData = node->asPhysics();
+        if (physData && physData->convexHullGenerated && !physData->hulls.empty()) {
+            renderConvexHulls(physData, node->loc);
         }
     }
 }
@@ -1588,7 +1595,7 @@ void CadOpenGLWidget::pickHoveredEdgeAt(const QPoint& pos) {
     }
 } 
 
-static void collectFaceNodes(CadNode* node, std::vector<CadNode*>& out) {
+void CadOpenGLWidget::collectFaceNodes(CadNode* node, std::vector<CadNode*>& out) {
     if (!node) return;
     XCAFNodeData* xData = node->asXCAF();
     if (xData && xData->type == TopAbs_FACE && xData->hasFace()) {
@@ -1949,6 +1956,52 @@ void CadOpenGLWidget::drawReferenceFrame(const TopLoc_Location& loc, float axisL
     glVertex3f(0.0f, 0.0f, axisLength);
     glEnd();
     glLineWidth(1.0f);
+    glPopMatrix();
+}
+
+// Add this function near other rendering helpers
+void CadOpenGLWidget::renderConvexHulls(const PhysicsNodeData* physData, const TopLoc_Location& loc) {
+    if (!physData) return;
+    qDebug() << "[renderConvexHulls] hull count:" << physData->hulls.size();
+    glPushMatrix();
+    // Apply transformation if needed
+    if (!loc.IsIdentity()) {
+        const gp_Trsf& trsf = loc.Transformation();
+        const gp_Mat& mat = trsf.VectorialPart();
+        const gp_XYZ& trans = trsf.TranslationPart();
+        double matrix[16] = {
+            mat.Value(1,1), mat.Value(2,1), mat.Value(3,1), 0.0,
+            mat.Value(1,2), mat.Value(2,2), mat.Value(3,2), 0.0,
+            mat.Value(1,3), mat.Value(2,3), mat.Value(3,3), 0.0,
+            trans.X(),     trans.Y(),     trans.Z(),     1.0
+        };
+        glMultMatrixd(matrix);
+    }
+    for (const auto& hull : physData->hulls) {
+        // Draw filled hull
+        glColor4f(1.0f, 0.5f, 0.1f, 0.3f); // Orange, semi-transparent
+        glBegin(GL_TRIANGLES);
+        for (const auto& tri : hull.indices) {
+            for (int i = 0; i < 3; ++i) {
+                const auto& v = hull.vertices[tri[i]];
+                glVertex3f(v[0], v[1], v[2]);
+            }
+        }
+        glEnd();
+        // Draw wireframe
+        glColor4f(0.0f, 0.0f, 0.0f, 0.7f);
+        glLineWidth(2.0f);
+        glBegin(GL_LINES);
+        for (const auto& tri : hull.indices) {
+            for (int i = 0; i < 3; ++i) {
+                const auto& v1 = hull.vertices[tri[i]];
+                const auto& v2 = hull.vertices[tri[(i+1)%3]];
+                glVertex3f(v1[0], v1[1], v1[2]);
+                glVertex3f(v2[0], v2[1], v2[2]);
+            }
+        }
+        glEnd();
+    }
     glPopMatrix();
 }
 
