@@ -1962,7 +1962,6 @@ void CadOpenGLWidget::drawReferenceFrame(const TopLoc_Location& loc, float axisL
 // Add this function near other rendering helpers
 void CadOpenGLWidget::renderConvexHulls(const PhysicsNodeData* physData, const TopLoc_Location& loc) {
     if (!physData) return;
-    qDebug() << "[renderConvexHulls] hull count:" << physData->hulls.size();
     glPushMatrix();
     // Apply transformation if needed
     if (!loc.IsIdentity()) {

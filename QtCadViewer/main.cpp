@@ -23,6 +23,9 @@
 #include <TDataStd_TreeNode.hxx>
 #include <TDF_RelocationTable.hxx>
 #include <BRepGProp.hxx>
+#include <TopoDS.hxx>
+#include <TopoDS_Shape.hxx>
+#include <set>
 
 #include "CadNode.h"
 #include "XCAFLabelTreeModel.h"
@@ -719,18 +722,40 @@ static void generateVHACDStub(const QString& nodeName, int resolution, int maxHu
             triangles.push_back(VHACD::Triangle(localIndices[n1-1], localIndices[n2-1], localIndices[n3-1]));
         }
     }
-    // --- Compute original mesh volume (approximate) ---
+    // --- Compute original mesh volume (true solid volume) ---
+    std::vector<TopoDS_Shape> solids;
+    std::function<void(CadNode*)> collectSolids;
+    collectSolids = [&](CadNode* node) {
+        if (!node) return;
+        XCAFNodeData* xData = node->asXCAF();
+        if (xData && xData->type == TopAbs_SOLID && !xData->shape.IsNull()) {
+            // Check for duplicate by TShape pointer
+            bool alreadyPresent = false;
+            for (const auto& s : solids) {
+                if (s.TShape().get() == xData->shape.TShape().get()) {
+                    alreadyPresent = true;
+                    break;
+                }
+            }
+            if (!alreadyPresent) {
+                solids.push_back(xData->shape);
+            }
+        }
+        for (const auto& child : node->children) {
+            collectSolids(child.get());
+        }
+    };
+    collectSolids(node); // node is the Physics node
     double originalVolume = 0.0;
-    for (CadNode* faceNode : faces) {
-        XCAFNodeData* xData = faceNode->asXCAF();
-        if (!xData || !xData->hasFace()) continue;
-        TopoDS_Face face = xData->getFace();
-        TopLoc_Location loc = faceNode->loc;
-        face = TopoDS::Face(face.Located(loc));
-        // Use OpenCascade's GProp_GProps to compute face area (not volume, but sum for info)
+    for (const auto& solid : solids) {
         GProp_GProps props;
-        BRepGProp::SurfaceProperties(face, props);
-        originalVolume += props.Mass(); // For a face, this is area, not volume
+        BRepGProp::VolumeProperties(solid, props);
+        originalVolume += props.Mass();
+    }
+    if (solids.empty()) {
+        qDebug() << "[VHACD] WARNING: No solids found under this Physics node. Cannot compute true volume comparison.";
+    } else {
+        qDebug() << "[VHACD] Found" << solids.size() << "unique solids. Total original solid volume:" << originalVolume;
     }
     // Try to get a better volume estimate if all faces belong to a single solid
     // (Optional: could be improved by traversing up to the solid node and using BRepGProp::VolumeProperties)
@@ -774,7 +799,12 @@ static void generateVHACDStub(const QString& nodeName, int resolution, int maxHu
              << "Total hull volume:" << totalVolume
              << "Success:" << ok;
     if (originalVolume > 0.0 && totalVolume > 0.0) {
-        qDebug() << "[VHACD] Ratio hull/original (using area as proxy):" << (totalVolume / originalVolume);
+        double ratio = totalVolume / originalVolume;
+        int percent = static_cast<int>(ratio * 100.0 + 0.5);
+        QString biggerSmaller = (ratio > 1.0) ? "bigger" : ((ratio < 1.0) ? "smaller" : "equal");
+        qDebug() << QString("[VHACD] Decomposition is %1% of original (%2) (hull/original)")
+                    .arg(percent)
+                    .arg(biggerSmaller);
     }
 }
 
@@ -1275,8 +1305,8 @@ int main(int argc, char *argv[])
             if (nodes.empty()) return;
             std::shared_ptr<CadNode> newPart = std::make_shared<CadNode>();
             newPart->name = QString("Carriage | Type: Physics | Transform: %1")
-                .arg(makeTransformString(nodes[0]->loc)).toStdString();
-            newPart->loc = nodes[0]->loc;
+                .arg(makeTransformString(TopLoc_Location())).toStdString();
+            newPart->loc = TopLoc_Location();
             newPart->color = nodes[0]->color;
             newPart->type = CadNodeType::Physics;
             auto physicsData = std::make_shared<PhysicsNodeData>();
@@ -1295,8 +1325,8 @@ int main(int argc, char *argv[])
             if (nodes.empty()) return;
             std::shared_ptr<CadNode> newPart = std::make_shared<CadNode>();
             newPart->name = QString("Start Segment | Type: Physics | Transform: %1")
-                .arg(makeTransformString(nodes[0]->loc)).toStdString();
-            newPart->loc = nodes[0]->loc;
+                .arg(makeTransformString(TopLoc_Location())).toStdString();
+            newPart->loc = TopLoc_Location();
             newPart->color = nodes[0]->color;
             newPart->type = CadNodeType::Physics;
             auto physicsData = std::make_shared<PhysicsNodeData>();
@@ -1314,8 +1344,8 @@ int main(int argc, char *argv[])
             if (nodes.empty()) return;
             std::shared_ptr<CadNode> newPart = std::make_shared<CadNode>();
             newPart->name = QString("End Segment | Type: Physics | Transform: %1")
-                .arg(makeTransformString(nodes[0]->loc)).toStdString();
-            newPart->loc = nodes[0]->loc;
+                .arg(makeTransformString(TopLoc_Location())).toStdString();
+            newPart->loc = TopLoc_Location();
             newPart->color = nodes[0]->color;
             newPart->type = CadNodeType::Physics;
             auto physicsData = std::make_shared<PhysicsNodeData>();
@@ -1333,8 +1363,8 @@ int main(int argc, char *argv[])
             if (nodes.empty()) return;
             std::shared_ptr<CadNode> newPart = std::make_shared<CadNode>();
             newPart->name = QString("Middle Segment | Type: Physics | Transform: %1")
-                .arg(makeTransformString(nodes[0]->loc)).toStdString();
-            newPart->loc = nodes[0]->loc;
+                .arg(makeTransformString(TopLoc_Location())).toStdString();
+            newPart->loc = TopLoc_Location();
             newPart->color = nodes[0]->color;
             newPart->type = CadNodeType::Physics;
             auto physicsData = std::make_shared<PhysicsNodeData>();
