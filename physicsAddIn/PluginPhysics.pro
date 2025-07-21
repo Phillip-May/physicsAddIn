@@ -152,6 +152,7 @@ DEFINES += PX_PHYSX_STATIC_LIB \
 
            LIBS += C:/PhysX-107.0-physx-5.6.0/physx/bin/win.x86_64.vc142.md/release/PhysXPvdSDK_static_64.lib
            LIBS += C:/PhysX-107.0-physx-5.6.0/physx/bin/win.x86_64.vc142.md/release/PhysXExtensions_static_64.lib
+           LIBS += -L$$PWD/v-hacd-4.1.0/build/ -lVHACD
 } else {
 DEFINES += PX_PHYSX_STATIC_LIB \
            _DEBUG # or NDEBUG for release builds
@@ -165,4 +166,5 @@ LIBS += -LC:/PhysX-107.0-physx-5.6.0/physx/bin/win.x86_64.vc142.md/debug/ -lPhys
 
 LIBS += C:/PhysX-107.0-physx-5.6.0/physx/bin/win.x86_64.vc142.md/debug/PhysXPvdSDK_static_64.lib
 LIBS += C:/PhysX-107.0-physx-5.6.0/physx/bin/win.x86_64.vc142.md/debug/PhysXExtensions_static_64.lib
+LIBS += -L$$PWD/v-hacd-4.1.0/build/ -lVHACD
 } 

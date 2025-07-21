@@ -88,13 +88,15 @@ public:
     void setCameraState(const CameraState& state);
     // Add this slot for tree selection
 public slots:
-    void setSelectedNode(CadNode* node);
     void clearSelection();
     void addToSelection(CadNode* node);
     void removeFromSelection(CadNode* node);
     void setCamera(const QVector3D& pos, const QQuaternion& rot, float zoom = 1.0f);
     void reframeCamera();
     void markCacheDirty(); // Force cache to be rebuilt on next paint
+    void drawReferenceFrame(const TopLoc_Location& loc, float axisLength);
+    CadNode* getSelectedFrameNode() const { return selectedFrameNode_; }
+    void setSelectedFrameNode(CadNode* node) { selectedFrameNode_ = node; update(); }
 protected:
     void initializeGL() override;
     void resizeGL(int w, int h) override;
@@ -122,6 +124,7 @@ private:
     CadNode* hoveredFaceNode_ = nullptr;
     CadNode* selectedEdgeNode_ = nullptr;
     CadNode* hoveredEdgeNode_ = nullptr;
+    CadNode* selectedFrameNode_ = nullptr;
     
     // Multi-selection support
     std::vector<CadNode*> selectedFaceNodes_;
@@ -199,3 +202,5 @@ signals:
     void facePicked(CadNode* node);
     void edgePicked(CadNode* node);
 };
+
+static void collectFaceNodes(CadNode* node, std::vector<CadNode*>& out);

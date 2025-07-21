@@ -60,6 +60,7 @@ enum class CadNodeType {
     Custom, //For components of other CadNodes
     Rail,
     Turnable,
+    Physics, // New: Physics object node
     // ... add more as needed
 };
 
@@ -89,6 +90,18 @@ struct CustomNodeData : public CadNodeDataBase {
     // ...
 };
 
+// 4b. Physics node data
+struct ConvexHullData {
+    std::vector<std::array<double, 3>> vertices; // x, y, z
+    std::vector<std::array<uint32_t, 3>> indices; // triangle indices
+};
+
+struct PhysicsNodeData : public CadNodeDataBase {
+    bool convexHullGenerated = false;
+    std::vector<ConvexHullData> hulls;
+    // Add more fields as needed (e.g., material, mass, etc.)
+};
+
 // 5. The generic CadNode struct
 struct CadNode {
     std::string name;
@@ -114,6 +127,14 @@ struct CadNode {
     }
     const CustomNodeData* asCustom() const {
         return type == CadNodeType::Custom ? static_cast<const CustomNodeData*>(data.get()) : nullptr;
+    }
+
+    // Helper to get Physics data safely
+    PhysicsNodeData* asPhysics() {
+        return type == CadNodeType::Physics ? static_cast<PhysicsNodeData*>(data.get()) : nullptr;
+    }
+    const PhysicsNodeData* asPhysics() const {
+        return type == CadNodeType::Physics ? static_cast<const PhysicsNodeData*>(data.get()) : nullptr;
     }
 
     // ... add more helpers for other node types as needed

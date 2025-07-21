@@ -1,3 +1,5 @@
+#define ENABLE_VHACD_IMPLEMENTATION 1
+#include "../physicsAddIn/v-hacd-4.1.0/include/VHACD.h"
 #include <QApplication>
 #include <QMainWindow>
 #include <QTreeView>
@@ -25,6 +27,13 @@
 #include "XCAFLabelTreeModel.h"
 #include "CadOpenGLWidget.h" // For SelectionMode enum
 #include "CustomModelTreeModel.h"
+#include <QDialog>
+#include <QFormLayout>
+#include <QDoubleSpinBox>
+#include <QSpinBox>
+#include <QPushButton>
+#include <QVBoxLayout>
+#include <QPoint>
 
 // Helper to recursively build XCAFLabelNode tree with sub-assembly detection
 std::unique_ptr<XCAFLabelNode> buildLabelTree(const TDF_Label& label, const Handle(XCAFDoc_ShapeTool)& shapeTool = nullptr) {
@@ -676,14 +685,79 @@ void connectTreeAndViewer(QTreeView* tree, CadOpenGLWidget* viewer, ModelType* m
 // Helper to collect all face nodes under a given node
 static void collectFaceNodes(CadNode* node, std::vector<CadNode*>& out) {
     if (!node) return;
-    XCAFNodeData* xData = node->asXCAF();
-    if (!xData) return;
-    if (xData->type == TopAbs_FACE && node->visible) {
-        out.push_back(node);
+    collectFaceNodes(node, out);
+}
+
+static void generateVHACDStub(const QString& nodeName, int resolution, int maxHulls, double minVolume, CadNode* node) {
+    std::vector<CadNode*> faces;
+    collectFaceNodes(node, faces);
+    int numInputFaces = static_cast<int>(faces.size());
+    std::vector<VHACD::Vertex> vertices;
+    std::vector<VHACD::Triangle> triangles;
+    uint32_t vertOffset = 0;
+    // Build mesh from all faces
+    for (CadNode* faceNode : faces) {
+        XCAFNodeData* xData = faceNode->asXCAF();
+        if (!xData || !xData->hasFace()) continue;
+        TopoDS_Face face = xData->getFace();
+        TopLoc_Location loc = faceNode->loc;
+        face = TopoDS::Face(face.Located(loc));
+        BRepMesh_IncrementalMesh mesher(face, 0.5);
+        TopLoc_Location locCopy;
+        Handle(Poly_Triangulation) tri = BRep_Tool::Triangulation(face, locCopy);
+        if (tri.IsNull() || tri->NbTriangles() == 0) continue;
+        // Add vertices
+        std::vector<uint32_t> localIndices(tri->NbNodes());
+        for (int i = 1; i <= tri->NbNodes(); ++i) {
+            gp_Pnt p = tri->Node(i).Transformed(locCopy.Transformation());
+            vertices.push_back(VHACD::Vertex(p.X(), p.Y(), p.Z()));
+            localIndices[i-1] = vertOffset++;
+        }
+        // Add triangles
+        for (int i = tri->Triangles().Lower(); i <= tri->Triangles().Upper(); ++i) {
+            int n1, n2, n3;
+            tri->Triangles()(i).Get(n1, n2, n3);
+            triangles.push_back(VHACD::Triangle(localIndices[n1-1], localIndices[n2-1], localIndices[n3-1]));
+        }
     }
-    for (const auto& child : node->children) {
-        if (child) collectFaceNodes(child.get(), out);
+    // Run VHACD
+    VHACD::IVHACD::Parameters params;
+    params.m_resolution = resolution;
+    params.m_maxConvexHulls = maxHulls;
+    params.m_minimumVolumePercentErrorAllowed = minVolume;
+    VHACD::IVHACD* interfaceVHACD = VHACD::CreateVHACD();
+    bool ok = interfaceVHACD->Compute(&vertices[0].mX, (uint32_t)vertices.size(),
+                                      (uint32_t*)&triangles[0], (uint32_t)triangles.size(), params);
+    PhysicsNodeData* physData = node->asPhysics();
+    physData->hulls.clear();
+    physData->convexHullGenerated = ok;
+    int hullCount = 0;
+    double totalVolume = 0.0;
+    if (ok) {
+        hullCount = interfaceVHACD->GetNConvexHulls();
+        for (uint32_t i = 0; i < hullCount; ++i) {
+            VHACD::IVHACD::ConvexHull ch;
+            interfaceVHACD->GetConvexHull(i, ch);
+            ConvexHullData hullData;
+            // Use m_points and m_triangles directly
+            for (const auto& v : ch.m_points) {
+                hullData.vertices.push_back({v.mX, v.mY, v.mZ});
+            }
+            for (const auto& tri : ch.m_triangles) {
+                hullData.indices.push_back({tri.mI0, tri.mI1, tri.mI2});
+            }
+            physData->hulls.push_back(std::move(hullData));
+            totalVolume += ch.m_volume;
+        }
     }
+    if (interfaceVHACD) interfaceVHACD->Release();
+    qDebug() << "[VHACD] Node:" << nodeName
+             << "Input faces:" << numInputFaces
+             << "Input vertices:" << vertices.size()
+             << "Input triangles:" << triangles.size()
+             << "Generated hulls:" << hullCount
+             << "Total hull volume:" << totalVolume
+             << "Success:" << ok;
 }
 
 int main(int argc, char *argv[])
@@ -886,6 +960,7 @@ int main(int argc, char *argv[])
     // Connect selection mode buttons
     QObject::connect(noSelectionBtn, &QPushButton::clicked, [=]() {
         viewer->setSelectionMode(SelectionMode::None);
+        customPartViewer->setSelectionMode(SelectionMode::None);
         noSelectionBtn->setStyleSheet("QPushButton { background-color: #4CAF50; color: white; font-weight: bold; }");
         faceSelectionBtn->setStyleSheet("QPushButton { background-color: #f0f0f0; color: black; }");
         edgeSelectionBtn->setStyleSheet("QPushButton { background-color: #f0f0f0; color: black; }");
@@ -893,6 +968,7 @@ int main(int argc, char *argv[])
     
     QObject::connect(faceSelectionBtn, &QPushButton::clicked, [=]() {
         viewer->setSelectionMode(SelectionMode::Faces);
+        customPartViewer->setSelectionMode(SelectionMode::Faces);
         noSelectionBtn->setStyleSheet("QPushButton { background-color: #f0f0f0; color: black; }");
         faceSelectionBtn->setStyleSheet("QPushButton { background-color: #4CAF50; color: white; font-weight: bold; }");
         edgeSelectionBtn->setStyleSheet("QPushButton { background-color: #f0f0f0; color: black; }");
@@ -900,6 +976,7 @@ int main(int argc, char *argv[])
     
     QObject::connect(edgeSelectionBtn, &QPushButton::clicked, [=]() {
         viewer->setSelectionMode(SelectionMode::Edges);
+        customPartViewer->setSelectionMode(SelectionMode::Edges);
         noSelectionBtn->setStyleSheet("QPushButton { background-color: #f0f0f0; color: black; }");
         faceSelectionBtn->setStyleSheet("QPushButton { background-color: #f0f0f0; color: black; }");
         edgeSelectionBtn->setStyleSheet("QPushButton { background-color: #4CAF50; color: white; font-weight: bold; }");
@@ -1150,6 +1227,21 @@ int main(int argc, char *argv[])
             }
         });
         
+        // --- Set as Frame Node in Active View ---
+        QAction* setFrameNodeAction = menu.addAction("Set as Frame Node in Active View");
+        QObject::connect(setFrameNodeAction, &QAction::triggered, treeView, [=]() {
+            // Determine which OpenGL view is active
+            int activeViewIdx = viewTabWidget->currentIndex();
+            CadOpenGLWidget* activeViewer = nullptr;
+            if (activeViewIdx == 0) {
+                activeViewer = viewer;
+            } else if (activeViewIdx == 1) {
+                activeViewer = customPartViewer;
+            }
+            if (activeViewer && node) {
+                activeViewer->setSelectedFrameNode(node);
+            }
+        });
         // --- Custom Model Add Logic ---
         auto getSelectedNodes = [&]() -> std::vector<CadNode*> {
             QModelIndexList selectedIndexes = treeView->selectionModel()->selectedIndexes();
@@ -1167,9 +1259,10 @@ int main(int argc, char *argv[])
             newPart->name = "Carriage";
             newPart->loc = nodes[0]->loc;
             newPart->color = nodes[0]->color;
-            newPart->type = CadNodeType::Custom;
-            auto customData = std::make_shared<CustomNodeData>();
-            newPart->data = customData;
+            newPart->type = CadNodeType::Physics;
+            auto physicsData = std::make_shared<PhysicsNodeData>();
+            newPart->data = physicsData;
+            newPart->visible = false;
             // Add selected nodes as children of the part node
             for (CadNode* n : nodes) {
                 if (n) newPart->children.push_back(std::make_shared<CadNode>(*n));
@@ -1177,7 +1270,6 @@ int main(int argc, char *argv[])
             customModelRoot->children.push_back(newPart);
             customModel->layoutChanged(); // Notify model of structure change
             customPartViewer->setRootTreeNode(customModel->getRootNodePointer()); // Update viewer's root node
-            // updateCustomPartViewer(); // This line is removed as per the edit hint
         });
         QObject::connect(addStartSegAction, &QAction::triggered, treeView, [=]() {
             auto nodes = getSelectedNodes();
@@ -1186,16 +1278,16 @@ int main(int argc, char *argv[])
             newPart->name = "Start Segment";
             newPart->loc = nodes[0]->loc;
             newPart->color = nodes[0]->color;
-            newPart->type = CadNodeType::Custom;
-            auto customData = std::make_shared<CustomNodeData>();
-            newPart->data = customData;
+            newPart->type = CadNodeType::Physics;
+            auto physicsData = std::make_shared<PhysicsNodeData>();
+            newPart->data = physicsData;
+            newPart->visible = false;
             for (CadNode* n : nodes) {
                 if (n) newPart->children.push_back(std::make_shared<CadNode>(*n));
             }
             customModelRoot->children.push_back(newPart);
             customModel->layoutChanged(); // Notify model of structure change
             customPartViewer->setRootTreeNode(customModel->getRootNodePointer()); // Update viewer's root node
-            // updateCustomPartViewer(); // This line is removed as per the edit hint
         });
         QObject::connect(addEndSegAction, &QAction::triggered, treeView, [=]() {
             auto nodes = getSelectedNodes();
@@ -1204,16 +1296,16 @@ int main(int argc, char *argv[])
             newPart->name = "End Segment";
             newPart->loc = nodes[0]->loc;
             newPart->color = nodes[0]->color;
-            newPart->type = CadNodeType::Custom;
-            auto customData = std::make_shared<CustomNodeData>();
-            newPart->data = customData;
+            newPart->type = CadNodeType::Physics;
+            auto physicsData = std::make_shared<PhysicsNodeData>();
+            newPart->data = physicsData;
+            newPart->visible = false;
             for (CadNode* n : nodes) {
                 if (n) newPart->children.push_back(std::make_shared<CadNode>(*n));
             }
             customModelRoot->children.push_back(newPart);
             customModel->layoutChanged(); // Notify model of structure change
             customPartViewer->setRootTreeNode(customModel->getRootNodePointer()); // Update viewer's root node
-            // updateCustomPartViewer(); // This line is removed as per the edit hint
         });
         QObject::connect(addMiddleSegAction, &QAction::triggered, treeView, [=]() {
             auto nodes = getSelectedNodes();
@@ -1222,16 +1314,16 @@ int main(int argc, char *argv[])
             newPart->name = "Middle Segment";
             newPart->loc = nodes[0]->loc;
             newPart->color = nodes[0]->color;
-            newPart->type = CadNodeType::Custom;
-            auto customData = std::make_shared<CustomNodeData>();
-            newPart->data = customData;
+            newPart->type = CadNodeType::Physics;
+            auto physicsData = std::make_shared<PhysicsNodeData>();
+            newPart->data = physicsData;
+            newPart->visible = false;
             for (CadNode* n : nodes) {
                 if (n) newPart->children.push_back(std::make_shared<CadNode>(*n));
             }
             customModelRoot->children.push_back(newPart);
             customModel->layoutChanged(); // Notify model of structure change
             customPartViewer->setRootTreeNode(customModel->getRootNodePointer()); // Update viewer's root node
-            // updateCustomPartViewer(); // This line is removed as per the edit hint
         });
         // --- Custom Model Clear Logic ---
         QObject::connect(clearCarriageAction, &QAction::triggered, treeView, [=]() {
@@ -1244,7 +1336,6 @@ int main(int argc, char *argv[])
                 children.end());
             customModel->layoutChanged(); // Notify model of structure change
             customPartViewer->setRootTreeNode(customModel->getRootNodePointer()); // Update viewer's root node
-            // updateCustomPartViewer(); // This line is removed as per the edit hint
         });
         QObject::connect(clearStartSegAction, &QAction::triggered, treeView, [=]() {
             auto& children = customModelRoot->children;
@@ -1256,7 +1347,6 @@ int main(int argc, char *argv[])
                 children.end());
             customModel->layoutChanged(); // Notify model of structure change
             customPartViewer->setRootTreeNode(customModel->getRootNodePointer()); // Update viewer's root node
-            // updateCustomPartViewer(); // This line is removed as per the edit hint
         });
         QObject::connect(clearEndSegAction, &QAction::triggered, treeView, [=]() {
             auto& children = customModelRoot->children;
@@ -1268,7 +1358,6 @@ int main(int argc, char *argv[])
                 children.end());
             customModel->layoutChanged(); // Notify model of structure change
             customPartViewer->setRootTreeNode(customModel->getRootNodePointer()); // Update viewer's root node
-            // updateCustomPartViewer(); // This line is removed as per the edit hint
         });
         QObject::connect(clearMiddleSegAction, &QAction::triggered, treeView, [=]() {
             auto& children = customModelRoot->children;
@@ -1280,7 +1369,6 @@ int main(int argc, char *argv[])
                 children.end());
             customModel->layoutChanged(); // Notify model of structure change
             customPartViewer->setRootTreeNode(customModel->getRootNodePointer()); // Update viewer's root node
-            // updateCustomPartViewer(); // This line is removed as per the edit hint
         });
         
         QObject::connect(showAction, &QAction::triggered, treeView, [=]() {
@@ -1516,6 +1604,51 @@ int main(int argc, char *argv[])
         }
         
         menu.exec(treeView->viewport()->mapToGlobal(pos));
+    });
+
+    customModelTreeView->setContextMenuPolicy(Qt::CustomContextMenu);
+    QObject::connect(customModelTreeView, &QTreeView::customContextMenuRequested, customModelTreeView, [=](const QPoint& pos) {
+        QModelIndex idx = customModelTreeView->indexAt(pos);
+        if (!idx.isValid()) return;
+        CadNode* node = const_cast<CadNode*>(customModel->getNode(idx));
+        if (!node) return;
+        QMenu menu;
+        // Only show for physics nodes
+        if (node->type == CadNodeType::Physics) {
+            QAction* vhacdAction = menu.addAction("Generate V-HACD");
+            QObject::connect(vhacdAction, &QAction::triggered, customModelTreeView, [=]() {
+                // V-HACD parameter widget (non-blocking)
+                QWidget* vhacdWidget = new QWidget(nullptr);
+                vhacdWidget->setAttribute(Qt::WA_DeleteOnClose);
+                vhacdWidget->setWindowTitle("V-HACD Parameters");
+                QFormLayout* form = new QFormLayout;
+                QSpinBox* resolutionSpin = new QSpinBox; resolutionSpin->setRange(10000, 1000000); resolutionSpin->setValue(100000);
+                QSpinBox* maxHullSpin = new QSpinBox; maxHullSpin->setRange(1, 1024); maxHullSpin->setValue(16);
+                QDoubleSpinBox* minVolumeSpin = new QDoubleSpinBox; minVolumeSpin->setRange(0.0, 0.1); minVolumeSpin->setDecimals(6); minVolumeSpin->setSingleStep(0.0001); minVolumeSpin->setValue(0.0001);
+                form->addRow("Resolution", resolutionSpin);
+                form->addRow("Max Hulls", maxHullSpin);
+                form->addRow("Min Volume", minVolumeSpin);
+                QPushButton* updateBtn = new QPushButton("Update");
+                QVBoxLayout* vbox = new QVBoxLayout;
+                vbox->addLayout(form);
+                vbox->addWidget(updateBtn);
+                vhacdWidget->setLayout(vbox);
+                QObject::connect(updateBtn, &QPushButton::clicked, vhacdWidget, [=]() {
+                    generateVHACDStub(QString::fromStdString(node->name),
+                                     resolutionSpin->value(),
+                                     maxHullSpin->value(),
+                                     minVolumeSpin->value(),
+                                     node);
+                });
+                vhacdWidget->setWindowModality(Qt::NonModal);
+                vhacdWidget->setFocusPolicy(Qt::StrongFocus);
+                vhacdWidget->resize(350, 200);
+                vhacdWidget->show();
+                vhacdWidget->activateWindow();
+                vhacdWidget->raise();
+            });
+        }
+        if (!menu.isEmpty()) menu.exec(customModelTreeView->viewport()->mapToGlobal(pos));
     });
 
     mainWindow.resize(1200, 800);
