@@ -13,6 +13,12 @@
 #include <QString>
 #include <unordered_set>
 #include <functional>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <TopoDS_Shape.hxx>
+#include <gp_Trsf.hxx>
+#include <array>
 
 // Define a simple RGBA color struct
 struct CADNodeColor {
@@ -73,6 +79,10 @@ enum class CadNodeType {
 // 2. Base class for node-specific data
 struct CadNodeDataBase {
     virtual ~CadNodeDataBase() = default;
+    virtual QJsonObject toJson() const { return QJsonObject(); }
+    static std::shared_ptr<CadNodeDataBase> fromJson(const QJsonObject& obj) {
+        return nullptr; // Default implementation
+    }
 };
 
 // 3. XCAF-specific data
@@ -87,6 +97,7 @@ struct XCAFNodeData : public CadNodeDataBase {
     bool hasEdge() const { return type == TopAbs_EDGE && !shape.IsNull(); }
     TopoDS_Face getFace() const { return (type == TopAbs_FACE) ? TopoDS::Face(shape) : TopoDS_Face(); }
     TopoDS_Edge getEdge() const { return (type == TopAbs_EDGE) ? TopoDS::Edge(shape) : TopoDS_Edge(); }
+    // No toJson/fromJson for XCAFNodeData!
 };
 
 // 4. Custom node data (example)
@@ -94,6 +105,17 @@ struct CustomNodeData : public CadNodeDataBase {
     // Add custom fields here
     int customProperty = 0;
     // ...
+
+    QJsonObject toJson() const override {
+        QJsonObject obj;
+        obj["customProperty"] = customProperty;
+        return obj;
+    }
+    static std::shared_ptr<CustomNodeData> fromJson(const QJsonObject& obj) {
+        auto data = std::make_shared<CustomNodeData>();
+        data->customProperty = obj["customProperty"].toInt();
+        return data;
+    }
 };
 
 // 4b. Physics node data
@@ -108,6 +130,20 @@ struct PhysicsNodeData : public CadNodeDataBase {
     // Add more fields as needed (e.g., material, mass, etc.)
     // Add this field for collision mesh visibility
     bool collisionMeshVisible = true;
+
+    QJsonObject toJson() const override {
+        QJsonObject obj;
+        obj["convexHullGenerated"] = convexHullGenerated;
+        obj["collisionMeshVisible"] = collisionMeshVisible;
+        // Hulls not serialized for now (can add if needed)
+        return obj;
+    }
+    static std::shared_ptr<PhysicsNodeData> fromJson(const QJsonObject& obj) {
+        auto data = std::make_shared<PhysicsNodeData>();
+        data->convexHullGenerated = obj["convexHullGenerated"].toBool();
+        data->collisionMeshVisible = obj["collisionMeshVisible"].toBool(true);
+        return data;
+    }
 };
 
 // 4c. Rail node data
@@ -117,11 +153,42 @@ struct RailNodeData : public CadNodeDataBase {
     double travelLength = 0.0;
     int numSegments = 1;
     QString jsonString; // For custom JSON editing
+
+    QJsonObject toJson() const override {
+        QJsonObject obj;
+        QJsonArray axisArr; axisArr << axisOfTravel.x() << axisOfTravel.y() << axisOfTravel.z();
+        QJsonArray jointArr; jointArr << buildJointPosition.x() << buildJointPosition.y() << buildJointPosition.z();
+        obj["axisOfTravel"] = axisArr;
+        obj["buildJointPosition"] = jointArr;
+        obj["travelLength"] = travelLength;
+        obj["numSegments"] = numSegments;
+        obj["jsonString"] = jsonString;
+        return obj;
+    }
+    static std::shared_ptr<RailNodeData> fromJson(const QJsonObject& obj) {
+        auto data = std::make_shared<RailNodeData>();
+        QJsonArray axisArr = obj["axisOfTravel"].toArray();
+        if (axisArr.size() == 3) data->axisOfTravel = QVector3D(axisArr[0].toDouble(), axisArr[1].toDouble(), axisArr[2].toDouble());
+        QJsonArray jointArr = obj["buildJointPosition"].toArray();
+        if (jointArr.size() == 3) data->buildJointPosition = QVector3D(jointArr[0].toDouble(), jointArr[1].toDouble(), jointArr[2].toDouble());
+        data->travelLength = obj["travelLength"].toDouble();
+        data->numSegments = obj["numSegments"].toInt();
+        data->jsonString = obj["jsonString"].toString();
+        return data;
+    }
 };
 
 // 4d. Transform node data (for future extensibility)
 struct TransformNodeData : public CadNodeDataBase {
     // Currently empty, but can be extended for animation, etc.
+
+    QJsonObject toJson() const override {
+        QJsonObject obj;
+        return obj;
+    }
+    static std::shared_ptr<TransformNodeData> fromJson(const QJsonObject& obj) {
+        return std::make_shared<TransformNodeData>();
+    }
 };
 
 // Connection point flags (bit flags)
@@ -190,6 +257,19 @@ struct ConnectionPointData : public CadNodeDataBase {
             connectionFlags &= ~ConnectionFlags::Conveyors;
         }
     }
+
+    QJsonObject toJson() const override {
+        QJsonObject obj;
+        obj["connectionFlags"] = static_cast<int>(connectionFlags);
+        obj["description"] = QString::fromStdString(description);
+        return obj;
+    }
+    static std::shared_ptr<ConnectionPointData> fromJson(const QJsonObject& obj) {
+        auto data = std::make_shared<ConnectionPointData>();
+        data->connectionFlags = static_cast<ConnectionFlags>(obj["connectionFlags"].toInt());
+        data->description = obj["description"].toString().toStdString();
+        return data;
+    }
 };
 
 // 5. The generic CadNode struct
@@ -203,6 +283,9 @@ struct CadNode {
 
     CadNodeType type = CadNodeType::Unknown; // Must be set explicitly
     std::shared_ptr<CadNodeDataBase> data; // Holds type-specific data
+
+    // New: Optional XCAF label tag for relinking geometry
+    int xcafLabelTag = -1; // -1 means not linked to XCAF
 
     // Helper to get XCAF data safely
     XCAFNodeData* asXCAF() {
@@ -268,6 +351,69 @@ struct CadNode {
         for (auto& child : children) {
             if (child) child->applyTransform(trsf);
         }
+    }
+
+    QJsonObject toJson() const {
+        QJsonObject obj;
+        obj["name"] = QString::fromStdString(name);
+        obj["color"] = QJsonArray{color.r, color.g, color.b, color.a};
+        // Serialize transform as a 12-element array (3x4 matrix)
+        const gp_Trsf& trsf = loc.Transformation();
+        QJsonArray locArr;
+        for (int row = 1; row <= 3; ++row) {
+            for (int col = 1; col <= 4; ++col) {
+                if (col <= 3) locArr.append(trsf.Value(row, col));
+                else locArr.append(trsf.TranslationPart().GetData()[row-1]);
+            }
+        }
+        obj["loc"] = locArr;
+        obj["visible"] = visible;
+        obj["excludedFromDecomposition"] = excludedFromDecomposition;
+        obj["type"] = static_cast<int>(type);
+        if (xcafLabelTag >= 0) obj["xcafLabelTag"] = xcafLabelTag;
+        // Data
+        QJsonObject dataObj;
+        if (type == CadNodeType::Rail && data) dataObj = static_cast<RailNodeData*>(data.get())->toJson();
+        else if (type == CadNodeType::Physics && data) dataObj = static_cast<PhysicsNodeData*>(data.get())->toJson();
+        else if (type == CadNodeType::ConnectionPoint && data) dataObj = static_cast<ConnectionPointData*>(data.get())->toJson();
+        obj["data"] = dataObj;
+        // Children
+        QJsonArray childrenArr;
+        for (const auto& child : children) {
+            if (child) childrenArr.append(child->toJson());
+        }
+        obj["children"] = childrenArr;
+        return obj;
+    }
+    static std::shared_ptr<CadNode> fromJson(const QJsonObject& obj) {
+        auto node = std::make_shared<CadNode>();
+        node->name = obj["name"].toString().toStdString();
+        QJsonArray colorArr = obj["color"].toArray();
+        if (colorArr.size() == 4) node->color = CADNodeColor(colorArr[0].toDouble(), colorArr[1].toDouble(), colorArr[2].toDouble(), colorArr[3].toDouble());
+        QJsonArray locArr = obj["loc"].toArray();
+        if (locArr.size() == 12) {
+            gp_Trsf trsf;
+            trsf.SetValues(
+                locArr[0].toDouble(), locArr[1].toDouble(), locArr[2].toDouble(), locArr[3].toDouble(),
+                locArr[4].toDouble(), locArr[5].toDouble(), locArr[6].toDouble(), locArr[7].toDouble(),
+                locArr[8].toDouble(), locArr[9].toDouble(), locArr[10].toDouble(), locArr[11].toDouble()
+            );
+            node->loc = TopLoc_Location(trsf);
+        }
+        node->visible = obj["visible"].toBool(true);
+        node->excludedFromDecomposition = obj["excludedFromDecomposition"].toBool(false);
+        node->type = static_cast<CadNodeType>(obj["type"].toInt());
+        node->xcafLabelTag = obj.contains("xcafLabelTag") ? obj["xcafLabelTag"].toInt() : -1;
+        QJsonObject dataObj = obj["data"].toObject();
+        if (node->type == CadNodeType::Rail) node->data = RailNodeData::fromJson(dataObj);
+        else if (node->type == CadNodeType::Physics) node->data = PhysicsNodeData::fromJson(dataObj);
+        else if (node->type == CadNodeType::ConnectionPoint) node->data = ConnectionPointData::fromJson(dataObj);
+        // Children
+        QJsonArray childrenArr = obj["children"].toArray();
+        for (const auto& childVal : childrenArr) {
+            if (childVal.isObject()) node->children.push_back(fromJson(childVal.toObject()));
+        }
+        return node;
     }
 };
 

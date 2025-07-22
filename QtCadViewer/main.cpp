@@ -52,6 +52,7 @@
 #include <QLineEdit>
 #include <QTextEdit>
 #include <unordered_map>
+#include <TDF_Tool.hxx>
 
 // Helper to recursively build XCAFLabelNode tree with sub-assembly detection
 std::unique_ptr<XCAFLabelNode> buildLabelTree(const TDF_Label& label, const Handle(XCAFDoc_ShapeTool)& shapeTool = nullptr) {
@@ -453,6 +454,7 @@ std::shared_ptr<CadNode> build_tree_xcaf(const TDF_Label& label,
     node->color = color;
     node->loc = nodeLoc;
     node->type = CadNodeType::XCAF;
+    node->xcafLabelTag = label.Tag(); // <-- Set XCAF label tag for relinking
     auto xData = std::make_shared<XCAFNodeData>();
     xData->shape = shape;
     xData->type = !shape.IsNull() ? shape.ShapeType() : TopAbs_SHAPE;
@@ -1088,6 +1090,7 @@ static void generateCoACDStub(const QString& nodeName, double concavity, double 
 std::shared_ptr<CadNode> deepCopyNodeNonExcluded(const CadNode* src) {
     if (!src || src->excludedFromDecomposition) return nullptr;
     auto copy = std::make_shared<CadNode>(*src);
+    copy->xcafLabelTag = src->xcafLabelTag; // Explicitly copy label tag
     copy->children.clear();
     for (const auto& child : src->children) {
         auto childCopy = deepCopyNodeNonExcluded(child.get());
@@ -1266,127 +1269,204 @@ void addRailToPhysicsPreview(CadNode* railNode, std::shared_ptr<CadNode> physics
     physicsPreviewRoot->children.push_back(railCopy);
 }
 
+// --- Add this at file scope, before main() ---
+void relinkCadNodeXCAFGeometry(std::shared_ptr<CadNode>& node, const Handle(TDocStd_Document)& doc) {
+    if (node->xcafLabelTag >= 0) {
+        Handle(XCAFDoc_ShapeTool) shapeTool = XCAFDoc_DocumentTool::ShapeTool(doc->Main());
+        Handle(XCAFDoc_ColorTool) colorTool = XCAFDoc_DocumentTool::ColorTool(doc->Main());
+        TDF_Label label;
+        TDF_Tool::Label(doc->GetData(), node->xcafLabelTag, label);
+        if (!label.IsNull()) {
+            // Get the shape for this label
+            TopoDS_Shape shape = shapeTool->GetShape(label);
+            if (!shape.IsNull()) {
+                auto xData = std::make_shared<XCAFNodeData>();
+                xData->shape = shape;
+                xData->type = shape.ShapeType();
+                node->data = xData;
+                node->type = CadNodeType::XCAF;
+                // Set color using get_shape_color
+                CADNodeColor parentColor = CADNodeColor::fromSRGB(200, 200, 200); // fallback
+                node->color = get_shape_color(shape, label, shapeTool, colorTool, parentColor);
+                // Set name as in build_tree_xcaf
+                QString typeName = shapeTypeToString(xData->type);
+                QString occName;
+                Handle(TDataStd_Name) nameAttr;
+                if (label.FindAttribute(TDataStd_Name::GetID(), nameAttr) && !nameAttr.IsNull()) {
+                    occName = QString::fromStdWString(nameAttr->Get().ToWideString());
+                } else {
+                    occName = QString("Label %1").arg(label.Tag());
+                }
+                QString transformStr = makeTransformString(node->loc);
+                node->name = QString("Label %1 | Type: %2 | Transform: %3%4%5")
+                    .arg(label.Tag())
+                    .arg(typeName)
+                    .arg(transformStr)
+                    .arg(occName.isEmpty() ? "" : QString(" | OCC Name: %1").arg(occName))
+                    .arg("")
+                    .toStdString();
+            }
+        }
+    }
+    for (auto& child : node->children) relinkCadNodeXCAFGeometry(child, doc);
+}
+
 int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
     QMainWindow mainWindow;
     mainWindow.setWindowTitle("QtCadViewer - OCC C++");
 
-    // Prompt for STEP file on startup
-    QString stepFile = QFileDialog::getOpenFileName(
-        nullptr, "Open STEP File", "", "STEP Files (*.step *.stp)");
-    if (stepFile.isEmpty()) {
-        QMessageBox::warning(nullptr, "No File", "No STEP file selected. Exiting.");
+    // Prompt for STEP or Rail Project file on startup
+    QString openFile = QFileDialog::getOpenFileName(
+        nullptr, "Open STEP or Rail Project File", "", "STEP or Rail Project (*.step *.stp *.json)");
+    if (openFile.isEmpty()) {
+        QMessageBox::warning(nullptr, "No File", "No file selected. Exiting.");
         return 0;
     }
 
-    // OCC: Load STEP file into XCAF document
-    Handle(XCAFApp_Application) appOCC = XCAFApp_Application::GetApplication();
-    Handle(TDocStd_Document) doc;
-    appOCC->NewDocument("BinXCAF", doc);
-    STEPCAFControl_Reader reader;
-    reader.SetColorMode(true);
-    reader.SetNameMode(true);
-    reader.SetLayerMode(true);
-    
-    // Enhanced STEP 214 handling - using available methods
-    
-    if (reader.ReadFile(stepFile.toStdString().c_str()) != IFSelect_RetDone) {
-        QMessageBox::critical(nullptr, "Error", "Failed to read STEP file.");
-        return 1;
-    }
-    if (!reader.Transfer(doc)) {
-        QMessageBox::critical(nullptr, "Error", "Failed to transfer STEP file.");
-        return 1;
-    }
-    
-    // Log STEP file information for debugging
-    qDebug() << "STEP file loaded successfully:" << stepFile;
-    qDebug() << "Document has" << doc->Main().NbChildren() << "root children";
-
-    // Get shape and color tools from the document
-    Handle(XCAFDoc_ShapeTool) shapeTool = XCAFDoc_DocumentTool::ShapeTool(doc->Main());
-    Handle(XCAFDoc_ColorTool) colorTool = XCAFDoc_DocumentTool::ColorTool(doc->Main());
-
-    // Build tree and collect faces
-    std::vector<ColoredFace> faces;
-    CADNodeColor defaultColor = CADNodeColor::fromSRGB(200, 200, 200);
-    TopLoc_Location identityLoc;
-    TDF_LabelSequence roots;
-    shapeTool->GetFreeShapes(roots);
-    
-    qDebug() << "Found" << roots.Length() << "free shapes in STEP file";
-    
-    auto root = std::make_unique<CadNode>();
-    root->name = "Root";
-    root->color = defaultColor;
-    root->loc = identityLoc;
-    
-    std::unordered_map<const void*, std::shared_ptr<CadNode>> sharedNodeMap;
-    for (Standard_Integer i = 1; i <= roots.Length(); ++i) {
-        TDF_Label rootLabel = roots.Value(i);
-        qDebug() << "Processing root shape" << i << "with tag" << rootLabel.Tag();
-        auto child = build_tree_xcaf(rootLabel, shapeTool, colorTool, defaultColor, identityLoc, sharedNodeMap);
-        if (child) {
-            root->children.push_back(child);
-            qDebug() << "Successfully added root shape" << i << "to tree";
-        } else {
-            qDebug() << "Failed to build tree for root shape" << i;
-        }
-    }
-    
-    // For STEP 214 files, also explore the main document structure to find assemblies
-    // that might not be in the free shapes list
-    qDebug() << "Exploring main document structure for STEP 214 assemblies...";
-    std::function<void(const TDF_Label&)> exploreDocument = [&](const TDF_Label& label) {
-        if (label.IsNull()) return;
-        
-        // Check if this label has a shape and is not already processed
-        TopoDS_Shape shape = shapeTool->GetShape(label);
-        if (!shape.IsNull()) {
-            // Check if this is an assembly compound
-            if (shape.ShapeType() == TopAbs_COMPOUND) {
-                bool hasDirectGeometry = false;
-                int refChildCount = 0;
-                
-                for (TDF_ChildIterator it(label); it.More(); it.Next()) {
-                    TDF_Label childLabel = it.Value();
-                    if (!childLabel.IsNull()) {
-                        TopoDS_Shape childShape = shapeTool->GetShape(childLabel);
-                        if (!childShape.IsNull()) {
-                            hasDirectGeometry = true;
-                        }
-                        if (shapeTool->IsReference(childLabel)) {
-                            refChildCount++;
-                        }
-                    }
-                }
-                
-                // If this looks like an assembly, add it to the tree
-                if (!hasDirectGeometry && refChildCount > 0) {
-                    qDebug() << "Found additional assembly at label" << label.Tag() << "with" << refChildCount << "references";
-                    auto assemblyChild = build_tree_xcaf(label, shapeTool, colorTool, defaultColor, identityLoc, sharedNodeMap);
-                    if (assemblyChild) {
-                        root->children.push_back(assemblyChild);
-                    }
-                }
+    QString stepFile;
+    QString railJsonFile;
+    QString railBinFile;
+    Handle(TDocStd_Document) doc; // <-- Move doc to outer scope so it's always available
+    std::unique_ptr<CadNode> cadRoot; // For main CAD tree
+    std::unique_ptr<XCAFLabelNode> labelRoot; // For XCAF label tree
+    Handle(XCAFDoc_ShapeTool) shapeTool;
+    Handle(XCAFDoc_ColorTool) colorTool;
+    std::shared_ptr<CadNode> customModelRootContainer; // For custom model tree
+    std::shared_ptr<CadNode> customModelRoot;
+    bool loadedFromJsonBin = false;
+    if (openFile.endsWith(".json", Qt::CaseInsensitive)) {
+        railJsonFile = openFile;
+        railBinFile = railJsonFile;
+        railBinFile.replace(".json", ".bin");
+        if (!QFile::exists(railBinFile)) {
+            QString altBin = railBinFile + ".xbf";
+            if (QFile::exists(altBin)) {
+                railBinFile = altBin;
             }
         }
-        
-        // Recurse into children
-        for (TDF_ChildIterator it(label); it.More(); it.Next()) {
-            exploreDocument(it.Value());
+        if (!QFile::exists(railBinFile)) {
+            QMessageBox::critical(nullptr, "Error", "Could not find corresponding .bin or .bin.xbf file for the selected project.");
+            return 1;
         }
-    };
-    
-    exploreDocument(doc->Main());
-    
-    qDebug() << "Tree building complete. Root has" << root->children.size() << "children";
-    qDebug() << "Total faces collected:" << faces.size();
+        // Load XCAF document
+        Handle(XCAFApp_Application) appOCC = XCAFApp_Application::GetApplication();
+        appOCC->NewDocument("BinXCAF", doc);
+        Handle(TDocStd_Application) occApp = Handle(TDocStd_Application)::DownCast(doc->Application());
+        BinXCAFDrivers::DefineFormat(occApp);
+        PCDM_ReaderStatus status = occApp->Open(railBinFile.toStdWString().c_str(), doc);
+        if (status != PCDM_RS_OK) {
+            QMessageBox::critical(nullptr, "Error", "Failed to load XCAF binary file: " + railBinFile);
+            return 1;
+        }
+        // Load custom model JSON
+        QFile file(railJsonFile);
+        if (!file.open(QIODevice::ReadOnly)) {
+            QMessageBox::critical(nullptr, "Error", "Failed to open file: " + railJsonFile);
+            return 1;
+        }
+        QByteArray data = file.readAll();
+        file.close();
+        QJsonParseError err;
+        QJsonDocument jsonDoc = QJsonDocument::fromJson(data, &err);
+        if (jsonDoc.isNull() || !jsonDoc.isObject()) {
+            QMessageBox::critical(nullptr, "Error", "Invalid JSON file: " + railJsonFile);
+            return 1;
+        }
+        customModelRoot = CadNode::fromJson(jsonDoc.object());
+        customModelRootContainer = std::make_shared<CadNode>();
+        customModelRootContainer->name = "Custom Model Root Container";
+        customModelRootContainer->visible = true;
+        customModelRootContainer->children.clear();
+        customModelRootContainer->children.push_back(customModelRoot);
+        loadedFromJsonBin = true;
+        stepFile = ""; // skip STEP loading
+    } else {
+        stepFile = openFile;
+    }
 
-    // Print total unique CadNode nodes in the tree
-    size_t uniqueNodeCount = countUniqueCadNodes(root.get());
-    qDebug() << "Total unique CadNode nodes in tree:" << static_cast<unsigned long long>(uniqueNodeCount);
+    // Always load the XCAF document and build the trees
+    if (!stepFile.isEmpty() || loadedFromJsonBin) {
+        if (!loadedFromJsonBin) {
+            // OCC: Load STEP file into XCAF document
+            Handle(XCAFApp_Application) appOCC = XCAFApp_Application::GetApplication();
+            appOCC->NewDocument("BinXCAF", doc);
+            STEPCAFControl_Reader reader;
+            reader.SetColorMode(true);
+            reader.SetNameMode(true);
+            reader.SetLayerMode(true);
+            if (reader.ReadFile(stepFile.toStdString().c_str()) != IFSelect_RetDone) {
+                QMessageBox::critical(nullptr, "Error", "Failed to read STEP file.");
+                return 1;
+            }
+            if (!reader.Transfer(doc)) {
+                QMessageBox::critical(nullptr, "Error", "Failed to transfer STEP file.");
+                return 1;
+            }
+        }
+        // Get shape and color tools from the document
+        shapeTool = XCAFDoc_DocumentTool::ShapeTool(doc->Main());
+        colorTool = XCAFDoc_DocumentTool::ColorTool(doc->Main());
+        // Build main CAD tree from XCAF
+        CADNodeColor defaultColor = CADNodeColor::fromSRGB(200, 200, 200);
+        TopLoc_Location identityLoc;
+        TDF_LabelSequence roots;
+        shapeTool->GetFreeShapes(roots);
+        cadRoot = std::make_unique<CadNode>();
+        cadRoot->name = "Root";
+        cadRoot->color = defaultColor;
+        cadRoot->loc = identityLoc;
+        std::unordered_map<const void*, std::shared_ptr<CadNode>> sharedNodeMap;
+        for (Standard_Integer i = 1; i <= roots.Length(); ++i) {
+            TDF_Label rootLabel = roots.Value(i);
+            auto child = build_tree_xcaf(rootLabel, shapeTool, colorTool, defaultColor, identityLoc, sharedNodeMap);
+            if (child) {
+                cadRoot->children.push_back(std::move(child));
+            }
+        }
+        // Build XCAF label tree
+        labelRoot = std::make_unique<XCAFLabelNode>(doc->Main());
+        labelRoot->label = doc->Main();
+        for (TDF_ChildIterator it(doc->Main()); it.More(); it.Next()) {
+            TDF_Label childLabel = it.Value();
+            labelRoot->children.push_back(buildLabelTreeWithReferences(childLabel, shapeTool));
+        }
+        TDF_LabelSequence freeShapes;
+        shapeTool->GetFreeShapes(freeShapes);
+        for (Standard_Integer i = 1; i <= freeShapes.Length(); ++i) {
+            TDF_Label freeShapeLabel = freeShapes.Value(i);
+            bool alreadyAdded = false;
+            for (const auto& existingChild : labelRoot->children) {
+                if (existingChild->label == freeShapeLabel) {
+                    alreadyAdded = true;
+                    break;
+                }
+            }
+            if (!alreadyAdded) {
+                labelRoot->children.push_back(buildLabelTreeWithReferences(freeShapeLabel, shapeTool));
+            }
+        }
+        // Add a special node for all shapes in the document
+        auto allShapesNode = std::make_unique<XCAFLabelNode>(TDF_Label());
+        allShapesNode->label = TDF_Label();
+        std::function<void(const TDF_Label&)> collectShapeLabels = [&](const TDF_Label& label) {
+            if (!label.IsNull()) {
+                TopoDS_Shape shape = shapeTool->GetShape(label);
+                if (!shape.IsNull()) {
+                    auto shapeNode = std::make_unique<XCAFLabelNode>(label);
+                    allShapesNode->children.push_back(std::move(shapeNode));
+                }
+                for (TDF_ChildIterator it(label); it.More(); it.Next()) {
+                    collectShapeLabels(it.Value());
+                }
+            }
+        };
+        collectShapeLabels(doc->Main());
+        if (!allShapesNode->children.empty()) {
+            labelRoot->children.push_back(std::move(allShapesNode));
+        }
+    }
 
     // Central widget and splitter
     // Outer splitter: custom model tree (left) and CAD/XCAF tabs (right)
@@ -1405,25 +1485,17 @@ int main(int argc, char *argv[])
     centralWidget->setLayout(vLayout);
     mainWindow.setCentralWidget(centralWidget);
 
-    // --- Custom Model Tree ---
-    // Create a special invisible root container node
-    std::shared_ptr<CadNode> customModelRootContainer = std::make_shared<CadNode>();
-    customModelRootContainer->name = "Custom Model Root Container";
-    customModelRootContainer->visible = true;
-    // The actual rail/root node
-    std::shared_ptr<CadNode> customModelRoot = std::make_shared<CadNode>();
-    customModelRoot->name = "Custom Model Root";
-    customModelRoot->visible = true;
-    customModelRoot->type = CadNodeType::Rail;
-    customModelRoot->data = std::make_shared<RailNodeData>();
-    customModelRootContainer->children.push_back(customModelRoot);
-    CustomModelTreeModel* customModel = new CustomModelTreeModel(customModelRootContainer);
-    QTreeView* customModelTreeView = new QTreeView;
-    customModelTreeView->setModel(customModel);
-    customModelTreeView->setHeaderHidden(false);
-    customModelTreeView->setMinimumWidth(220);
-    customModelTreeView->setSelectionMode(QAbstractItemView::ExtendedSelection); // Allow multi-selection and clear selection by clicking below
-    outerSplitter->addWidget(customModelTreeView);
+    // Add selection mode buttons
+    QPushButton* noSelectionBtn = new QPushButton("No Selection");
+    QPushButton* faceSelectionBtn = new QPushButton("Face Selection");
+    QPushButton* edgeSelectionBtn = new QPushButton("Edge Selection");
+
+    // Style the buttons to show current selection mode
+    noSelectionBtn->setStyleSheet("QPushButton { background-color: #4CAF50; color: white; font-weight: bold; }");
+
+    buttonLayout->addWidget(noSelectionBtn);
+    buttonLayout->addWidget(faceSelectionBtn);
+    buttonLayout->addWidget(edgeSelectionBtn);
 
     // --- CAD/XCAF Tabs and OpenGL Viewer ---
     outerSplitter->addWidget(splitter);
@@ -1434,7 +1506,7 @@ int main(int argc, char *argv[])
     splitter->addWidget(tabWidget);
 
     // Model/view tree for first tab
-    CadTreeModel *model = new CadTreeModel(std::move(root));
+    CadTreeModel *model = new CadTreeModel(std::move(cadRoot));
     QTreeView *treeView = new QTreeView;
     treeView->setModel(model);
     treeView->setHeaderHidden(false);
@@ -1451,30 +1523,126 @@ int main(int argc, char *argv[])
     viewer->update();
     viewTabWidget->addTab(viewer, "Full Model");
 
+    // --- Custom Model Tree ---
+    // Only create default root if not loaded from JSON/bin
+    if (!loadedFromJsonBin) {
+        if (!customModelRootContainer) customModelRootContainer = std::make_shared<CadNode>();
+        customModelRootContainer->name = "Custom Model Root Container";
+        customModelRootContainer->visible = true;
+        // The actual rail/root node
+        if (!customModelRoot) customModelRoot = std::make_shared<CadNode>();
+        customModelRoot->name = "Custom Model Root";
+        customModelRoot->visible = true;
+        customModelRoot->type = CadNodeType::Rail;
+        customModelRoot->data = std::make_shared<RailNodeData>();
+        customModelRootContainer->children.clear();
+        customModelRootContainer->children.push_back(customModelRoot);
+    }
+    CustomModelTreeModel* customModel = new CustomModelTreeModel(customModelRootContainer);
+    QTreeView* customModelTreeView = new QTreeView;
+    customModelTreeView->setModel(customModel);
+    customModelTreeView->setHeaderHidden(false);
+    customModelTreeView->setMinimumWidth(220);
+    customModelTreeView->setSelectionMode(QAbstractItemView::ExtendedSelection); // Allow multi-selection and clear selection by clicking below
+
     // Custom model part OpenGL widget
     CadOpenGLWidget *customPartViewer = new CadOpenGLWidget;
+    relinkCadNodeXCAFGeometry(customModelRoot, doc);
     customPartViewer->setRootTreeNode(customModelRoot.get());
     viewTabWidget->addTab(customPartViewer, "Custom Model Part Editor");
 
     // Connect selection for both tree/view pairs
     connectTreeAndViewer(treeView, viewer, model);
     connectTreeAndViewer(customModelTreeView, customPartViewer, customModel);
-    
+
+    // --- Add Load/Save Rail buttons above the custom model tree ---
+    QPushButton* loadRailBtn = new QPushButton("Load Rail (JSON + XCAF)");
+    QPushButton* saveRailBtn = new QPushButton("Save Rail (JSON + XCAF)");
+    QObject::connect(saveRailBtn, &QPushButton::clicked, [=]() {
+        QString baseName = QFileDialog::getSaveFileName(nullptr, "Save Rail Base Name", "", "Rail Project (*.json)");
+        if (baseName.isEmpty()) return;
+        if (!baseName.endsWith(".json")) baseName += ".json";
+        QString binName = baseName;
+        binName.replace(".json", ".bin");
+        // Save custom model JSON (only the selected Rail node or root)
+        QModelIndexList selected = customModelTreeView->selectionModel()->selectedIndexes();
+        std::shared_ptr<CadNode> nodeToSave = nullptr;
+        if (!selected.isEmpty()) {
+            CadNode* n = const_cast<CadNode*>(customModel->getNode(selected.first()));
+            if (n && n->type == CadNodeType::Rail) nodeToSave = std::make_shared<CadNode>(*n);
+        }
+        if (!nodeToSave) nodeToSave = customModelRoot;
+        QJsonObject obj = nodeToSave->toJson();
+        QJsonDocument jsondoc(obj);
+        QFile file(baseName);
+        if (!file.open(QIODevice::WriteOnly)) {
+            QMessageBox::warning(nullptr, "Error", "Failed to open file for writing: " + baseName);
+            return;
+        }
+        file.write(jsondoc.toJson(QJsonDocument::Indented));
+        file.close();
+        // Save XCAF document
+        if (!saveXCAFToBinary(doc, binName)) {
+            QMessageBox::warning(nullptr, "Error", "Failed to save XCAF binary file: " + binName);
+            return;
+        }
+        QMessageBox::information(nullptr, "Success", "Rail and XCAF saved as:\n" + baseName + "\n" + binName);
+    });
+    QObject::connect(loadRailBtn, &QPushButton::clicked, [=]() {
+        QString baseName = QFileDialog::getOpenFileName(nullptr, "Load Rail Base Name", "", "Rail Project (*.json)");
+        if (baseName.isEmpty()) return;
+        if (!baseName.endsWith(".json")) baseName += ".json";
+        QString binName = baseName;
+        binName.replace(".json", ".bin");
+        // If .bin does not exist, try .bin.xbf
+        if (!QFile::exists(binName)) {
+            QString altBinName = binName + ".xbf";
+            if (QFile::exists(altBinName)) {
+                binName = altBinName;
+            }
+        }
+        // Load XCAF document
+        Handle(TDocStd_Document) loadedDoc;
+        Handle(XCAFApp_Application) appOCC = XCAFApp_Application::GetApplication();
+        appOCC->NewDocument("BinXCAF", loadedDoc);
+        Handle(TDocStd_Application) occApp = Handle(TDocStd_Application)::DownCast(loadedDoc->Application());
+        BinXCAFDrivers::DefineFormat(occApp);
+        PCDM_ReaderStatus status = occApp->Open(binName.toStdWString().c_str(), loadedDoc);
+        if (status != PCDM_RS_OK) {
+            QMessageBox::warning(nullptr, "Error", "Failed to load XCAF binary file: " + binName);
+            return;
+        }
+        // Load custom model JSON
+        QFile file(baseName);
+        if (!file.open(QIODevice::ReadOnly)) {
+            QMessageBox::warning(nullptr, "Error", "Failed to open file: " + baseName);
+            return;
+        }
+        QByteArray data = file.readAll();
+        file.close();
+        QJsonParseError err;
+        QJsonDocument doc = QJsonDocument::fromJson(data, &err);
+        if (doc.isNull() || !doc.isObject()) {
+            QMessageBox::warning(nullptr, "Error", "Invalid JSON file: " + baseName);
+            return;
+        }
+        auto loadedNode = CadNode::fromJson(doc.object());
+        // Relink: for each node with xcafLabelTag >= 0, find the corresponding XCAF label and update geometry if needed
+        relinkCadNodeXCAFGeometry(loadedNode, loadedDoc);
+        customModelRoot->children.push_back(loadedNode);
+        customModel->layoutChanged();
+        customPartViewer->setRootTreeNode(customModelRoot.get());
+        customPartViewer->markCacheDirty();
+        customPartViewer->update();
+        QMessageBox::information(nullptr, "Success", "Rail and XCAF loaded from:\n" + baseName + "\n" + binName);
+    });
+
+
+
+
     // Force the viewer to update and render the geometry
     viewer->update();
 
-    // Add selection mode buttons
-    QPushButton* noSelectionBtn = new QPushButton("No Selection");
-    QPushButton* faceSelectionBtn = new QPushButton("Face Selection");
-    QPushButton* edgeSelectionBtn = new QPushButton("Edge Selection");
-    
-    // Style the buttons to show current selection mode
-    noSelectionBtn->setStyleSheet("QPushButton { background-color: #4CAF50; color: white; font-weight: bold; }");
-    
-    buttonLayout->addWidget(noSelectionBtn);
-    buttonLayout->addWidget(faceSelectionBtn);
-    buttonLayout->addWidget(edgeSelectionBtn);
-    
     // Connect selection mode buttons
     QObject::connect(noSelectionBtn, &QPushButton::clicked, [=]() {
         viewer->setSelectionMode(SelectionMode::None);
@@ -1605,7 +1773,7 @@ int main(int argc, char *argv[])
 
     // --- XCAF Label Tree View for second tab ---
     // Build comprehensive label tree showing all XCAF structure
-    auto labelRoot = std::make_unique<XCAFLabelNode>(doc->Main());
+    labelRoot = std::make_unique<XCAFLabelNode>(doc->Main());
     labelRoot->label = doc->Main();
     
     qDebug() << "Building comprehensive XCAF tree...";
@@ -3114,6 +3282,15 @@ int main(int argc, char *argv[])
         }
         if (!menu.isEmpty()) menu.exec(customModelTreeView->viewport()->mapToGlobal(pos));
     });
+
+    // Insert the buttons above the custom model tree in the layout
+    QVBoxLayout* customModelLayout = new QVBoxLayout;
+    customModelLayout->addWidget(saveRailBtn);
+    customModelLayout->addWidget(loadRailBtn);
+    customModelLayout->addWidget(customModelTreeView);
+    QWidget* customModelWidget = new QWidget;
+    customModelWidget->setLayout(customModelLayout);
+    outerSplitter->insertWidget(0, customModelWidget);
 
     mainWindow.resize(1200, 800);
     mainWindow.show();
