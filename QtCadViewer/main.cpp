@@ -32,6 +32,10 @@
 #include <Geom_Plane.hxx>
 #include <BRepTools.hxx>
 #include <gp_Quaternion.hxx>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QJsonObject>
+#include <QJsonDocument>
 
 #include "CadNode.h"
 #include "XCAFLabelTreeModel.h"
@@ -46,6 +50,10 @@
 #include <QPoint>
 #include <QInputDialog>
 #include <QLineEdit>
+#include <QTextEdit>
+#include <unordered_map>
+
+
 
 // Helper to recursively build XCAFLabelNode tree with sub-assembly detection
 std::unique_ptr<XCAFLabelNode> buildLabelTree(const TDF_Label& label, const Handle(XCAFDoc_ShapeTool)& shapeTool = nullptr) {
@@ -368,9 +376,44 @@ std::shared_ptr<CadNode> build_tree_xcaf(const TDF_Label& label,
                    const Handle(XCAFDoc_ShapeTool)& shapeTool,
                    const Handle(XCAFDoc_ColorTool)& colorTool,
                    const CADNodeColor& parentColor,
-                   const TopLoc_Location& parentLoc)
+                   const TopLoc_Location& parentLoc,
+                   std::unordered_map<const void*, std::shared_ptr<CadNode>>& sharedNodeMap)
 {
     TopoDS_Shape shape = shapeTool->GetShape(label);
+    const void* shapeKey = (!shape.IsNull()) ? shape.TShape().get() : nullptr;
+    bool isReference = shapeTool->IsReference(label);
+    if (isReference && shapeKey) {
+        // 1. Create a new CadNode for the reference node (the parent)
+        auto refNode = std::make_shared<CadNode>();
+        refNode->type = CadNodeType::XCAF;
+        refNode->loc = getEffectiveTransform(label, shapeTool, parentLoc); // The transform for this instance
+        refNode->color = get_shape_color(shape, label, shapeTool, colorTool, parentColor);
+        // Compose a name for the reference node, including the transform
+        QString name;
+        Handle(TDataStd_Name) nameAttr;
+        if (label.FindAttribute(TDataStd_Name::GetID(), nameAttr) && !nameAttr.IsNull()) {
+            name = QString::fromStdWString(nameAttr->Get().ToWideString());
+        } else {
+            name = QString("Label %1").arg(label.Tag());
+        }
+        QString transformStr = makeTransformString(refNode->loc);
+        refNode->name = QString("Reference Node | Label %1 | Transform: %2 | OCC Name: %3")
+            .arg(label.Tag())
+            .arg(transformStr)
+            .arg(name)
+            .toStdString();
+        // 2. Get the shared child (the actual geometry/assembly)
+        TDF_Label refLabel;
+        if (shapeTool->GetReferredShape(label, refLabel)) {
+            // Always build the shared child with parentLoc=identity
+            auto sharedChild = build_tree_xcaf(refLabel, shapeTool, colorTool, refNode->color, TopLoc_Location(), sharedNodeMap);
+            if (sharedChild) {
+                refNode->children.push_back(sharedChild);
+            }
+        }
+        return refNode;
+    }
+    
     CADNodeColor color = get_shape_color(shape, label, shapeTool, colorTool, parentColor);
     
     // Debug color propagation for important nodes
@@ -461,16 +504,14 @@ std::shared_ptr<CadNode> build_tree_xcaf(const TDF_Label& label,
         .toStdString();
 
     // Enhanced reference handling for STEP 214 assemblies
-    if (shapeTool->IsReference(label)) {
+    if (isReference) {
         TDF_Label refLabel;
         if (shapeTool->GetReferredShape(label, refLabel)) {
             qDebug() << "Following reference from label" << label.Tag() << "to" << refLabel.Tag();
             TopLoc_Location refLoc = nodeLoc; // Use the effective transform
             
-            // For references, we want to preserve the color from the reference label
-            // but also allow the referred shape to have its own colors
-            // So we pass the current color as the parent color for inheritance
-            auto child = build_tree_xcaf(refLabel, shapeTool, colorTool, color, refLoc);
+            // For references, just point to the shared node for the referred label
+            auto child = build_tree_xcaf(refLabel, shapeTool, colorTool, color, refLoc, sharedNodeMap);
             if (child) {
                 // Mark this as a reference node in the name
                 child->name = QString("REF->%1 | %2").arg(refLabel.Tag()).arg(QString::fromStdString(child->name)).toStdString();
@@ -481,7 +522,7 @@ std::shared_ptr<CadNode> build_tree_xcaf(const TDF_Label& label,
 
     // Recurse into children (for all labels)
     for (TDF_ChildIterator it(label); it.More(); it.Next()) {
-        auto child = build_tree_xcaf(it.Value(), shapeTool, colorTool, color, nodeLoc);
+        auto child = build_tree_xcaf(it.Value(), shapeTool, colorTool, color, nodeLoc, sharedNodeMap);
         if (child) node->children.push_back(child);
     }
     
@@ -546,6 +587,11 @@ std::shared_ptr<CadNode> build_tree_xcaf(const TDF_Label& label,
             
             qDebug() << "Added" << faceCount << "faces and" << edgeCount << "edges to solid at label" << label.Tag();
         }
+    }
+    
+    // Only store in map for non-reference nodes (for sharing by reference nodes)
+    if (shapeKey) {
+        sharedNodeMap[shapeKey] = node;
     }
     
     return node;
@@ -970,6 +1016,54 @@ std::shared_ptr<CadNode> deepCopyNodeNonExcluded(const CadNode* src) {
     return copy;
 }
 
+// Helper: Insert a node into the custom model tree at the same position as the selected node(s) in the CAD tree
+void insertCustomModelNodeAtCadTreePosition(CadNode* customModelRoot, std::shared_ptr<CadNode> newNode, const std::vector<CadNode*>& selectedCadNodes, CadTreeModel* cadModel) {
+    // Try to find the index of the first selected node in the CAD tree among its siblings
+    int insertIdx = -1;
+    if (!selectedCadNodes.empty()) {
+        CadNode* refNode = selectedCadNodes.front();
+        // Find the parent of the reference node in the CAD tree
+        const CadNode* parent = cadModel->getParentNode(refNode);
+        if (parent) {
+            // Find the index of the reference node among its siblings
+            for (size_t i = 0; i < parent->children.size(); ++i) {
+                if (parent->children[i].get() == refNode) {
+                    insertIdx = static_cast<int>(i);
+                    break;
+                }
+            }
+        }
+    }
+    // If we found a valid index, insert at that position; otherwise, append
+    if (insertIdx >= 0 && insertIdx <= static_cast<int>(customModelRoot->children.size())) {
+        customModelRoot->children.insert(customModelRoot->children.begin() + insertIdx, newNode);
+    } else {
+        customModelRoot->children.push_back(newNode);
+    }
+}
+
+// Helper: Recursively adjust all descendants' transforms so their global transform matches the original
+void adjustSubtreeTransforms(const CadNode* src, CadNode* copy, const TopLoc_Location& baseLoc, std::function<const CadNode*(const CadNode*)> getParent) {
+    // Compute original global transform of src
+    TopLoc_Location acc;
+    std::vector<const CadNode*> ancestry;
+    const CadNode* cur = src;
+    while (cur) {
+        ancestry.push_back(cur);
+        cur = getParent(cur);
+    }
+    for (auto it = ancestry.rbegin(); it != ancestry.rend(); ++it) {
+        acc = acc * (*it)->loc;
+    }
+    copy->loc = baseLoc.Inverted() * acc;
+    // Recurse for children
+    for (size_t i = 0; i < src->children.size(); ++i) {
+        if (copy->children.size() > i) {
+            adjustSubtreeTransforms(src->children[i].get(), copy->children[i].get(), baseLoc, getParent);
+        }
+    }
+}
+
 int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
@@ -1026,11 +1120,11 @@ int main(int argc, char *argv[])
     root->color = defaultColor;
     root->loc = identityLoc;
     
+    std::unordered_map<const void*, std::shared_ptr<CadNode>> sharedNodeMap;
     for (Standard_Integer i = 1; i <= roots.Length(); ++i) {
         TDF_Label rootLabel = roots.Value(i);
         qDebug() << "Processing root shape" << i << "with tag" << rootLabel.Tag();
-        
-        auto child = build_tree_xcaf(rootLabel, shapeTool, colorTool, defaultColor, identityLoc);
+        auto child = build_tree_xcaf(rootLabel, shapeTool, colorTool, defaultColor, identityLoc, sharedNodeMap);
         if (child) {
             root->children.push_back(child);
             qDebug() << "Successfully added root shape" << i << "to tree";
@@ -1069,7 +1163,7 @@ int main(int argc, char *argv[])
                 // If this looks like an assembly, add it to the tree
                 if (!hasDirectGeometry && refChildCount > 0) {
                     qDebug() << "Found additional assembly at label" << label.Tag() << "with" << refChildCount << "references";
-                    auto assemblyChild = build_tree_xcaf(label, shapeTool, colorTool, defaultColor, identityLoc);
+                    auto assemblyChild = build_tree_xcaf(label, shapeTool, colorTool, defaultColor, identityLoc, sharedNodeMap);
                     if (assemblyChild) {
                         root->children.push_back(assemblyChild);
                     }
@@ -1087,6 +1181,10 @@ int main(int argc, char *argv[])
     
     qDebug() << "Tree building complete. Root has" << root->children.size() << "children";
     qDebug() << "Total faces collected:" << faces.size();
+
+    // Print total unique CadNode nodes in the tree
+    size_t uniqueNodeCount = countUniqueCadNodes(root.get());
+    qDebug() << "Total unique CadNode nodes in tree:" << static_cast<unsigned long long>(uniqueNodeCount);
 
     // Central widget and splitter
     // Outer splitter: custom model tree (left) and CAD/XCAF tabs (right)
@@ -1114,6 +1212,8 @@ int main(int argc, char *argv[])
     std::shared_ptr<CadNode> customModelRoot = std::make_shared<CadNode>();
     customModelRoot->name = "Custom Model Root";
     customModelRoot->visible = true;
+    customModelRoot->type = CadNodeType::Rail;
+    customModelRoot->data = std::make_shared<RailNodeData>();
     customModelRootContainer->children.push_back(customModelRoot);
     CustomModelTreeModel* customModel = new CustomModelTreeModel(customModelRootContainer);
     QTreeView* customModelTreeView = new QTreeView;
@@ -1151,7 +1251,7 @@ int main(int argc, char *argv[])
 
     // Custom model part OpenGL widget
     CadOpenGLWidget *customPartViewer = new CadOpenGLWidget;
-    customPartViewer->setRootTreeNode(customModel->getRootNodePointer());
+    customPartViewer->setRootTreeNode(customModelRoot.get());
     viewTabWidget->addTab(customPartViewer, "Custom Model Part Editor");
 
     // Connect selection for both tree/view pairs
@@ -1362,9 +1462,6 @@ int main(int argc, char *argv[])
         
         CadNode* node = model->getNode(idx);
         if (!node) return;
-        XCAFNodeData* xData = node->asXCAF();
-        if (!xData) return;
-        
         QMenu menu;
         QAction* showAction = menu.addAction("Show");
         QAction* hideAction = menu.addAction("Hide");
@@ -1384,12 +1481,15 @@ int main(int argc, char *argv[])
         // Add debug info option for solids and faces
         QAction* debugAction = nullptr;
         QAction* debugFaceAction = nullptr;
-        if (xData->type == TopAbs_SOLID) {
-            menu.addSeparator();
-            debugAction = menu.addAction("Debug Solid Info");
-        } else if (xData->type == TopAbs_FACE) {
-            menu.addSeparator();
-            debugFaceAction = menu.addAction("Debug Face Info");
+        XCAFNodeData* xData = node->asXCAF();
+        if (xData) {
+            if (xData->type == TopAbs_SOLID) {
+                menu.addSeparator();
+                debugAction = menu.addAction("Debug Solid Info");
+            } else if (xData->type == TopAbs_FACE) {
+                menu.addSeparator();
+                debugFaceAction = menu.addAction("Debug Face Info");
+            }
         }
 
         // --- Unselect by Color ---
@@ -1468,7 +1568,32 @@ int main(int argc, char *argv[])
                 activeViewer = customPartViewer;
             }
             if (activeViewer && node) {
-                activeViewer->setSelectedFrameNode(node);
+                // Compute accumulated transform from root to node
+                TopLoc_Location accumulatedLoc;
+                std::function<bool(const CadNode*, TopLoc_Location&)> findAccumulatedLoc;
+                findAccumulatedLoc = [&](const CadNode* current, TopLoc_Location& acc) -> bool {
+                    if (current == node) {
+                        acc = acc * current->loc;
+                        return true;
+                    }
+                    for (const auto& child : current->children) {
+                        if (child) {
+                            TopLoc_Location childAcc = acc * current->loc;
+                            if (findAccumulatedLoc(child.get(), childAcc)) {
+                                acc = childAcc;
+                                return true;
+                            }
+                        }
+                    }
+                    return false;
+                };
+                const CadNode* root = activeViewer->getRootTreeNode();
+                TopLoc_Location accLoc;
+                if (root && findAccumulatedLoc(root, accLoc)) {
+                    activeViewer->setSelectedFrameNode(node, accLoc);
+                } else {
+                    activeViewer->setSelectedFrameNode(node, node->loc);
+                }
             }
         });
         // --- Custom Model Add Logic ---
@@ -1485,82 +1610,171 @@ int main(int argc, char *argv[])
             auto nodes = getSelectedNodes();
             if (nodes.empty()) return;
             std::shared_ptr<CadNode> newPart = std::make_shared<CadNode>();
-            newPart->name = QString("Carriage | Type: Physics | Transform: %1")
-                .arg(makeTransformString(TopLoc_Location())).toStdString();
-            newPart->loc = TopLoc_Location();
             newPart->color = nodes[0]->color;
             newPart->type = CadNodeType::Physics;
             auto physicsData = std::make_shared<PhysicsNodeData>();
             newPart->data = physicsData;
             newPart->visible = false;
-            // Add selected nodes as deep copies (non-excluded only)
+            // Compute global transform of the parent of the first selected node
+            auto getGlobalTransform = [&](CadNode* node) -> TopLoc_Location {
+                TopLoc_Location acc;
+                std::vector<CadNode*> ancestry;
+                CadNode* cur = node;
+                while (cur) {
+                    ancestry.push_back(cur);
+                    cur = const_cast<CadNode*>(model->getParentNode(cur));
+                }
+                for (auto it = ancestry.rbegin(); it != ancestry.rend(); ++it) {
+                    acc = acc * (*it)->loc;
+                }
+                return acc;
+            };
+            // Get parent of first selected node
+            CadNode* parentOfFirst = model->getParentNode(nodes[0]);
+            TopLoc_Location physicsNodeGlobal = TopLoc_Location();
+            if (parentOfFirst) {
+                physicsNodeGlobal = getGlobalTransform(parentOfFirst);
+            }
+            newPart->loc = physicsNodeGlobal;
+            newPart->name = QString("Carriage | Type: Physics | Transform: %1")
+                .arg(makeTransformString(newPart->loc)).toStdString();
             for (CadNode* n : nodes) {
                 auto copy = deepCopyNodeNonExcluded(n);
-                if (copy) newPart->children.push_back(copy);
+                if (copy) {
+                    TopLoc_Location childGlobal = getGlobalTransform(n);
+                    copy->loc = childGlobal * physicsNodeGlobal.Inverted();
+                    newPart->children.push_back(copy);
+                }
             }
-            customModelRoot->children.push_back(newPart);
+            insertCustomModelNodeAtCadTreePosition(customModelRoot.get(), newPart, nodes, model);
             customModel->layoutChanged();
-            customPartViewer->setRootTreeNode(customModel->getRootNodePointer());
+            customPartViewer->setRootTreeNode(customModelRoot.get());
         });
         QObject::connect(addStartSegAction, &QAction::triggered, treeView, [=]() {
             auto nodes = getSelectedNodes();
             if (nodes.empty()) return;
             std::shared_ptr<CadNode> newPart = std::make_shared<CadNode>();
-            newPart->name = QString("Start Segment | Type: Physics | Transform: %1")
-                .arg(makeTransformString(TopLoc_Location())).toStdString();
-            newPart->loc = TopLoc_Location();
             newPart->color = nodes[0]->color;
             newPart->type = CadNodeType::Physics;
             auto physicsData = std::make_shared<PhysicsNodeData>();
             newPart->data = physicsData;
             newPart->visible = false;
+            auto getGlobalTransform = [&](CadNode* node) -> TopLoc_Location {
+                TopLoc_Location acc;
+                std::vector<CadNode*> ancestry;
+                CadNode* cur = node;
+                while (cur) {
+                    ancestry.push_back(cur);
+                    cur = const_cast<CadNode*>(model->getParentNode(cur));
+                }
+                for (auto it = ancestry.rbegin(); it != ancestry.rend(); ++it) {
+                    acc = acc * (*it)->loc;
+                }
+                return acc;
+            };
+            CadNode* parentOfFirst = model->getParentNode(nodes[0]);
+            TopLoc_Location physicsNodeGlobal = TopLoc_Location();
+            if (parentOfFirst) {
+                physicsNodeGlobal = getGlobalTransform(parentOfFirst);
+            }
+            newPart->loc = physicsNodeGlobal;
+            newPart->name = QString("Start Segment | Type: Physics | Transform: %1")
+                .arg(makeTransformString(newPart->loc)).toStdString();
             for (CadNode* n : nodes) {
                 auto copy = deepCopyNodeNonExcluded(n);
-                if (copy) newPart->children.push_back(copy);
+                if (copy) {
+                    TopLoc_Location childGlobal = getGlobalTransform(n);
+                    copy->loc = childGlobal * physicsNodeGlobal.Inverted();
+                    newPart->children.push_back(copy);
+                }
             }
-            customModelRoot->children.push_back(newPart);
+            insertCustomModelNodeAtCadTreePosition(customModelRoot.get(), newPart, nodes, model);
             customModel->layoutChanged();
-            customPartViewer->setRootTreeNode(customModel->getRootNodePointer());
+            customPartViewer->setRootTreeNode(customModelRoot.get());
         });
         QObject::connect(addEndSegAction, &QAction::triggered, treeView, [=]() {
             auto nodes = getSelectedNodes();
             if (nodes.empty()) return;
             std::shared_ptr<CadNode> newPart = std::make_shared<CadNode>();
-            newPart->name = QString("End Segment | Type: Physics | Transform: %1")
-                .arg(makeTransformString(TopLoc_Location())).toStdString();
-            newPart->loc = TopLoc_Location();
             newPart->color = nodes[0]->color;
             newPart->type = CadNodeType::Physics;
             auto physicsData = std::make_shared<PhysicsNodeData>();
             newPart->data = physicsData;
             newPart->visible = false;
+            auto getGlobalTransform = [&](CadNode* node) -> TopLoc_Location {
+                TopLoc_Location acc;
+                std::vector<CadNode*> ancestry;
+                CadNode* cur = node;
+                while (cur) {
+                    ancestry.push_back(cur);
+                    cur = const_cast<CadNode*>(model->getParentNode(cur));
+                }
+                for (auto it = ancestry.rbegin(); it != ancestry.rend(); ++it) {
+                    acc = acc * (*it)->loc;
+                }
+                return acc;
+            };
+            CadNode* parentOfFirst = model->getParentNode(nodes[0]);
+            TopLoc_Location physicsNodeGlobal = TopLoc_Location();
+            if (parentOfFirst) {
+                physicsNodeGlobal = getGlobalTransform(parentOfFirst);
+            }
+            newPart->loc = physicsNodeGlobal;
+            newPart->name = QString("End Segment | Type: Physics | Transform: %1")
+                .arg(makeTransformString(newPart->loc)).toStdString();
             for (CadNode* n : nodes) {
                 auto copy = deepCopyNodeNonExcluded(n);
-                if (copy) newPart->children.push_back(copy);
+                if (copy) {
+                    TopLoc_Location childGlobal = getGlobalTransform(n);
+                    copy->loc = childGlobal * physicsNodeGlobal.Inverted();
+                    newPart->children.push_back(copy);
+                }
             }
-            customModelRoot->children.push_back(newPart);
+            insertCustomModelNodeAtCadTreePosition(customModelRoot.get(), newPart, nodes, model);
             customModel->layoutChanged();
-            customPartViewer->setRootTreeNode(customModel->getRootNodePointer());
+            customPartViewer->setRootTreeNode(customModelRoot.get());
         });
         QObject::connect(addMiddleSegAction, &QAction::triggered, treeView, [=]() {
             auto nodes = getSelectedNodes();
             if (nodes.empty()) return;
             std::shared_ptr<CadNode> newPart = std::make_shared<CadNode>();
-            newPart->name = QString("Middle Segment | Type: Physics | Transform: %1")
-                .arg(makeTransformString(TopLoc_Location())).toStdString();
-            newPart->loc = TopLoc_Location();
             newPart->color = nodes[0]->color;
             newPart->type = CadNodeType::Physics;
             auto physicsData = std::make_shared<PhysicsNodeData>();
             newPart->data = physicsData;
             newPart->visible = false;
+            auto getGlobalTransform = [&](CadNode* node) -> TopLoc_Location {
+                TopLoc_Location acc;
+                std::vector<CadNode*> ancestry;
+                CadNode* cur = node;
+                while (cur) {
+                    ancestry.push_back(cur);
+                    cur = const_cast<CadNode*>(model->getParentNode(cur));
+                }
+                for (auto it = ancestry.rbegin(); it != ancestry.rend(); ++it) {
+                    acc = acc * (*it)->loc;
+                }
+                return acc;
+            };
+            CadNode* parentOfFirst = model->getParentNode(nodes[0]);
+            TopLoc_Location physicsNodeGlobal = TopLoc_Location();
+            if (parentOfFirst) {
+                physicsNodeGlobal = getGlobalTransform(parentOfFirst);
+            }
+            newPart->loc = physicsNodeGlobal;
+            newPart->name = QString("Middle Segment | Type: Physics | Transform: %1")
+                .arg(makeTransformString(newPart->loc)).toStdString();
             for (CadNode* n : nodes) {
                 auto copy = deepCopyNodeNonExcluded(n);
-                if (copy) newPart->children.push_back(copy);
+                if (copy) {
+                    TopLoc_Location childGlobal = getGlobalTransform(n);
+                    copy->loc = childGlobal * physicsNodeGlobal.Inverted();
+                    newPart->children.push_back(copy);
+                }
             }
-            customModelRoot->children.push_back(newPart);
+            insertCustomModelNodeAtCadTreePosition(customModelRoot.get(), newPart, nodes, model);
             customModel->layoutChanged();
-            customPartViewer->setRootTreeNode(customModel->getRootNodePointer());
+            customPartViewer->setRootTreeNode(customModelRoot.get());
         });
         // --- Custom Model Clear Logic ---
         QObject::connect(clearCarriageAction, &QAction::triggered, treeView, [=]() {
@@ -1572,7 +1786,7 @@ int main(int argc, char *argv[])
                                }),
                 children.end());
             customModel->layoutChanged(); // Notify model of structure change
-            customPartViewer->setRootTreeNode(customModel->getRootNodePointer()); // Update viewer's root node
+            customPartViewer->setRootTreeNode(customModelRoot.get()); // Update viewer's root node
         });
         QObject::connect(clearStartSegAction, &QAction::triggered, treeView, [=]() {
             auto& children = customModelRoot->children;
@@ -1583,7 +1797,7 @@ int main(int argc, char *argv[])
                                }),
                 children.end());
             customModel->layoutChanged(); // Notify model of structure change
-            customPartViewer->setRootTreeNode(customModel->getRootNodePointer()); // Update viewer's root node
+            customPartViewer->setRootTreeNode(customModelRoot.get()); // Update viewer's root node
         });
         QObject::connect(clearEndSegAction, &QAction::triggered, treeView, [=]() {
             auto& children = customModelRoot->children;
@@ -1594,7 +1808,7 @@ int main(int argc, char *argv[])
                                }),
                 children.end());
             customModel->layoutChanged(); // Notify model of structure change
-            customPartViewer->setRootTreeNode(customModel->getRootNodePointer()); // Update viewer's root node
+            customPartViewer->setRootTreeNode(customModelRoot.get()); // Update viewer's root node
         });
         QObject::connect(clearMiddleSegAction, &QAction::triggered, treeView, [=]() {
             auto& children = customModelRoot->children;
@@ -1605,7 +1819,7 @@ int main(int argc, char *argv[])
                                }),
                 children.end());
             customModel->layoutChanged(); // Notify model of structure change
-            customPartViewer->setRootTreeNode(customModel->getRootNodePointer()); // Update viewer's root node
+            customPartViewer->setRootTreeNode(customModelRoot.get()); // Update viewer's root node
         });
         
         QObject::connect(showAction, &QAction::triggered, treeView, [=]() {
@@ -2294,7 +2508,7 @@ int main(int argc, char *argv[])
                 QObject::connect(addConnectionPointAction, &QAction::triggered, customModelTreeView, [=]() {
                     // Calculate face center
                     XCAFNodeData* xData = n->asXCAF();
-                    TopoDS_Face face = TopoDS::Face(xData->getFace().Located(n->loc));
+                    TopoDS_Face face = TopoDS::Face(xData->getFace());
                     
                     // Calculate bounding box center as approximation of face center
                     Bnd_Box bbox;
@@ -2345,7 +2559,7 @@ int main(int argc, char *argv[])
                     if (physicsAncestor) {
                         physicsAncestor->children.push_back(connectionPointNode);
                         customModel->layoutChanged();
-                        customPartViewer->setRootTreeNode(customModel->getRootNodePointer());
+                        customPartViewer->setRootTreeNode(customModelRoot.get());
                         customPartViewer->update();
                         qDebug() << "Added connection point at:" << centerX << centerY << centerZ;
                     } else {
@@ -2371,7 +2585,7 @@ int main(int argc, char *argv[])
                         double distance = QInputDialog::getDouble(nullptr, "Extrusion Distance", "Enter extrusion distance:", 10.0, -10000.0, 10000.0, 2, &ok);
                         if (!ok) return;
                         XCAFNodeData* xData = n->asXCAF();
-                        TopoDS_Face face = TopoDS::Face(xData->getFace().Located(n->loc));
+                        TopoDS_Face face = TopoDS::Face(xData->getFace());
                         Handle(Geom_Surface) surf = BRep_Tool::Surface(face);
                         Handle(Geom_Plane) plane = Handle(Geom_Plane)::DownCast(surf);
                         if (plane.IsNull()) {
@@ -2436,6 +2650,21 @@ int main(int argc, char *argv[])
             if (nodeA && nodeB && nodeA->asXCAF() && nodeB->asXCAF() && nodeA->asXCAF()->type == TopAbs_FACE && nodeB->asXCAF()->type == TopAbs_FACE) {
                 QAction* alignFacesAction = menu.addAction("Align Selected Faces (Move Second)");
                 QObject::connect(alignFacesAction, &QAction::triggered, customModelTreeView, [=]() {
+                    // Utility: Compute the global transform (accumulated from root) for a node
+                    std::function<TopLoc_Location(CadNode*)> getGlobalTransform = [&](CadNode* node) -> TopLoc_Location {
+                        TopLoc_Location acc;
+                        std::vector<CadNode*> ancestry;
+                        CadNode* cur = node;
+                        while (cur) {
+                            ancestry.push_back(cur);
+                            cur = const_cast<CadNode*>(customModel->getParentNode(cur));
+                        }
+                        // Accumulate from root to node
+                        for (auto it = ancestry.rbegin(); it != ancestry.rend(); ++it) {
+                            acc = acc * (*it)->loc;
+                        }
+                        return acc;
+                    };
                     // Helper to find parent solid/compound by walking up using getParentNode
                     auto findParentPhysicsObject = [&](CadNode* n) -> CadNode* {
                         const CadNode* parent = customModel->getParentNode(n);
@@ -2472,7 +2701,7 @@ int main(int argc, char *argv[])
                     // Get face geometry (center and normal)
                     auto getFaceCenterNormal = [](CadNode* faceNode, gp_Pnt& center, gp_Dir& normal) {
                         XCAFNodeData* xData = faceNode->asXCAF();
-                        TopoDS_Face face = TopoDS::Face(xData->getFace().Located(faceNode->loc));
+                        TopoDS_Face face = TopoDS::Face(xData->getFace());
                         // Compute center (bounding box center)
                         Bnd_Box bbox;
                         BRepBndLib::Add(face, bbox);
@@ -2516,20 +2745,123 @@ int main(int argc, char *argv[])
                     gp_Trsf trsf;
                     trsf.SetRotation(rotTrsf.GetRotation());
                     trsf.SetTranslationPart(translation);
-                    // Apply transform to parentB and all its children
-                    parentB->applyTransform(trsf);
+                    // Compute parentB's global transform before
+                    TopLoc_Location parentBGlobal = getGlobalTransform(parentB);
+                    // Compute desired global transform after alignment
+                    TopLoc_Location desiredGlobal = TopLoc_Location(trsf * parentBGlobal.Transformation());
+                    // Compute parent's global transform (parent of parentB)
+                    CadNode* parentOfB = const_cast<CadNode*>(customModel->getParentNode(parentB));
+                    TopLoc_Location parentOfBGlobal = parentOfB ? getGlobalTransform(parentOfB) : TopLoc_Location();
+                    // Set parentB->loc so that parentOfBGlobal * parentB->loc == desiredGlobal
+                    TopLoc_Location newLocal = parentOfBGlobal.IsIdentity() ? desiredGlobal : TopLoc_Location(parentOfBGlobal.Transformation().Inverted() * desiredGlobal.Transformation());
+                    parentB->loc = newLocal;
                     customPartViewer->markCacheDirty();
                     customModel->layoutChanged();
-                    customPartViewer->setRootTreeNode(customModel->getRootNodePointer());
+                    customPartViewer->setRootTreeNode(customModelRoot.get());
                     customPartViewer->update();
                     QMessageBox::information(nullptr, "Align Faces", "Moved second object so faces touch.");
                 });
             }
         }
-
+        if (node->type == CadNodeType::Rail) {
+            QAction* editRailJsonAction = menu.addAction("Edit Rail JSON...");
+            QObject::connect(editRailJsonAction, &QAction::triggered, customModelTreeView, [=]() {
+                RailNodeData* railData = node->asRail();
+                if (!railData) return;
+                // Parse JSON if present, otherwise use defaults
+                QJsonObject jsonObj;
+                if (!railData->jsonString.isEmpty()) {
+                    QJsonDocument doc = QJsonDocument::fromJson(railData->jsonString.toUtf8());
+                    if (doc.isObject()) jsonObj = doc.object();
+                }
+                // Extract or default fields
+                QVector3D axis = railData->axisOfTravel;
+                double joint = 0.0;
+                double travel = railData->travelLength;
+                int numSeg = railData->numSegments;
+                if (jsonObj.contains("axisOfTravel")) {
+                    QJsonArray arr = jsonObj["axisOfTravel"].toArray();
+                    if (arr.size() == 3) axis = QVector3D(arr[0].toDouble(), arr[1].toDouble(), arr[2].toDouble());
+                }
+                if (jsonObj.contains("buildJointPosition")) {
+                    joint = jsonObj["buildJointPosition"].toDouble();
+                }
+                if (jsonObj.contains("travelLength")) travel = jsonObj["travelLength"].toDouble();
+                if (jsonObj.contains("numSegments")) numSeg = jsonObj["numSegments"].toInt();
+                // Dialog
+                QDialog* dialog = new QDialog(nullptr);
+                dialog->setWindowTitle("Edit Rail Properties");
+                QFormLayout* form = new QFormLayout(dialog);
+                // Axis of travel
+                QLineEdit* axisEdit = new QLineEdit(QString("%1, %2, %3").arg(axis.x()).arg(axis.y()).arg(axis.z()));
+                form->addRow("Axis of Travel (x, y, z):", axisEdit);
+                // Build joint position (scalar)
+                QDoubleSpinBox* jointSpin = new QDoubleSpinBox();
+                jointSpin->setRange(-1e6, 1e6);
+                jointSpin->setDecimals(3);
+                jointSpin->setValue(joint);
+                form->addRow("Build Joint Position (distance along rail):", jointSpin);
+                // Travel length
+                QDoubleSpinBox* travelSpin = new QDoubleSpinBox();
+                travelSpin->setRange(-1e6, 1e6);
+                travelSpin->setDecimals(3);
+                travelSpin->setValue(travel);
+                form->addRow("Travel Length:", travelSpin);
+                // Number of segments
+                QSpinBox* numSegSpin = new QSpinBox();
+                numSegSpin->setRange(1, 1000);
+                numSegSpin->setValue(numSeg);
+                form->addRow("Number of Segments:", numSegSpin);
+                // Raw JSON view
+                QTextEdit* textEdit = new QTextEdit(dialog);
+                textEdit->setPlainText(railData->jsonString);
+                form->addRow("Raw JSON:", textEdit);
+                // Buttons
+                QHBoxLayout* buttonLayout = new QHBoxLayout();
+                QPushButton* okBtn = new QPushButton("OK");
+                QPushButton* cancelBtn = new QPushButton("Cancel");
+                buttonLayout->addWidget(okBtn);
+                buttonLayout->addWidget(cancelBtn);
+                form->addRow(buttonLayout);
+                dialog->setLayout(form);
+                QObject::connect(okBtn, &QPushButton::clicked, dialog, [=]() {
+                    // Parse axis
+                    QVector3D newAxis = axis;
+                    QStringList axisParts = axisEdit->text().split(",");
+                    if (axisParts.size() == 3) {
+                        bool ok1, ok2, ok3;
+                        double x = axisParts[0].toDouble(&ok1);
+                        double y = axisParts[1].toDouble(&ok2);
+                        double z = axisParts[2].toDouble(&ok3);
+                        if (ok1 && ok2 && ok3) newAxis = QVector3D(x, y, z);
+                    }
+                    double newJoint = jointSpin->value();
+                    double newTravel = travelSpin->value();
+                    int newNumSeg = numSegSpin->value();
+                    // Update RailNodeData fields
+                    railData->axisOfTravel = newAxis;
+                    railData->buildJointPosition = QVector3D(newJoint, 0, 0); // Store as x only
+                    railData->travelLength = newTravel;
+                    railData->numSegments = newNumSeg;
+                    // Compose JSON
+                    QJsonObject newObj;
+                    QJsonArray axisArr; axisArr << newAxis.x() << newAxis.y() << newAxis.z();
+                    newObj["axisOfTravel"] = axisArr;
+                    newObj["buildJointPosition"] = newJoint;
+                    newObj["travelLength"] = newTravel;
+                    newObj["numSegments"] = newNumSeg;
+                    railData->jsonString = QJsonDocument(newObj).toJson(QJsonDocument::Compact);
+                    textEdit->setPlainText(railData->jsonString);
+                    customModel->layoutChanged();
+                    customPartViewer->update();
+                    dialog->accept();
+                });
+                QObject::connect(cancelBtn, &QPushButton::clicked, dialog, &QDialog::reject);
+                dialog->exec();
+            });
+        }
         if (!menu.isEmpty()) menu.exec(customModelTreeView->viewport()->mapToGlobal(pos));
     });
-
 
     mainWindow.resize(1200, 800);
     mainWindow.show();

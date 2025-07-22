@@ -42,6 +42,8 @@ public:
     QModelIndex indexForNode(const NodeType* node, int column = 0) const;
     const NodeType* getParentNode(const NodeType* node) const;
 
+    // Transform nodes are supported in the custom model tree. They apply a transform to all children without duplicating geometry.
+
 private:
     std::shared_ptr<NodeType> root_;
 };

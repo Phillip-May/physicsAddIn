@@ -9,6 +9,10 @@
 #include <TopoDS_Edge.hxx>
 #include <TopoDS.hxx>
 #include <memory>
+#include <QVector3D>
+#include <QString>
+#include <unordered_set>
+#include <functional>
 
 // Define a simple RGBA color struct
 struct CADNodeColor {
@@ -61,6 +65,8 @@ enum class CadNodeType {
     Rail,
     Turnable,
     Physics, // New: Physics object node
+    ConnectionPoint, // New: Connection point node
+    Transform, // New: Transform node type
     // ... add more as needed
 };
 
@@ -102,6 +108,88 @@ struct PhysicsNodeData : public CadNodeDataBase {
     // Add more fields as needed (e.g., material, mass, etc.)
 };
 
+// 4c. Rail node data
+struct RailNodeData : public CadNodeDataBase {
+    QVector3D axisOfTravel{1,0,0};
+    QVector3D buildJointPosition{0,0,0};
+    double travelLength = 0.0;
+    int numSegments = 1;
+    QString jsonString; // For custom JSON editing
+};
+
+// 4d. Transform node data (for future extensibility)
+struct TransformNodeData : public CadNodeDataBase {
+    // Currently empty, but can be extended for animation, etc.
+};
+
+// Connection point flags (bit flags)
+enum class ConnectionFlags : uint32_t {
+    None = 0,
+    Cables = 1 << 0,      // Can connect cables
+    Conveyors = 1 << 1,   // Can connect conveyors
+    All = Cables | Conveyors
+};
+
+// Bitwise operators for ConnectionFlags
+inline ConnectionFlags operator|(ConnectionFlags a, ConnectionFlags b) {
+    return static_cast<ConnectionFlags>(static_cast<uint32_t>(a) | static_cast<uint32_t>(b));
+}
+
+inline ConnectionFlags operator&(ConnectionFlags a, ConnectionFlags b) {
+    return static_cast<ConnectionFlags>(static_cast<uint32_t>(a) & static_cast<uint32_t>(b));
+}
+
+inline ConnectionFlags operator^(ConnectionFlags a, ConnectionFlags b) {
+    return static_cast<ConnectionFlags>(static_cast<uint32_t>(a) ^ static_cast<uint32_t>(b));
+}
+
+inline ConnectionFlags operator~(ConnectionFlags a) {
+    return static_cast<ConnectionFlags>(~static_cast<uint32_t>(a));
+}
+
+inline ConnectionFlags& operator|=(ConnectionFlags& a, ConnectionFlags b) {
+    return a = a | b;
+}
+
+inline ConnectionFlags& operator&=(ConnectionFlags& a, ConnectionFlags b) {
+    return a = a & b;
+}
+
+inline ConnectionFlags& operator^=(ConnectionFlags& a, ConnectionFlags b) {
+    return a = a ^ b;
+}
+
+// Connection point data
+struct ConnectionPointData : public CadNodeDataBase {
+    ConnectionFlags connectionFlags = ConnectionFlags::Cables; // Default to cables
+    std::string description; // Optional description of the connection point
+    
+    // Helper functions
+    bool canConnectCables() const {
+        return (connectionFlags & ConnectionFlags::Cables) != ConnectionFlags::None;
+    }
+    
+    bool canConnectConveyors() const {
+        return (connectionFlags & ConnectionFlags::Conveyors) != ConnectionFlags::None;
+    }
+    
+    void setCanConnectCables(bool enable) {
+        if (enable) {
+            connectionFlags |= ConnectionFlags::Cables;
+        } else {
+            connectionFlags &= ~ConnectionFlags::Cables;
+        }
+    }
+    
+    void setCanConnectConveyors(bool enable) {
+        if (enable) {
+            connectionFlags |= ConnectionFlags::Conveyors;
+        } else {
+            connectionFlags &= ~ConnectionFlags::Conveyors;
+        }
+    }
+};
+
 // 5. The generic CadNode struct
 struct CadNode {
     std::string name;
@@ -109,6 +197,7 @@ struct CadNode {
     TopLoc_Location loc;
     std::vector<std::shared_ptr<CadNode>> children;
     bool visible = true;
+    bool excludedFromDecomposition = false; // Exclude from VHACD/CoACD mesh generation
 
     CadNodeType type = CadNodeType::Unknown; // Must be set explicitly
     std::shared_ptr<CadNodeDataBase> data; // Holds type-specific data
@@ -137,6 +226,30 @@ struct CadNode {
         return type == CadNodeType::Physics ? static_cast<const PhysicsNodeData*>(data.get()) : nullptr;
     }
 
+    // Helper to get Rail data safely
+    RailNodeData* asRail() {
+        return type == CadNodeType::Rail ? static_cast<RailNodeData*>(data.get()) : nullptr;
+    }
+    const RailNodeData* asRail() const {
+        return type == CadNodeType::Rail ? static_cast<const RailNodeData*>(data.get()) : nullptr;
+    }
+
+    // Helper to get Transform data safely
+    TransformNodeData* asTransform() {
+        return type == CadNodeType::Transform ? static_cast<TransformNodeData*>(data.get()) : nullptr;
+    }
+    const TransformNodeData* asTransform() const {
+        return type == CadNodeType::Transform ? static_cast<const TransformNodeData*>(data.get()) : nullptr;
+    }
+
+    // Helper to get ConnectionPoint data safely
+    ConnectionPointData* asConnectionPoint() {
+        return type == CadNodeType::ConnectionPoint ? static_cast<ConnectionPointData*>(data.get()) : nullptr;
+    }
+    const ConnectionPointData* asConnectionPoint() const {
+        return type == CadNodeType::ConnectionPoint ? static_cast<const ConnectionPointData*>(data.get()) : nullptr;
+    }
+
     // ... add more helpers for other node types as needed
 
     // Visibility helper
@@ -146,7 +259,29 @@ struct CadNode {
             if (child) child->setVisibleRecursive(vis);
         }
     }
+
+    // Recursively apply a transformation to this node and all children
+    void applyTransform(const gp_Trsf& trsf) {
+        loc = TopLoc_Location(trsf * loc.Transformation());
+        for (auto& child : children) {
+            if (child) child->applyTransform(trsf);
+        }
+    }
 };
+
+// Utility: Count unique CadNode pointers in a tree
+inline size_t countUniqueCadNodes(const CadNode* root) {
+    std::unordered_set<const CadNode*> visited;
+    std::function<void(const CadNode*)> visit = [&](const CadNode* node) {
+        if (!node || visited.count(node)) return;
+        visited.insert(node);
+        for (const auto& child : node->children) {
+            visit(child.get());
+        }
+    };
+    visit(root);
+    return visited.size();
+}
 
 #endif // QTCADVIEWER_CADNODE_H
 

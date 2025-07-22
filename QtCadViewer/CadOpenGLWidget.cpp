@@ -39,12 +39,13 @@
 #include "CadNode.h"
 #include <QWidget>
 #include <QObject>
+#include <functional> // For std::hash
 
 // Forward declaration for screenToWorldRay
 static void screenToWorldRay(const QPoint& pos, int width, int height, const QVector3D& cameraPos, const QQuaternion& cameraRot, float cameraZoom, gp_Pnt& rayOrigin, gp_Dir& rayDir);
 QPoint CadOpenGLWidget_projectWorldToScreen(const QVector3D& world, int width, int height, const QVector3D& cameraPos, const QQuaternion& cameraRot, float cameraZoom);
 static QVector3D unprojectScreenToWorld(const QPoint& screenPos, float depth, int width, int height, const QVector3D& cameraPos, const QQuaternion& cameraRot, float cameraZoom);
-static void accumulateBoundingBox(const CadNode* node, Bnd_Box& bbox);
+static void accumulateBoundingBox(const CadNode* node, const TopLoc_Location& accumulatedLoc, Bnd_Box& bbox);
 
 // Function to clear geometry cache
 void CadOpenGLWidget::clearGeometryCache() {
@@ -266,15 +267,11 @@ void CadOpenGLWidget::renderBatchedGeometry() {
         }
         return;
     }
-    
     if (m_frameCount % 120 == 0) {
         //qDebug() << "[Render] Rendering geometry, root children:" << rootNode_->children.size();
     }
-    
-    // Use the original traversal approach but with optimized face rendering
-    for (const auto& child : rootNode_->children) {
-        traverseAndRender(child.get(), CADNodeColor(1.0f, 1.0f, 1.0f, 1.0f), true);
-    }
+    // Traverse from the root node itself, not just its children
+    traverseAndRender(rootNode_, CADNodeColor(1.0f, 1.0f, 1.0f, 1.0f), TopLoc_Location(), true);
 }
 
 // Build color batches for efficient rendering
@@ -285,31 +282,60 @@ void CadOpenGLWidget::buildColorBatches() {
     // Each face is cached individually and rendered efficiently
 }
 
+// Shared helper: treat Transform, Physics, and reference nodes as transform-like for accumulation
+static inline bool isTransformLikeNode(const CadNode* node) {
+    if (!node) return false;
+    if (node->type == CadNodeType::Transform || node->type == CadNodeType::Physics) return true;
+    // Reference node: XCAF node with a single child that is also XCAF and is shared (heuristic)
+    if (node->type == CadNodeType::XCAF && node->children.size() == 1) {
+        if (node->children[0] && node->children[0].get() != node && node->children[0]->type == CadNodeType::XCAF) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Shared transform accumulation function
+static TopLoc_Location accumulateNodeTransform(const CadNode* node, const TopLoc_Location& parentAccum) {
+    if (!node || node->loc.IsIdentity()) return parentAccum;
+    if (isTransformLikeNode(node)) {
+        return parentAccum * node->loc;
+    }
+    return parentAccum;
+}
+
 // Update traverseAndRender to use extremely optimized rendering
-void CadOpenGLWidget::traverseAndRender(const CadNode* node, CADNodeColor inheritedColor, bool /*ancestorsVisible*/) {
+void CadOpenGLWidget::traverseAndRender(const CadNode* node, CADNodeColor inheritedColor, const TopLoc_Location& accumulatedLoc, bool /*ancestorsVisible*/) {
     if (!node) return;
+    // Always accumulate the transform for this node
+    TopLoc_Location newAccumulatedLoc = accumulateNodeTransform(node, accumulatedLoc);
+    bool needsTransform = !node->loc.IsIdentity();
+    if (needsTransform) {
+        glPushMatrix();
+        // Apply this node's transform
+        const gp_Trsf& trsf = node->loc.Transformation();
+        double mat[16] = {
+            trsf.Value(1,1), trsf.Value(2,1), trsf.Value(3,1), 0.0,
+            trsf.Value(1,2), trsf.Value(2,2), trsf.Value(3,2), 0.0,
+            trsf.Value(1,3), trsf.Value(2,3), trsf.Value(3,3), 0.0,
+            trsf.TranslationPart().X(), trsf.TranslationPart().Y(), trsf.TranslationPart().Z(), 1.0
+        };
+        glMultMatrixd(mat);
+    }
     if (node->visible) {
         CADNodeColor nodeColor = (node->color.a >= 0.0f) ? node->color : inheritedColor;
-        
-        // Only apply transformation if needed
-        bool needsTransform = !node->loc.IsIdentity();
-        if (needsTransform) {
-            const TopLoc_Location& fullLoc = node->loc;
-            const gp_Trsf& trsf = fullLoc.Transformation();
-            const gp_Mat& mat = trsf.VectorialPart();
-            const gp_XYZ& trans = trsf.TranslationPart();
-            
-            glMatrixMode(GL_MODELVIEW);
-            glPushMatrix();
-            double matrix[16] = {
-                mat.Value(1,1), mat.Value(2,1), mat.Value(3,1), 0.0,
-                mat.Value(1,2), mat.Value(2,2), mat.Value(3,2), 0.0,
-                mat.Value(1,3), mat.Value(2,3), mat.Value(3,3), 0.0,
-                trans.X(),     trans.Y(),     trans.Z(),     1.0
-            };
-            glMultMatrixd(matrix);
+        // If this is a transform-like node, just traverse children and return
+        if (isTransformLikeNode(node)) {
+            for (const auto& child : node->children) {
+                if (child) {
+                    traverseAndRender(child.get(), node->color, newAccumulatedLoc, true);
+                }
+            }
+            if (needsTransform) {
+                glPopMatrix();
+            }
+            return;
         }
-
         // Only render XCAF nodes as geometry
         if (node->type == CadNodeType::XCAF) {
             const XCAFNodeData* xData = node->asXCAF();
@@ -317,8 +343,8 @@ void CadOpenGLWidget::traverseAndRender(const CadNode* node, CADNodeColor inheri
                 switch (xData->type) {
                     case TopAbs_FACE:
                         if (!xData->shape.IsNull() && xData->type == TopAbs_FACE) {
-                            if (isInFrustum(TopoDS::Face(xData->shape), node->loc)) {
-                                renderFaceOptimized(node, nodeColor);
+                            if (isInFrustum(TopoDS::Face(xData->shape), newAccumulatedLoc)) {
+                                renderFaceOptimized(node, nodeColor, newAccumulatedLoc);
                             } else if (m_frameCount % 120 == 0) {
                                 qDebug() << "[Render] Face culled by frustum:" << node;
                             }
@@ -334,30 +360,60 @@ void CadOpenGLWidget::traverseAndRender(const CadNode* node, CADNodeColor inheri
                 }
             }
         }
-        // Draw reference frame for the selected node during traversal, while transform is on stack
-        if (node == selectedFrameNode_) {
-            drawReferenceFrame(TopLoc_Location(), 50000.0f);
-        }
-        if (needsTransform) {
-            glPopMatrix();
+        // Render ConnectionPoint nodes
+        if (node->type == CadNodeType::ConnectionPoint) {
+            renderConnectionPoint(node, nodeColor);
         }
     }
-    // Always traverse children for visibility
     for (const auto& child : node->children) {
         if (child) {
-            traverseAndRender(child.get(), node->color, true);
+            traverseAndRender(child.get(), node->color, accumulateNodeTransform(node, accumulatedLoc), true);
         }
     }
     if (node->type == CadNodeType::Physics) {
         const PhysicsNodeData* physData = node->asPhysics();
         if (physData && physData->convexHullGenerated && !physData->hulls.empty()) {
-            renderConvexHulls(physData, node->loc);
+            renderConvexHulls(physData, accumulateNodeTransform(node, accumulatedLoc));
         }
+    }
+    if (needsTransform) {
+        glPopMatrix();
     }
 }
 
+// Helper: Render a connection point as a small sphere or axis marker
+void CadOpenGLWidget::renderConnectionPoint(const CadNode* node, const CADNodeColor& color) {
+    // Draw a small sphere at the origin (transformed by node->loc)
+    glPushAttrib(GL_ENABLE_BIT | GL_POINT_BIT | GL_COLOR_BUFFER_BIT);
+    glDisable(GL_LIGHTING);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glColor4f(color.r, color.g, color.b, color.a > 0.0f ? color.a : 1.0f);
+    float radius = 10.0f; // Adjust as needed for visibility
+    int slices = 16, stacks = 8;
+    // Simple sphere (parametric)
+    for (int i = 0; i < stacks; ++i) {
+        float lat0 = M_PI * (-0.5f + float(i) / stacks);
+        float z0  = sin(lat0);
+        float zr0 = cos(lat0);
+        float lat1 = M_PI * (-0.5f + float(i+1) / stacks);
+        float z1 = sin(lat1);
+        float zr1 = cos(lat1);
+        glBegin(GL_QUAD_STRIP);
+        for (int j = 0; j <= slices; ++j) {
+            float lng = 2 * M_PI * float(j) / slices;
+            float x = cos(lng);
+            float y = sin(lng);
+            glVertex3f(radius * x * zr0, radius * y * zr0, radius * z0);
+            glVertex3f(radius * x * zr1, radius * y * zr1, radius * z1);
+        }
+        glEnd();
+    }
+    glPopAttrib();
+}
+
 // Optimized face rendering using cached geometry with wireframe overlay
-void CadOpenGLWidget::renderFaceOptimized(const CadNode* node, const CADNodeColor& color) {
+void CadOpenGLWidget::renderFaceOptimized(const CadNode* node, const CADNodeColor& color, const TopLoc_Location&) {
     if (!node) return;
     const XCAFNodeData* xData = node->asXCAF();
     if (!xData || !xData->hasFace()) return;
@@ -382,9 +438,9 @@ void CadOpenGLWidget::renderFaceOptimized(const CadNode* node, const CADNodeColo
         auto it = std::find(selectedFaceNodes_.begin(), selectedFaceNodes_.end(), node);
         if (it != selectedFaceNodes_.end()) {
             isSelected = true;
-                    if (m_frameCount % 60 == 0) {
-            qDebug() << "[MultiSelect] Rendering selected face, total selected:" << selectedFaceNodes_.size() << "node:" << xData;
-        }
+            if (m_frameCount % 60 == 0) {
+                qDebug() << "[MultiSelect] Rendering selected face, total selected:" << selectedFaceNodes_.size() << "node:" << xData;
+            }
         }
     }
     
@@ -395,6 +451,9 @@ void CadOpenGLWidget::renderFaceOptimized(const CadNode* node, const CADNodeColo
     } else if (isHovered) {
         // Hovered face: bright green
         glColor4f(0.0f, 1.0f, 0.0f, 0.7f);
+    } else if (node->excludedFromDecomposition) {
+        // Excluded: greyed out
+        glColor4f(0.4f, 0.4f, 0.4f, 0.5f);
     } else {
         // Normal face: use original color
         glColor4f(color.r, color.g, color.b, color.a);
@@ -522,7 +581,7 @@ void CadOpenGLWidget::paintGL() {
 
     // Draw the scene bounding box
     Bnd_Box bbox;
-    accumulateBoundingBox(rootNode_, bbox);
+    accumulateBoundingBox(rootNode_, TopLoc_Location(), bbox);
     if (!bbox.IsVoid()) {
         Standard_Real xmin, ymin, zmin, xmax, ymax, zmax;
         bbox.Get(xmin, ymin, zmin, xmax, ymax, zmax);
@@ -533,16 +592,22 @@ void CadOpenGLWidget::paintGL() {
     Bnd_Box selectionBox;
     for (CadNode* node : selectedFaceNodes_) {
         if (!node) continue;
+        // Find the corresponding FaceInstance in faceCache_ to get the accumulatedLoc
+        auto it = std::find_if(faceCache_.begin(), faceCache_.end(), [node](const FaceInstance& inst) { return inst.node == node; });
+        if (it == faceCache_.end()) continue;
         XCAFNodeData* xData = node->asXCAF();
         if (!xData || !xData->hasFace()) continue;
-        TopoDS_Face face = TopoDS::Face(xData->getFace().Located(node->loc));
+        TopoDS_Face face = TopoDS::Face(xData->getFace().Located(it->accumulatedLoc));
         BRepBndLib::Add(face, selectionBox);
     }
     for (CadNode* node : selectedEdgeNodes_) {
         if (!node) continue;
+        // Find the corresponding EdgeInstance in edgeCache_ to get the accumulatedLoc
+        auto it = std::find_if(edgeCache_.begin(), edgeCache_.end(), [node](const EdgeInstance& inst) { return inst.node == node; });
+        if (it == edgeCache_.end()) continue;
         XCAFNodeData* xData = node->asXCAF();
         if (!xData || !xData->hasEdge()) continue;
-        TopoDS_Edge edge = TopoDS::Edge(xData->getEdge().Located(node->loc));
+        TopoDS_Edge edge = TopoDS::Edge(xData->getEdge().Located(it->accumulatedLoc));
         BRepBndLib::Add(edge, selectionBox);
     }
     if (!selectionBox.IsVoid()) {
@@ -550,6 +615,11 @@ void CadOpenGLWidget::paintGL() {
         selectionBox.Get(sxmin, symin, szmin, sxmax, symax, szmax);
         // Bright yellow for selection
         drawBoundingBox(QVector3D(sxmin, symin, szmin), QVector3D(sxmax, symax, szmax), QVector4D(1.0f, 1.0f, 0.0f, 0.8f));
+    }
+
+    // In paintGL, when drawing the reference frame for the selected frame node:
+    if (selectedFrameNode_) {
+        drawReferenceFrame(selectedFrameNodeAccumulatedLoc_, 5000.0f);
     }
 }
 
@@ -582,10 +652,10 @@ void CadOpenGLWidget::mousePressEvent(QMouseEvent* event) {
                 // Ctrl+click: add/remove from selection
                 if (m_selectionMode == SelectionMode::Faces) {
                     addToSelection(pickedNode);
-                    // Don't emit signal for Ctrl+click to avoid tree view interference
+                    emit facePicked(pickedNode); // Now emit for Ctrl+click as well
                 } else if (m_selectionMode == SelectionMode::Edges) {
                     addToSelection(pickedNode);
-                    // Don't emit signal for Ctrl+click to avoid tree view interference
+                    // Optionally emit edgePicked here if you want multi-selection for edges too
                 }
             } else {
                 // Regular click: clear selection and select single item
@@ -955,15 +1025,10 @@ void CadOpenGLWidget::updateFrustumPlanes() {
     }
 }
 
-bool CadOpenGLWidget::isInFrustum(const TopoDS_Face& face, const TopLoc_Location& loc) {
+bool CadOpenGLWidget::isInFrustum(const TopoDS_Face& face, const TopLoc_Location&) {
     // Balanced frustum culling - permissive but not overly so
     Bnd_Box bbox;
-    if (!loc.IsIdentity()) {
-        TopoDS_Face transformedFace = TopoDS::Face(face.Located(loc));
-        BRepBndLib::Add(transformedFace, bbox);
-    } else {
-        BRepBndLib::Add(face, bbox);
-    }
+    BRepBndLib::Add(face, bbox);
     
     if (bbox.IsVoid()) return true; // If we can't determine bounds, render it
     
@@ -1253,7 +1318,7 @@ bool CadOpenGLWidget::pickElementAt(const QPoint& pos, QVector3D* outIntersectio
         XCAFNodeData* xData = inst.node->asXCAF();
         CadNode* node = inst.node;
         if (!node || !xData->hasFace()) continue;
-        TopoDS_Face face = TopoDS::Face(xData->getFace().Located(node->loc));
+        TopoDS_Face face = TopoDS::Face(xData->getFace().Located(inst.accumulatedLoc));
         BRepIntCurveSurface_Inter intersector;
         intersector.Init(face, ray, 1e-6);
         while (intersector.More()) {
@@ -1275,7 +1340,7 @@ bool CadOpenGLWidget::pickElementAt(const QPoint& pos, QVector3D* outIntersectio
     if (pickedFace && pickedFace->node) {
         CadNode* node = pickedFace->node;
         XCAFNodeData* xData = pickedFace->node->asXCAF();
-        selectedFace_ = TopoDS::Face(xData->getFace().Located(node->loc));
+        selectedFace_ = TopoDS::Face(xData->getFace().Located(pickedFace->accumulatedLoc));
         selectedFaceNode_ = node;
         if (m_frameCount % 60 == 0) {
             qDebug() << "[Ray] Selected face at TShape address:" << (void*)selectedFace_.TShape().get();
@@ -1343,7 +1408,7 @@ bool CadOpenGLWidget::pickEdgeAt(const QPoint& pos, QVector3D* outIntersection) 
         XCAFNodeData* xData = inst.node->asXCAF();
 
         if (!xData || !xData->hasEdge()) continue;
-        TopoDS_Edge edge = TopoDS::Edge(xData->getEdge().Located(node->loc));
+        TopoDS_Edge edge = TopoDS::Edge(xData->getEdge().Located(inst.accumulatedLoc));
         
         // Find closest point on edge to ray
         Standard_Real first, last;
@@ -1382,7 +1447,7 @@ bool CadOpenGLWidget::pickEdgeAt(const QPoint& pos, QVector3D* outIntersection) 
             if (pickedEdge && pickedEdge->node) {
             CadNode* node = pickedEdge->node;
             XCAFNodeData* xData = node->asXCAF();
-            selectedEdge_ = TopoDS::Edge(xData->getEdge().Located(node->loc));
+            selectedEdge_ = TopoDS::Edge(xData->getEdge().Located(pickedEdge->accumulatedLoc));
             selectedEdgeNode_ = node;
             if (m_frameCount % 60 == 0) {
                 qDebug() << "[Ray] Selected edge at TShape address:" << (void*)selectedEdge_.TShape().get();
@@ -1447,7 +1512,7 @@ bool CadOpenGLWidget::pickElementAtForPivot(const QPoint& pos, QVector3D* outInt
         CadNode* node = inst.node;
         XCAFNodeData* xData = node->asXCAF();
         if (!xData || !xData->hasFace()) continue;
-        TopoDS_Face face = TopoDS::Face(xData->getFace().Located(node->loc));
+        TopoDS_Face face = TopoDS::Face(xData->getFace().Located(inst.accumulatedLoc));
         BRepIntCurveSurface_Inter intersector;
         intersector.Init(face, ray, 1e-6);
         while (intersector.More()) {
@@ -1500,7 +1565,7 @@ void CadOpenGLWidget::pickHoveredFaceAt(const QPoint& pos) {
         CadNode* node = inst.node;
         XCAFNodeData* xData = node->asXCAF();
         if (!node || !xData->hasFace()) continue;
-        TopoDS_Face face = TopoDS::Face(xData->getFace().Located(node->loc));
+        TopoDS_Face face = TopoDS::Face(xData->getFace().Located(inst.accumulatedLoc));
         BRepIntCurveSurface_Inter intersector;
         intersector.Init(face, ray, 1e-6);
         while (intersector.More()) {
@@ -1516,7 +1581,7 @@ void CadOpenGLWidget::pickHoveredFaceAt(const QPoint& pos) {
     if (pickedFace && pickedFace->node) {
         CadNode* node = pickedFace->node;
         XCAFNodeData* xData = node->asXCAF();
-        hoveredFace_ = TopoDS::Face(xData->getFace().Located(node->loc));
+        hoveredFace_ = TopoDS::Face(xData->getFace().Located(pickedFace->accumulatedLoc));
         hoveredFaceNode_ = node; // Store the picked node
     }
     
@@ -1552,7 +1617,7 @@ void CadOpenGLWidget::pickHoveredEdgeAt(const QPoint& pos) {
         CadNode* node = inst.node;
         XCAFNodeData* xData = node->asXCAF();
         if (!xData || !xData->hasEdge()) continue;
-        TopoDS_Edge edge = TopoDS::Edge(xData->getEdge().Located(node->loc));
+        TopoDS_Edge edge = TopoDS::Edge(xData->getEdge().Located(inst.accumulatedLoc));
         
         // Find closest point on edge to ray
         Standard_Real first, last;
@@ -1585,7 +1650,7 @@ void CadOpenGLWidget::pickHoveredEdgeAt(const QPoint& pos) {
     if (pickedEdge && pickedEdge->node) {
         CadNode* node = pickedEdge->node;
         XCAFNodeData* xData = node->asXCAF();
-        hoveredEdge_ = TopoDS::Edge(xData->getEdge().Located(node->loc));
+        hoveredEdge_ = TopoDS::Edge(xData->getEdge().Located(pickedEdge->accumulatedLoc));
         hoveredEdgeNode_ = node;
     }
     
@@ -1611,9 +1676,21 @@ void CadOpenGLWidget::buildFaceCache() {
     cacheTimer.start();
     faceCache_.clear();
     if (!rootNode_) return;
-    std::vector<CadNode*> faceNodes;
-    for (auto& child : rootNode_->children) collectFaceNodes(child.get(), faceNodes);
-    for (CadNode* n : faceNodes) faceCache_.push_back(FaceInstance{n});
+    std::vector<std::pair<CadNode*, TopLoc_Location>> faceNodes;
+    std::function<void(CadNode*, TopLoc_Location)> collect;
+    collect = [&](CadNode* node, TopLoc_Location accumulatedLoc) {
+        if (!node) return;
+        TopLoc_Location newAccumulatedLoc = accumulateNodeTransform(node, accumulatedLoc);
+        XCAFNodeData* xData = node->asXCAF();
+        if (xData && xData->type == TopAbs_FACE && xData->hasFace()) {
+            faceNodes.emplace_back(node, newAccumulatedLoc);
+        }
+        for (auto& child : node->children) {
+            collect(child.get(), newAccumulatedLoc);
+        }
+    };
+    for (auto& child : rootNode_->children) collect(child.get(), TopLoc_Location());
+    for (const auto& pair : faceNodes) faceCache_.push_back(FaceInstance{pair.first, pair.second});
     qint64 cacheTime = cacheTimer.nsecsElapsed();
     if (m_frameCount % 60 == 0) {
         qDebug() << "[Profile] buildFaceCache took:" << cacheTime / 1000000.0 << "ms (cached" << faceCache_.size() << "faces)";
@@ -1799,27 +1876,27 @@ void CadOpenGLWidget::setPivotSphere(const QVector3D& worldPos) {
     update();
 } 
 
-// Helper to recursively accumulate bounding box for a node and its children
-static void accumulateBoundingBox(const CadNode* node, Bnd_Box& bbox) {
+// Helper to recursively accumulate bounding box for a node and its children, using transform accumulation
+static void accumulateBoundingBox(const CadNode* node, const TopLoc_Location& accumulatedLoc, Bnd_Box& bbox) {
     if (!node) return;
+    TopLoc_Location newAccumulatedLoc = accumulateNodeTransform(node, accumulatedLoc);
     const XCAFNodeData* xData = node->asXCAF();
     if (xData) {
         if (xData->type == TopAbs_FACE && xData->hasFace()) {
-            TopoDS_Face locatedFace = TopoDS::Face(xData->getFace().Located(node->loc));
+            TopoDS_Face locatedFace = TopoDS::Face(xData->getFace().Located(newAccumulatedLoc));
             BRepBndLib::Add(locatedFace, bbox);
         }
     }
     for (const auto& child : node->children) {
-        if (child) accumulateBoundingBox(child.get(), bbox);
+        if (child) accumulateBoundingBox(child.get(), newAccumulatedLoc, bbox);
     }
 }
 
 void CadOpenGLWidget::reframeCamera() {
     if (!rootNode_) return;
-
     // 1. Compute bounding box
     Bnd_Box bbox;
-    accumulateBoundingBox(rootNode_, bbox);
+    accumulateBoundingBox(rootNode_, TopLoc_Location(), bbox);
     if (bbox.IsVoid()) return;
 
     Standard_Real xmin, ymin, zmin, xmax, ymax, zmax;
@@ -1960,22 +2037,9 @@ void CadOpenGLWidget::drawReferenceFrame(const TopLoc_Location& loc, float axisL
 }
 
 // Add this function near other rendering helpers
-void CadOpenGLWidget::renderConvexHulls(const PhysicsNodeData* physData, const TopLoc_Location& loc) {
+void CadOpenGLWidget::renderConvexHulls(const PhysicsNodeData* physData, const TopLoc_Location&) {
     if (!physData) return;
-    glPushMatrix();
-    // Apply transformation if needed
-    if (!loc.IsIdentity()) {
-        const gp_Trsf& trsf = loc.Transformation();
-        const gp_Mat& mat = trsf.VectorialPart();
-        const gp_XYZ& trans = trsf.TranslationPart();
-        double matrix[16] = {
-            mat.Value(1,1), mat.Value(2,1), mat.Value(3,1), 0.0,
-            mat.Value(1,2), mat.Value(2,2), mat.Value(3,2), 0.0,
-            mat.Value(1,3), mat.Value(2,3), mat.Value(3,3), 0.0,
-            trans.X(),     trans.Y(),     trans.Z(),     1.0
-        };
-        glMultMatrixd(matrix);
-    }
+    // No transform application here; rely on OpenGL stack
     for (const auto& hull : physData->hulls) {
         // Draw filled hull
         glColor4f(1.0f, 0.5f, 0.1f, 0.3f); // Orange, semi-transparent
@@ -2001,7 +2065,6 @@ void CadOpenGLWidget::renderConvexHulls(const PhysicsNodeData* physData, const T
         }
         glEnd();
     }
-    glPopMatrix();
 }
 
 

@@ -89,6 +89,7 @@ public:
     void setCameraState(const CameraState& state);
     // Add this slot for tree selection
     static void collectFaceNodes(CadNode *node, std::vector<CadNode*> &out);
+    const CadNode* getRootTreeNode() const { return rootNode_; }
 public slots:
     void clearSelection();
     void addToSelection(CadNode* node);
@@ -98,7 +99,8 @@ public slots:
     void markCacheDirty(); // Force cache to be rebuilt on next paint
     void drawReferenceFrame(const TopLoc_Location& loc, float axisLength);
     CadNode* getSelectedFrameNode() const { return selectedFrameNode_; }
-    void setSelectedFrameNode(CadNode* node) { selectedFrameNode_ = node; update(); }
+    void setSelectedFrameNode(CadNode* node, const TopLoc_Location& accLoc) { selectedFrameNode_ = node; selectedFrameNodeAccumulatedLoc_ = accLoc; update(); }
+    void setSelectedFrameNode(CadNode* node) { selectedFrameNode_ = node; selectedFrameNodeAccumulatedLoc_ = node ? node->loc : TopLoc_Location(); update(); }
 protected:
     void initializeGL() override;
     void resizeGL(int w, int h) override;
@@ -127,6 +129,7 @@ private:
     CadNode* selectedEdgeNode_ = nullptr;
     CadNode* hoveredEdgeNode_ = nullptr;
     CadNode* selectedFrameNode_ = nullptr;
+    TopLoc_Location selectedFrameNodeAccumulatedLoc_;
     
     // Multi-selection support
     std::vector<CadNode*> selectedFaceNodes_;
@@ -142,6 +145,7 @@ private:
     // Flat cache of all visible faces (per instance)
     struct FaceInstance {
         CadNode* node;
+        TopLoc_Location accumulatedLoc;
     };
     std::vector<FaceInstance> faceCache_;
     void buildFaceCache();
@@ -149,10 +153,12 @@ private:
     // Flat cache of all visible edges (per instance)
     struct EdgeInstance {
         CadNode* node;
+        TopLoc_Location accumulatedLoc;
     };
     std::vector<EdgeInstance> edgeCache_;
     void buildEdgeCache();
-    void traverseAndRender(const CadNode *node, CADNodeColor inheritedColor, bool ancestorsVisible);
+    // Update: Add accumulatedLoc parameter for hierarchical transform
+    void traverseAndRender(const CadNode *node, CADNodeColor inheritedColor, const TopLoc_Location& accumulatedLoc, bool ancestorsVisible);
     void renderEdge(const TopoDS_Edge &edge, const CADNodeColor &color);
     // Overload: pick and output intersection point (returns true if hit)
     bool pickElementAt(const QPoint& pos, QVector3D* outIntersection = nullptr);
@@ -179,7 +185,7 @@ private:
     // Optimized rendering functions
     void renderBatchedGeometry();
     void buildColorBatches();
-    void renderFaceOptimized(const CadNode* xData, const CADNodeColor& color);
+    void renderFaceOptimized(const CadNode* node, const CADNodeColor& color, const TopLoc_Location& accumulatedLoc);
     void renderEdgeOptimized(const CadNode* node, const CADNodeColor& color);
     void renderHighlightedEdges();
     CachedGeometry& getOrCreateCachedGeometry(const TopoDS_Face& face);

@@ -81,4 +81,20 @@ QModelIndex CadTreeModel::indexForNode(CadNode* target) const {
         return QModelIndex();
     };
     return find(m_root.get(), QModelIndex());
+}
+
+// Recursively find the parent of a given node
+CadNode* CadTreeModel::getParentNode(const CadNode* node) const {
+    if (!m_root || node == m_root.get()) return nullptr;
+    std::function<CadNode*(CadNode*)> findParent = [&](CadNode* current) -> CadNode* {
+        for (const auto& child : current->children) {
+            if (child.get() == node) return current;
+            if (child) {
+                CadNode* res = findParent(child.get());
+                if (res) return res;
+            }
+        }
+        return nullptr;
+    };
+    return findParent(m_root.get());
 } 

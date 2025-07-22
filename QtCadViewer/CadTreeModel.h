@@ -18,6 +18,7 @@ public:
     CadNode* nodeFromIndex(const QModelIndex& index) const;
     CadNode* getRootNodePointer() const { return m_root.get(); }
     QModelIndex indexForNode(CadNode* target) const;
+    CadNode* getParentNode(const CadNode* node) const;
 private:
     std::unique_ptr<CadNode> m_root;
 }; 
