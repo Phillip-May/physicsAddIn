@@ -201,6 +201,7 @@ private:
     void clearGeometryCache();
     void drawBoundingBox(const QVector3D& min, const QVector3D& max, const QVector4D& color);
     void renderConvexHulls(const PhysicsNodeData *physData, const TopLoc_Location &loc);
+    void renderConnectionPoint(const CadNode* node, const CADNodeColor& color);
 signals:
     void facePicked(CadNode* node);
     void edgePicked(CadNode* node);

@@ -29,6 +29,9 @@
 #include <set>
 #include <QComboBox>
 #include <QCheckBox>
+#include <Geom_Plane.hxx>
+#include <BRepTools.hxx>
+#include <gp_Quaternion.hxx>
 
 #include "CadNode.h"
 #include "XCAFLabelTreeModel.h"
@@ -41,6 +44,8 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 #include <QPoint>
+#include <QInputDialog>
+#include <QLineEdit>
 
 // Helper to recursively build XCAFLabelNode tree with sub-assembly detection
 std::unique_ptr<XCAFLabelNode> buildLabelTree(const TDF_Label& label, const Handle(XCAFDoc_ShapeTool)& shapeTool = nullptr) {
@@ -672,8 +677,12 @@ void connectTreeAndViewer(QTreeView* tree, CadOpenGLWidget* viewer, ModelType* m
                 tree->expand(parentIdx);
                 parentIdx = parentIdx.parent();
             }
-            tree->setCurrentIndex(idx);
-            tree->scrollTo(idx);
+            // Multi-selection: add to selection instead of replacing
+            QItemSelectionModel* selModel = tree->selectionModel();
+            if (selModel) {
+                selModel->select(idx, QItemSelectionModel::Select | QItemSelectionModel::Rows);
+                tree->scrollTo(idx);
+            }
         }
     });
     QObject::connect(viewer, &CadOpenGLWidget::edgePicked, tree, [=](CadNode* node) {
@@ -695,6 +704,8 @@ static void generateVHACDStub(const QString& nodeName, int resolution, int maxHu
     std::vector<CadNode*> faces;
     qDebug() << "Node Name: " << node->name.c_str();
     CadOpenGLWidget::collectFaceNodes(node, faces);
+    // Filter out excluded nodes
+    faces.erase(std::remove_if(faces.begin(), faces.end(), [](CadNode* n) { return n->excludedFromDecomposition; }), faces.end());
     qDebug() << "Face count: " << faces.size();
     int numInputFaces = static_cast<int>(faces.size());
     std::vector<VHACD::Vertex> vertices;
@@ -817,6 +828,8 @@ static void generateCoACDStub(const QString& nodeName, double concavity, double 
     std::vector<CadNode*> faces;
     qDebug() << "Node Name: " << node->name.c_str();
     CadOpenGLWidget::collectFaceNodes(node, faces);
+    // Filter out excluded nodes
+    faces.erase(std::remove_if(faces.begin(), faces.end(), [](CadNode* n) { return n->excludedFromDecomposition; }), faces.end());
     qDebug() << "Face count: " << faces.size();
     int numInputFaces = static_cast<int>(faces.size());
     std::vector<double> vertices;
@@ -943,6 +956,18 @@ static void generateCoACDStub(const QString& nodeName, double concavity, double 
                     .arg(percent)
                     .arg(biggerSmaller);
     }
+}
+
+// Helper: Deep copy a CadNode and all non-excluded children
+std::shared_ptr<CadNode> deepCopyNodeNonExcluded(const CadNode* src) {
+    if (!src || src->excludedFromDecomposition) return nullptr;
+    auto copy = std::make_shared<CadNode>(*src);
+    copy->children.clear();
+    for (const auto& child : src->children) {
+        auto childCopy = deepCopyNodeNonExcluded(child.get());
+        if (childCopy) copy->children.push_back(childCopy);
+    }
+    return copy;
 }
 
 int main(int argc, char *argv[])
@@ -1081,10 +1106,16 @@ int main(int argc, char *argv[])
     mainWindow.setCentralWidget(centralWidget);
 
     // --- Custom Model Tree ---
-    // Create persistent root node for the custom model
+    // Create a special invisible root container node
+    std::shared_ptr<CadNode> customModelRootContainer = std::make_shared<CadNode>();
+    customModelRootContainer->name = "Custom Model Root Container";
+    customModelRootContainer->visible = true;
+    // The actual rail/root node
     std::shared_ptr<CadNode> customModelRoot = std::make_shared<CadNode>();
     customModelRoot->name = "Custom Model Root";
-    CustomModelTreeModel* customModel = new CustomModelTreeModel(customModelRoot);
+    customModelRoot->visible = true;
+    customModelRootContainer->children.push_back(customModelRoot);
+    CustomModelTreeModel* customModel = new CustomModelTreeModel(customModelRootContainer);
     QTreeView* customModelTreeView = new QTreeView;
     customModelTreeView->setModel(customModel);
     customModelTreeView->setHeaderHidden(false);
@@ -1121,7 +1152,7 @@ int main(int argc, char *argv[])
     // Custom model part OpenGL widget
     CadOpenGLWidget *customPartViewer = new CadOpenGLWidget;
     customPartViewer->setRootTreeNode(customModel->getRootNodePointer());
-    viewTabWidget->addTab(customPartViewer, "Custom Model Part");
+    viewTabWidget->addTab(customPartViewer, "Custom Model Part Editor");
 
     // Connect selection for both tree/view pairs
     connectTreeAndViewer(treeView, viewer, model);
@@ -1362,30 +1393,41 @@ int main(int argc, char *argv[])
         }
 
         // --- Unselect by Color ---
-        QAction* unselectByColorAction = menu.addAction("Unselect All by Color");
-        QObject::connect(unselectByColorAction, &QAction::triggered, treeView, [=]() {
-            // Gather all selected nodes and their colors
+        QAction* excludeByColorAction = menu.addAction("Exclude All by Color");
+        QObject::connect(excludeByColorAction, &QAction::triggered, treeView, [=]() {
             QModelIndexList selectedIndexes = treeView->selectionModel()->selectedIndexes();
             if (selectedIndexes.empty()) return;
             QMap<QString, QList<QModelIndex>> colorToIndexes;
             QMap<QString, QColor> colorKeyToColor;
-            for (const QModelIndex& selIdx : selectedIndexes) {
-                CadNode* n = model->getNode(selIdx);
+            // Helper to recursively collect all nodes and their children
+            std::function<void(const QModelIndex&)> collectByColor;
+            collectByColor = [&](const QModelIndex& idx) {
+                if (!idx.isValid()) return;
+                CadNode* n = model->getNode(idx);
                 if (n) {
                     QColor color = n->color.toQColor();
                     QString colorKey = color.name(QColor::HexArgb);
-                    colorToIndexes[colorKey].append(selIdx);
+                    colorToIndexes[colorKey].append(idx);
                     colorKeyToColor[colorKey] = color;
                 }
+                int rowCount = model->rowCount(idx);
+                for (int i = 0; i < rowCount; ++i) {
+                    collectByColor(model->index(i, 0, idx));
+                }
+            };
+            for (const QModelIndex& selIdx : selectedIndexes) {
+                collectByColor(selIdx);
             }
             if (colorToIndexes.isEmpty()) return;
             if (colorToIndexes.size() == 1) {
-                // Only one color, unselect all
-                QList<QModelIndex> toUnselect = colorToIndexes.first();
-                QItemSelectionModel* selModel = treeView->selectionModel();
-                for (const QModelIndex& idx : toUnselect) {
-                    selModel->select(idx, QItemSelectionModel::Deselect);
+                // Only one color, exclude all
+                QList<QModelIndex> toExclude = colorToIndexes.first();
+                for (const QModelIndex& idx : toExclude) {
+                    CadNode* n = model->getNode(idx);
+                    if (n) n->excludedFromDecomposition = true;
                 }
+                viewer->update();
+                for (const QModelIndex& idx : toExclude) model->dataChanged(idx, idx);
             } else {
                 // Multiple colors, show a submenu to pick
                 QMenu colorMenu;
@@ -1393,7 +1435,7 @@ int main(int argc, char *argv[])
                 for (auto it = colorToIndexes.begin(); it != colorToIndexes.end(); ++it) {
                     QString colorKey = it.key();
                     QColor color = colorKeyToColor[colorKey];
-                    QString label = QString("Unselect color: ") + color.name(QColor::HexArgb) + QString(" (%1)").arg(it.value().size());
+                    QString label = QString("Exclude color: ") + color.name(QColor::HexArgb) + QString(" (%1)").arg(it.value().size());
                     QAction* colorAct = colorMenu.addAction(label);
                     QPixmap pix(16, 16);
                     pix.fill(color);
@@ -1403,11 +1445,13 @@ int main(int argc, char *argv[])
                 QAction* chosen = colorMenu.exec(QCursor::pos());
                 if (chosen && actionToColorKey.contains(chosen)) {
                     QString chosenColorKey = actionToColorKey[chosen];
-                    QList<QModelIndex> toUnselect = colorToIndexes[chosenColorKey];
-                    QItemSelectionModel* selModel = treeView->selectionModel();
-                    for (const QModelIndex& idx : toUnselect) {
-                        selModel->select(idx, QItemSelectionModel::Deselect);
+                    QList<QModelIndex> toExclude = colorToIndexes[chosenColorKey];
+                    for (const QModelIndex& idx : toExclude) {
+                        CadNode* n = model->getNode(idx);
+                        if (n) n->excludedFromDecomposition = true;
                     }
+                    viewer->update();
+                    for (const QModelIndex& idx : toExclude) model->dataChanged(idx, idx);
                 }
             }
         });
@@ -1449,13 +1493,14 @@ int main(int argc, char *argv[])
             auto physicsData = std::make_shared<PhysicsNodeData>();
             newPart->data = physicsData;
             newPart->visible = false;
-            // Add selected nodes as children of the part node
+            // Add selected nodes as deep copies (non-excluded only)
             for (CadNode* n : nodes) {
-                if (n) newPart->children.push_back(std::make_shared<CadNode>(*n));
+                auto copy = deepCopyNodeNonExcluded(n);
+                if (copy) newPart->children.push_back(copy);
             }
             customModelRoot->children.push_back(newPart);
-            customModel->layoutChanged(); // Notify model of structure change
-            customPartViewer->setRootTreeNode(customModel->getRootNodePointer()); // Update viewer's root node
+            customModel->layoutChanged();
+            customPartViewer->setRootTreeNode(customModel->getRootNodePointer());
         });
         QObject::connect(addStartSegAction, &QAction::triggered, treeView, [=]() {
             auto nodes = getSelectedNodes();
@@ -1470,11 +1515,12 @@ int main(int argc, char *argv[])
             newPart->data = physicsData;
             newPart->visible = false;
             for (CadNode* n : nodes) {
-                if (n) newPart->children.push_back(std::make_shared<CadNode>(*n));
+                auto copy = deepCopyNodeNonExcluded(n);
+                if (copy) newPart->children.push_back(copy);
             }
             customModelRoot->children.push_back(newPart);
-            customModel->layoutChanged(); // Notify model of structure change
-            customPartViewer->setRootTreeNode(customModel->getRootNodePointer()); // Update viewer's root node
+            customModel->layoutChanged();
+            customPartViewer->setRootTreeNode(customModel->getRootNodePointer());
         });
         QObject::connect(addEndSegAction, &QAction::triggered, treeView, [=]() {
             auto nodes = getSelectedNodes();
@@ -1489,11 +1535,12 @@ int main(int argc, char *argv[])
             newPart->data = physicsData;
             newPart->visible = false;
             for (CadNode* n : nodes) {
-                if (n) newPart->children.push_back(std::make_shared<CadNode>(*n));
+                auto copy = deepCopyNodeNonExcluded(n);
+                if (copy) newPart->children.push_back(copy);
             }
             customModelRoot->children.push_back(newPart);
-            customModel->layoutChanged(); // Notify model of structure change
-            customPartViewer->setRootTreeNode(customModel->getRootNodePointer()); // Update viewer's root node
+            customModel->layoutChanged();
+            customPartViewer->setRootTreeNode(customModel->getRootNodePointer());
         });
         QObject::connect(addMiddleSegAction, &QAction::triggered, treeView, [=]() {
             auto nodes = getSelectedNodes();
@@ -1508,11 +1555,12 @@ int main(int argc, char *argv[])
             newPart->data = physicsData;
             newPart->visible = false;
             for (CadNode* n : nodes) {
-                if (n) newPart->children.push_back(std::make_shared<CadNode>(*n));
+                auto copy = deepCopyNodeNonExcluded(n);
+                if (copy) newPart->children.push_back(copy);
             }
             customModelRoot->children.push_back(newPart);
-            customModel->layoutChanged(); // Notify model of structure change
-            customPartViewer->setRootTreeNode(customModel->getRootNodePointer()); // Update viewer's root node
+            customModel->layoutChanged();
+            customPartViewer->setRootTreeNode(customModel->getRootNodePointer());
         });
         // --- Custom Model Clear Logic ---
         QObject::connect(clearCarriageAction, &QAction::triggered, treeView, [=]() {
@@ -1792,6 +1840,30 @@ int main(int argc, char *argv[])
             });
         }
         
+        QAction* excludeAction = nullptr;
+        if (node->excludedFromDecomposition) {
+            excludeAction = menu.addAction("Include in Decomposition");
+        } else {
+            excludeAction = menu.addAction("Exclude from Decomposition");
+        }
+        QObject::connect(excludeAction, &QAction::triggered, treeView, [=]() {
+            // Recursively set excludedFromDecomposition for node and all children
+            std::function<void(CadNode*, bool)> setExcludedRecursive = [&](CadNode* n, bool value) {
+                n->excludedFromDecomposition = value;
+                for (auto& child : n->children) {
+                    if (child) setExcludedRecursive(child.get(), value);
+                }
+            };
+            bool newValue = !node->excludedFromDecomposition;
+            setExcludedRecursive(node, newValue);
+            model->dataChanged(idx, idx); // Update tree display
+            viewer->update(); // Refresh viewer if needed
+        });
+        
+        // --- Exclude/Include by Color ---
+        // (Removed from CAD Tree context menu)
+        // (No QAction* excludeByColorAction or includeByColorAction or related logic here)
+        
         menu.exec(treeView->viewport()->mapToGlobal(pos));
     });
 
@@ -1802,6 +1874,26 @@ int main(int argc, char *argv[])
         CadNode* node = const_cast<CadNode*>(customModel->getNode(idx));
         if (!node) return;
         QMenu menu;
+        // Exclude/include from decomposition option
+        QAction* excludeAction = nullptr;
+        if (node->excludedFromDecomposition) {
+            excludeAction = menu.addAction("Include in Decomposition");
+        } else {
+            excludeAction = menu.addAction("Exclude from Decomposition");
+        }
+        QObject::connect(excludeAction, &QAction::triggered, customModelTreeView, [=]() {
+            // Recursively set excludedFromDecomposition for node and all children
+            std::function<void(CadNode*, bool)> setExcludedRecursive = [&](CadNode* n, bool value) {
+                n->excludedFromDecomposition = value;
+                for (auto& child : n->children) {
+                    if (child) setExcludedRecursive(child.get(), value);
+                }
+            };
+            bool newValue = !node->excludedFromDecomposition;
+            setExcludedRecursive(node, newValue);
+            customModel->dataChanged(idx, idx); // Update tree display
+            customPartViewer->update(); // Refresh viewer if needed
+        });
         // Only show for physics nodes
         if (node->type == CadNodeType::Physics) {
             QAction* vhacdAction = menu.addAction("Generate V-HACD");
@@ -2010,8 +2102,434 @@ int main(int argc, char *argv[])
                 coacdWidget->raise();
             });
         }
+        
+        // Add connection point configuration for existing connection points
+        if (node->type == CadNodeType::ConnectionPoint) {
+            menu.addSeparator();
+            QAction* configureConnectionAction = menu.addAction("Configure Connection Point");
+            QObject::connect(configureConnectionAction, &QAction::triggered, customModelTreeView, [=]() {
+                ConnectionPointData* connData = node->asConnectionPoint();
+                if (!connData) return;
+                
+                // Create configuration dialog
+                QDialog* configDialog = new QDialog(nullptr);
+                configDialog->setWindowTitle("Configure Connection Point");
+                configDialog->setAttribute(Qt::WA_DeleteOnClose);
+                
+                QVBoxLayout* layout = new QVBoxLayout(configDialog);
+                
+                // Connection type checkboxes
+                QCheckBox* cablesCheck = new QCheckBox("Can connect cables");
+                QCheckBox* conveyorsCheck = new QCheckBox("Can connect conveyors");
+                
+                // Set current state
+                cablesCheck->setChecked(connData->canConnectCables());
+                conveyorsCheck->setChecked(connData->canConnectConveyors());
+                
+                layout->addWidget(cablesCheck);
+                layout->addWidget(conveyorsCheck);
+                
+                // Description field
+                QFormLayout* formLayout = new QFormLayout();
+                QLineEdit* descriptionEdit = new QLineEdit(QString::fromStdString(connData->description));
+                formLayout->addRow("Description:", descriptionEdit);
+                layout->addLayout(formLayout);
+                
+                // Buttons
+                QHBoxLayout* buttonLayout = new QHBoxLayout();
+                QPushButton* okButton = new QPushButton("OK");
+                QPushButton* cancelButton = new QPushButton("Cancel");
+                buttonLayout->addWidget(okButton);
+                buttonLayout->addWidget(cancelButton);
+                layout->addLayout(buttonLayout);
+                
+                // Connect buttons
+                QObject::connect(okButton, &QPushButton::clicked, configDialog, [=]() {
+                    // Update connection flags
+                    connData->setCanConnectCables(cablesCheck->isChecked());
+                    connData->setCanConnectConveyors(conveyorsCheck->isChecked());
+                    connData->description = descriptionEdit->text().toStdString();
+                    
+                    // Update node name to reflect connection types
+                    QString connectionTypes;
+                    if (connData->canConnectCables() && connData->canConnectConveyors()) {
+                        connectionTypes = "Cables & Conveyors";
+                    } else if (connData->canConnectCables()) {
+                        connectionTypes = "Cables";
+                    } else if (connData->canConnectConveyors()) {
+                        connectionTypes = "Conveyors";
+                    } else {
+                        connectionTypes = "None";
+                    }
+                    
+                    // Extract location from current location
+                    gp_Trsf transform = node->loc.Transformation();
+                    gp_XYZ translation = transform.TranslationPart();
+                    
+                    node->name = QString("Connection Point (%1) | Location: (%2, %3, %4)")
+                        .arg(connectionTypes)
+                        .arg(QString::number(translation.X(), 'f', 2))
+                        .arg(QString::number(translation.Y(), 'f', 2))
+                        .arg(QString::number(translation.Z(), 'f', 2))
+                        .toStdString();
+                    
+                    // Update tree display
+                    customModel->layoutChanged();
+                    customPartViewer->update();
+                    
+                    configDialog->accept();
+                });
+                
+                QObject::connect(cancelButton, &QPushButton::clicked, configDialog, &QDialog::reject);
+                
+                configDialog->exec();
+            });
+        }
+        
+        // In the customModelTreeView context menu, add exclude/include by color options:
+        QAction* excludeByColorAction2 = menu.addAction("Exclude All by Color");
+        QAction* includeByColorAction2 = menu.addAction("Include All by Color");
+        QObject::connect(excludeByColorAction2, &QAction::triggered, customModelTreeView, [=]() {
+            QModelIndexList selectedIndexes = customModelTreeView->selectionModel()->selectedIndexes();
+            if (selectedIndexes.empty()) return;
+            QMap<QString, QColor> colorKeyToColor;
+            // Gather all unique colors in the tree
+            std::function<void(CadNode*)> collectColors;
+            collectColors = [&](CadNode* n) {
+                if (n) {
+                    QColor color = n->color.toQColor();
+                    QString colorKey = color.name(QColor::HexArgb);
+                    colorKeyToColor[colorKey] = color;
+                    for (auto& child : n->children) collectColors(child.get());
+                }
+            };
+            for (const auto& child : customModel->getRootNodePointer()->children) collectColors(child.get());
+            if (colorKeyToColor.isEmpty()) return;
+            QMenu colorMenu;
+            QMap<QAction*, QString> actionToColorKey;
+            for (auto it = colorKeyToColor.begin(); it != colorKeyToColor.end(); ++it) {
+                QString colorKey = it.key();
+                QColor color = it.value();
+                QString label = QString("Exclude color: ") + color.name(QColor::HexArgb);
+                QAction* colorAct = colorMenu.addAction(label);
+                QPixmap pix(16, 16);
+                pix.fill(color);
+                colorAct->setIcon(QIcon(pix));
+                actionToColorKey[colorAct] = colorKey;
+            }
+            QAction* chosen = colorMenu.exec(QCursor::pos());
+            if (chosen && actionToColorKey.contains(chosen)) {
+                QString chosenColorKey = actionToColorKey[chosen];
+                // Traverse all nodes and exclude only those with the chosen color (do not recurse from a match)
+                std::function<void(CadNode*)> excludeByColor = [&](CadNode* n) {
+                    if (!n) return;
+                    QColor color = n->color.toQColor();
+                    QString colorKey = color.name(QColor::HexArgb);
+                    if (colorKey == chosenColorKey) {
+                        n->excludedFromDecomposition = true;
+                        // Do not recurse into children
+                        return;
+                    }
+                    for (auto& child : n->children) excludeByColor(child.get());
+                };
+                for (auto& child : customModel->getRootNodePointer()->children) excludeByColor(child.get());
+                customPartViewer->update();
+                customModel->layoutChanged();
+            }
+        });
+        QObject::connect(includeByColorAction2, &QAction::triggered, customModelTreeView, [=]() {
+            QModelIndexList selectedIndexes = customModelTreeView->selectionModel()->selectedIndexes();
+            if (selectedIndexes.empty()) return;
+            QMap<QString, QColor> colorKeyToColor;
+            std::function<void(CadNode*)> collectColors;
+            collectColors = [&](CadNode* n) {
+                if (n) {
+                    QColor color = n->color.toQColor();
+                    QString colorKey = color.name(QColor::HexArgb);
+                    colorKeyToColor[colorKey] = color;
+                    for (auto& child : n->children) collectColors(child.get());
+                }
+            };
+            for (const auto& child : customModel->getRootNodePointer()->children) collectColors(child.get());
+            if (colorKeyToColor.isEmpty()) return;
+            QMenu colorMenu;
+            QMap<QAction*, QString> actionToColorKey;
+            for (auto it = colorKeyToColor.begin(); it != colorKeyToColor.end(); ++it) {
+                QString colorKey = it.key();
+                QColor color = it.value();
+                QString label = QString("Include color: ") + color.name(QColor::HexArgb);
+                QAction* colorAct = colorMenu.addAction(label);
+                QPixmap pix(16, 16);
+                pix.fill(color);
+                colorAct->setIcon(QIcon(pix));
+                actionToColorKey[colorAct] = colorKey;
+            }
+            QAction* chosen = colorMenu.exec(QCursor::pos());
+            if (chosen && actionToColorKey.contains(chosen)) {
+                QString chosenColorKey = actionToColorKey[chosen];
+                std::function<void(CadNode*)> includeByColor = [&](CadNode* n) {
+                    if (!n) return;
+                    QColor color = n->color.toQColor();
+                    QString colorKey = color.name(QColor::HexArgb);
+                    if (colorKey == chosenColorKey) {
+                        n->excludedFromDecomposition = false;
+                        // Do not recurse into children
+                        return;
+                    }
+                    for (auto& child : n->children) includeByColor(child.get());
+                };
+                for (auto& child : customModel->getRootNodePointer()->children) includeByColor(child.get());
+                customPartViewer->update();
+                customModel->layoutChanged();
+            }
+        });
+
+        // Add connection point action for faces
+        QModelIndexList selectedIndexes = customModelTreeView->selectionModel()->selectedIndexes();
+        if (selectedIndexes.size() == 1) {
+            QModelIndex selIdx = selectedIndexes.first();
+            CadNode* n = const_cast<CadNode*>(customModel->getNode(selIdx));
+            if (n && n->asXCAF() && n->asXCAF()->type == TopAbs_FACE) {
+                QAction* addConnectionPointAction = menu.addAction("Add Connection Point");
+                QObject::connect(addConnectionPointAction, &QAction::triggered, customModelTreeView, [=]() {
+                    // Calculate face center
+                    XCAFNodeData* xData = n->asXCAF();
+                    TopoDS_Face face = TopoDS::Face(xData->getFace().Located(n->loc));
+                    
+                    // Calculate bounding box center as approximation of face center
+                    Bnd_Box bbox;
+                    BRepBndLib::Add(face, bbox);
+                    Standard_Real xmin, ymin, zmin, xmax, ymax, zmax;
+                    bbox.Get(xmin, ymin, zmin, xmax, ymax, zmax);
+                    
+                    // Calculate center point
+                    double centerX = (xmin + xmax) * 0.5;
+                    double centerY = (ymin + ymax) * 0.5;
+                    double centerZ = (zmin + zmax) * 0.5;
+                    
+                    // Create connection point node
+                    auto connectionPointNode = std::make_shared<CadNode>();
+                    connectionPointNode->name = QString("Connection Point | Face Center: (%1, %2, %3)")
+                        .arg(QString::number(centerX, 'f', 2))
+                        .arg(QString::number(centerY, 'f', 2))
+                        .arg(QString::number(centerZ, 'f', 2))
+                        .toStdString();
+                    
+                    // Set location to face center
+                    gp_Trsf transform;
+                    transform.SetTranslation(gp_Vec(centerX, centerY, centerZ));
+                    connectionPointNode->loc = TopLoc_Location(transform);
+                    
+                    // Set color (bright green for connection points)
+                    connectionPointNode->color = CADNodeColor::fromSRGB(0, 255, 0, 255);
+                    connectionPointNode->type = CadNodeType::ConnectionPoint;
+                    connectionPointNode->visible = true;
+                    
+                    // Create connection point data with default cable connection
+                    auto connectionData = std::make_shared<ConnectionPointData>();
+                    connectionData->connectionFlags = ConnectionFlags::Cables;
+                    connectionData->description = "Connection point created from face center";
+                    connectionPointNode->data = connectionData;
+                    
+                    // Find nearest ancestor Physics node
+                    QModelIndex ancestorIdx = selIdx.parent();
+                    CadNode* physicsAncestor = nullptr;
+                    while (ancestorIdx.isValid()) {
+                        CadNode* anc = const_cast<CadNode*>(customModel->getNode(ancestorIdx));
+                        if (anc && anc->type == CadNodeType::Physics) {
+                            physicsAncestor = anc;
+                            break;
+                        }
+                        ancestorIdx = ancestorIdx.parent();
+                    }
+                    if (physicsAncestor) {
+                        physicsAncestor->children.push_back(connectionPointNode);
+                        customModel->layoutChanged();
+                        customPartViewer->setRootTreeNode(customModel->getRootNodePointer());
+                        customPartViewer->update();
+                        qDebug() << "Added connection point at:" << centerX << centerY << centerZ;
+                    } else {
+                        QMessageBox::warning(nullptr, "No Physics Node", "No Physics node found in the ancestry. Please add a Physics node first.");
+                    }
+                });
+                
+                // Traverse up to find the nearest ancestor Physics node for extrusion
+                QModelIndex ancestorIdx = selIdx.parent();
+                CadNode* physicsAncestor = nullptr;
+                while (ancestorIdx.isValid()) {
+                    CadNode* anc = const_cast<CadNode*>(customModel->getNode(ancestorIdx));
+                    if (anc && anc->type == CadNodeType::Physics) {
+                        physicsAncestor = anc;
+                        break;
+                    }
+                    ancestorIdx = ancestorIdx.parent();
+                }
+                if (physicsAncestor) {
+                    QAction* extrudeAction = menu.addAction("Extrude Face to Collision Mesh");
+                    QObject::connect(extrudeAction, &QAction::triggered, customModelTreeView, [=]() {
+                        bool ok = false;
+                        double distance = QInputDialog::getDouble(nullptr, "Extrusion Distance", "Enter extrusion distance:", 10.0, -10000.0, 10000.0, 2, &ok);
+                        if (!ok) return;
+                        XCAFNodeData* xData = n->asXCAF();
+                        TopoDS_Face face = TopoDS::Face(xData->getFace().Located(n->loc));
+                        Handle(Geom_Surface) surf = BRep_Tool::Surface(face);
+                        Handle(Geom_Plane) plane = Handle(Geom_Plane)::DownCast(surf);
+                        if (plane.IsNull()) {
+                            QMessageBox::warning(nullptr, "Not Planar", "Selected face is not planar and cannot be extruded as a convex mesh.");
+                            return;
+                        }
+                        gp_Pln pln = plane->Pln();
+                        gp_Dir normal = pln.Axis().Direction();
+                        TopoDS_Wire outerWire = BRepTools::OuterWire(face);
+                        std::vector<gp_Pnt> baseVerts;
+                        for (TopExp_Explorer exp(outerWire, TopAbs_VERTEX); exp.More(); exp.Next()) {
+                            TopoDS_Vertex v = TopoDS::Vertex(exp.Current());
+                            baseVerts.push_back(BRep_Tool::Pnt(v));
+                        }
+                        if (baseVerts.size() < 3) {
+                            QMessageBox::warning(nullptr, "Invalid Face", "Face does not have enough vertices to extrude.");
+                            return;
+                        }
+                        std::vector<std::array<double, 3>> vertices;
+                        for (const auto& p : baseVerts) {
+                            vertices.push_back({p.X(), p.Y(), p.Z()});
+                        }
+                        for (const auto& p : baseVerts) {
+                            gp_Pnt p2 = p.Translated(normal.XYZ() * distance);
+                            vertices.push_back({p2.X(), p2.Y(), p2.Z()});
+                        }
+                        std::vector<std::array<uint32_t, 3>> indices;
+                        size_t N = baseVerts.size();
+                        for (size_t i = 1; i + 1 < N; ++i) {
+                            indices.push_back({0, uint32_t(i), uint32_t(i+1)});
+                        }
+                        for (size_t i = 1; i + 1 < N; ++i) {
+                            indices.push_back({uint32_t(N), uint32_t(N+i+1), uint32_t(N+i)});
+                        }
+                        for (size_t i = 0; i < N; ++i) {
+                            size_t next = (i+1)%N;
+                            uint32_t a = uint32_t(i);
+                            uint32_t b = uint32_t(next);
+                            uint32_t c = uint32_t(N+next);
+                            uint32_t d = uint32_t(N+i);
+                            indices.push_back({a, b, c});
+                            indices.push_back({a, c, d});
+                        }
+                        PhysicsNodeData* physData = physicsAncestor->asPhysics();
+                        if (!physData) return;
+                        ConvexHullData hull;
+                        hull.vertices = vertices;
+                        hull.indices = indices;
+                        physData->hulls.push_back(std::move(hull));
+                        physData->convexHullGenerated = true;
+                        customPartViewer->update();
+                        QMessageBox::information(nullptr, "Extrusion Complete", "Extruded mesh added to collision data.");
+                    });
+                }
+            }
+        }
+
+        // Align two faces by moving the parent solid/compound of the second face
+        if (selectedIndexes.size() == 2) {
+            CadNode* nodeA = const_cast<CadNode*>(customModel->getNode(selectedIndexes[0]));
+            CadNode* nodeB = const_cast<CadNode*>(customModel->getNode(selectedIndexes[1]));
+            if (nodeA && nodeB && nodeA->asXCAF() && nodeB->asXCAF() && nodeA->asXCAF()->type == TopAbs_FACE && nodeB->asXCAF()->type == TopAbs_FACE) {
+                QAction* alignFacesAction = menu.addAction("Align Selected Faces (Move Second)");
+                QObject::connect(alignFacesAction, &QAction::triggered, customModelTreeView, [=]() {
+                    // Helper to find parent solid/compound by walking up using getParentNode
+                    auto findParentPhysicsObject = [&](CadNode* n) -> CadNode* {
+                        const CadNode* parent = customModel->getParentNode(n);
+                        while (parent) {
+                            if (parent->type == CadNodeType::Physics)
+                                return const_cast<CadNode*>(parent);
+                            parent = customModel->getParentNode(parent);
+                        }
+                        return nullptr;
+                    };
+                    // Find parent solids
+                    CadNode* parentA = findParentPhysicsObject(nodeA);
+                    CadNode* parentB = findParentPhysicsObject(nodeB);
+                    if (!parentA || !parentB) {
+                        // Debug: print ancestry for nodeA
+                        const CadNode* debugParentA = customModel->getParentNode(nodeA);
+                        QString ancestryA;
+                        while (debugParentA) {
+                            ancestryA += QString::fromStdString(debugParentA->name) + " (type=" + QString::number(int(debugParentA->type)) + ") -> ";
+                            debugParentA = customModel->getParentNode(debugParentA);
+                        }
+                        qDebug() << "Ancestry for nodeA:" << ancestryA;
+                        // Debug: print ancestry for nodeB
+                        const CadNode* debugParentB = customModel->getParentNode(nodeB);
+                        QString ancestryB;
+                        while (debugParentB) {
+                            ancestryB += QString::fromStdString(debugParentB->name) + " (type=" + QString::number(int(debugParentB->type)) + ") -> ";
+                            debugParentB = customModel->getParentNode(debugParentB);
+                        }
+                        qDebug() << "Ancestry for nodeB:" << ancestryB;
+                        QMessageBox::warning(nullptr, "Align Faces", "Could not find parent solid/compound for both faces.");
+                        return;
+                    }
+                    // Get face geometry (center and normal)
+                    auto getFaceCenterNormal = [](CadNode* faceNode, gp_Pnt& center, gp_Dir& normal) {
+                        XCAFNodeData* xData = faceNode->asXCAF();
+                        TopoDS_Face face = TopoDS::Face(xData->getFace().Located(faceNode->loc));
+                        // Compute center (bounding box center)
+                        Bnd_Box bbox;
+                        BRepBndLib::Add(face, bbox);
+                        Standard_Real xmin, ymin, zmin, xmax, ymax, zmax;
+                        bbox.Get(xmin, ymin, zmin, xmax, ymax, zmax);
+                        center = gp_Pnt((xmin + xmax) * 0.5, (ymin + ymax) * 0.5, (zmin + zmax) * 0.5);
+                        // Compute normal at center (cross product of derivatives)
+                        TopLoc_Location loc;
+                        Handle(Geom_Surface) surf = BRep_Tool::Surface(face, loc);
+                        Standard_Real umin, umax, vmin, vmax;
+                        surf->Bounds(umin, umax, vmin, vmax);
+                        Standard_Real u = (umin + umax) * 0.5;
+                        Standard_Real v = (vmin + vmax) * 0.5;
+                        gp_Pnt p;
+                        gp_Vec d1u, d1v;
+                        surf->D1(u, v, p, d1u, d1v);
+                        gp_Vec n = d1u.Crossed(d1v);
+                        if (n.Magnitude() > 1e-10)
+                            normal = gp_Dir(n);
+                        else
+                            normal = gp_Dir(0, 0, 1); // fallback
+                    };
+                    gp_Pnt centerA, centerB;
+                    gp_Dir normalA, normalB;
+                    getFaceCenterNormal(nodeA, centerA, normalA);
+                    getFaceCenterNormal(nodeB, centerB, normalB);
+                    // Compute rotation to align normals
+                    gp_Vec vA(normalA.X(), normalA.Y(), normalA.Z());
+                    gp_Vec vB(normalB.X(), normalB.Y(), normalB.Z());
+                    gp_Vec axis = vB.Crossed(vA);
+                    Standard_Real angle = vB.Angle(vA);
+                    gp_Trsf rotTrsf;
+                    if (axis.SquareMagnitude() > 1e-10 && angle > 1e-10) {
+                        rotTrsf.SetRotation(gp_Ax1(centerB, axis), angle);
+                    } else {
+                        rotTrsf = gp_Trsf();
+                    }
+                    // Compute translation to align centers (after rotation)
+                    gp_Pnt centerB_rot = centerB.Transformed(rotTrsf);
+                    gp_Vec translation(centerB_rot, centerA);
+                    gp_Trsf trsf;
+                    trsf.SetRotation(rotTrsf.GetRotation());
+                    trsf.SetTranslationPart(translation);
+                    // Apply transform to parentB and all its children
+                    parentB->applyTransform(trsf);
+                    customPartViewer->markCacheDirty();
+                    customModel->layoutChanged();
+                    customPartViewer->setRootTreeNode(customModel->getRootNodePointer());
+                    customPartViewer->update();
+                    QMessageBox::information(nullptr, "Align Faces", "Moved second object so faces touch.");
+                });
+            }
+        }
+
         if (!menu.isEmpty()) menu.exec(customModelTreeView->viewport()->mapToGlobal(pos));
     });
+
 
     mainWindow.resize(1200, 800);
     mainWindow.show();
