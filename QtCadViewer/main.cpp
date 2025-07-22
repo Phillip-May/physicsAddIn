@@ -746,24 +746,61 @@ void connectTreeAndViewer(QTreeView* tree, CadOpenGLWidget* viewer, ModelType* m
 }
 
 
+// Helper struct for face and accumulated transform
+struct FaceWithTransform {
+    CadNode* node;
+    TopLoc_Location accumulatedLoc;
+};
+
+// Recursive function to collect faces with accumulated transform
+void collectFaceNodesWithTransform(CadNode* node, const TopLoc_Location& parentLoc, std::vector<FaceWithTransform>& out) {
+    if (!node) return;
+    TopLoc_Location thisLoc = parentLoc * node->loc;
+    XCAFNodeData* xData = node->asXCAF();
+    if (xData && xData->type == TopAbs_FACE && xData->hasFace()) {
+        out.push_back({node, thisLoc});
+    }
+    for (auto& child : node->children) {
+        collectFaceNodesWithTransform(child.get(), thisLoc, out);
+    }
+}
+
 static void generateVHACDStub(const QString& nodeName, int resolution, int maxHulls, double minVolume, CadNode* node) {
-    std::vector<CadNode*> faces;
+    std::vector<FaceWithTransform> faces;
     qDebug() << "Node Name: " << node->name.c_str();
-    CadOpenGLWidget::collectFaceNodes(node, faces);
+    collectFaceNodesWithTransform(node, TopLoc_Location(), faces);
     // Filter out excluded nodes
-    faces.erase(std::remove_if(faces.begin(), faces.end(), [](CadNode* n) { return n->excludedFromDecomposition; }), faces.end());
+    faces.erase(std::remove_if(faces.begin(), faces.end(), [](const FaceWithTransform& f) { return f.node->excludedFromDecomposition; }), faces.end());
     qDebug() << "Face count: " << faces.size();
     int numInputFaces = static_cast<int>(faces.size());
     std::vector<VHACD::Vertex> vertices;
     std::vector<VHACD::Triangle> triangles;
     uint32_t vertOffset = 0;
+    // Compute global transform for the Physics node
+    TopLoc_Location physicsGlobalLoc = TopLoc_Location();
+    {
+        // Walk up the tree to accumulate the global transform
+        CadNode* cur = node;
+        std::vector<CadNode*> ancestry;
+        while (cur) {
+            ancestry.push_back(cur);
+            // No parent pointer, so break (assume node is root or passed as such)
+            // If you have a getParentNode, use it here
+            break;
+        }
+        for (auto it = ancestry.rbegin(); it != ancestry.rend(); ++it) {
+            physicsGlobalLoc = physicsGlobalLoc * (*it)->loc;
+        }
+    }
     // Build mesh from all faces
-    for (CadNode* faceNode : faces) {
+    for (const auto& faceInfo : faces) {
+        CadNode* faceNode = faceInfo.node;
+        TopLoc_Location faceGlobalLoc = faceInfo.accumulatedLoc;
+        // Compute relative transform from Physics node to face
+        TopLoc_Location relLoc = physicsGlobalLoc.Inverted() * faceGlobalLoc;
         XCAFNodeData* xData = faceNode->asXCAF();
         if (!xData || !xData->hasFace()) continue;
         TopoDS_Face face = xData->getFace();
-        TopLoc_Location loc = faceNode->loc;
-        face = TopoDS::Face(face.Located(loc));
         BRepMesh_IncrementalMesh mesher(face, 0.5);
         TopLoc_Location locCopy;
         Handle(Poly_Triangulation) tri = BRep_Tool::Triangulation(face, locCopy);
@@ -771,7 +808,9 @@ static void generateVHACDStub(const QString& nodeName, int resolution, int maxHu
         // Add vertices
         std::vector<uint32_t> localIndices(tri->NbNodes());
         for (int i = 1; i <= tri->NbNodes(); ++i) {
-            gp_Pnt p = tri->Node(i).Transformed(locCopy.Transformation());
+            gp_Pnt p = tri->Node(i);
+            // Transform to Physics node local space
+            p.Transform(relLoc.Transformation());
             vertices.push_back(VHACD::Vertex(p.X(), p.Y(), p.Z()));
             localIndices[i-1] = vertOffset++;
         }
@@ -871,30 +910,47 @@ static void generateVHACDStub(const QString& nodeName, int resolution, int maxHu
 static void generateCoACDStub(const QString& nodeName, double concavity, double alpha, double beta, CadNode* node,
     int maxConvexHull, std::string preprocess, int prepRes, int sampleRes, int mctsNodes, int mctsIter, int mctsDepth,
     bool pca, bool merge, bool decimate, int maxChVertex, bool extrude, double extrudeMargin, std::string apxMode, int seed) {
-    std::vector<CadNode*> faces;
+    std::vector<FaceWithTransform> faces;
     qDebug() << "Node Name: " << node->name.c_str();
-    CadOpenGLWidget::collectFaceNodes(node, faces);
+    collectFaceNodesWithTransform(node, TopLoc_Location(), faces);
     // Filter out excluded nodes
-    faces.erase(std::remove_if(faces.begin(), faces.end(), [](CadNode* n) { return n->excludedFromDecomposition; }), faces.end());
+    faces.erase(std::remove_if(faces.begin(), faces.end(), [](const FaceWithTransform& f) { return f.node->excludedFromDecomposition; }), faces.end());
     qDebug() << "Face count: " << faces.size();
     int numInputFaces = static_cast<int>(faces.size());
     std::vector<double> vertices;
     std::vector<int> triangles;
     uint32_t vertOffset = 0;
-    // Build mesh from all faces (unchanged)
-    for (CadNode* faceNode : faces) {
+    // Compute global transform for the Physics node
+    TopLoc_Location physicsGlobalLoc = TopLoc_Location();
+    {
+        CadNode* cur = node;
+        std::vector<CadNode*> ancestry;
+        while (cur) {
+            ancestry.push_back(cur);
+            // No parent pointer, so break
+            break;
+        }
+        for (auto it = ancestry.rbegin(); it != ancestry.rend(); ++it) {
+            physicsGlobalLoc = physicsGlobalLoc * (*it)->loc;
+        }
+    }
+    // Build mesh from all faces
+    for (const auto& faceInfo : faces) {
+        CadNode* faceNode = faceInfo.node;
+        TopLoc_Location faceGlobalLoc = faceInfo.accumulatedLoc;
+        TopLoc_Location relLoc = physicsGlobalLoc.Inverted() * faceGlobalLoc;
         XCAFNodeData* xData = faceNode->asXCAF();
         if (!xData || !xData->hasFace()) continue;
         TopoDS_Face face = xData->getFace();
-        TopLoc_Location loc = faceNode->loc;
-        face = TopoDS::Face(face.Located(loc));
         BRepMesh_IncrementalMesh mesher(face, 0.5);
         TopLoc_Location locCopy;
         Handle(Poly_Triangulation) tri = BRep_Tool::Triangulation(face, locCopy);
         if (tri.IsNull() || tri->NbTriangles() == 0) continue;
         std::vector<uint32_t> localIndices(tri->NbNodes());
         for (int i = 1; i <= tri->NbNodes(); ++i) {
-            gp_Pnt p = tri->Node(i).Transformed(locCopy.Transformation());
+            gp_Pnt p = tri->Node(i);
+            // Transform to Physics node local space
+            p.Transform(relLoc.Transformation());
             vertices.push_back(p.X());
             vertices.push_back(p.Y());
             vertices.push_back(p.Z());
@@ -2659,13 +2715,12 @@ int main(int argc, char *argv[])
                             ancestry.push_back(cur);
                             cur = const_cast<CadNode*>(customModel->getParentNode(cur));
                         }
-                        // Accumulate from root to node
                         for (auto it = ancestry.rbegin(); it != ancestry.rend(); ++it) {
                             acc = acc * (*it)->loc;
                         }
                         return acc;
                     };
-                    // Helper to find parent solid/compound by walking up using getParentNode
+                    // Find parent physics nodes
                     auto findParentPhysicsObject = [&](CadNode* n) -> CadNode* {
                         const CadNode* parent = customModel->getParentNode(n);
                         while (parent) {
@@ -2675,26 +2730,9 @@ int main(int argc, char *argv[])
                         }
                         return nullptr;
                     };
-                    // Find parent solids
                     CadNode* parentA = findParentPhysicsObject(nodeA);
                     CadNode* parentB = findParentPhysicsObject(nodeB);
                     if (!parentA || !parentB) {
-                        // Debug: print ancestry for nodeA
-                        const CadNode* debugParentA = customModel->getParentNode(nodeA);
-                        QString ancestryA;
-                        while (debugParentA) {
-                            ancestryA += QString::fromStdString(debugParentA->name) + " (type=" + QString::number(int(debugParentA->type)) + ") -> ";
-                            debugParentA = customModel->getParentNode(debugParentA);
-                        }
-                        qDebug() << "Ancestry for nodeA:" << ancestryA;
-                        // Debug: print ancestry for nodeB
-                        const CadNode* debugParentB = customModel->getParentNode(nodeB);
-                        QString ancestryB;
-                        while (debugParentB) {
-                            ancestryB += QString::fromStdString(debugParentB->name) + " (type=" + QString::number(int(debugParentB->type)) + ") -> ";
-                            debugParentB = customModel->getParentNode(debugParentB);
-                        }
-                        qDebug() << "Ancestry for nodeB:" << ancestryB;
                         QMessageBox::warning(nullptr, "Align Faces", "Could not find parent solid/compound for both faces.");
                         return;
                     }
@@ -2702,13 +2740,11 @@ int main(int argc, char *argv[])
                     auto getFaceCenterNormal = [](CadNode* faceNode, gp_Pnt& center, gp_Dir& normal) {
                         XCAFNodeData* xData = faceNode->asXCAF();
                         TopoDS_Face face = TopoDS::Face(xData->getFace());
-                        // Compute center (bounding box center)
                         Bnd_Box bbox;
                         BRepBndLib::Add(face, bbox);
                         Standard_Real xmin, ymin, zmin, xmax, ymax, zmax;
                         bbox.Get(xmin, ymin, zmin, xmax, ymax, zmax);
                         center = gp_Pnt((xmin + xmax) * 0.5, (ymin + ymax) * 0.5, (zmin + zmax) * 0.5);
-                        // Compute normal at center (cross product of derivatives)
                         TopLoc_Location loc;
                         Handle(Geom_Surface) surf = BRep_Tool::Surface(face, loc);
                         Standard_Real umin, umax, vmin, vmax;
@@ -2728,33 +2764,44 @@ int main(int argc, char *argv[])
                     gp_Dir normalA, normalB;
                     getFaceCenterNormal(nodeA, centerA, normalA);
                     getFaceCenterNormal(nodeB, centerB, normalB);
-                    // Compute rotation to align normals
-                    gp_Vec vA(normalA.X(), normalA.Y(), normalA.Z());
-                    gp_Vec vB(normalB.X(), normalB.Y(), normalB.Z());
-                    gp_Vec axis = vB.Crossed(vA);
-                    Standard_Real angle = vB.Angle(vA);
+                    // Compute global transforms
+                    TopLoc_Location faceBGlobalLoc = getGlobalTransform(nodeB);
+                    TopLoc_Location faceAGlobalLoc = getGlobalTransform(nodeA);
+                    TopLoc_Location parentBGlobal = getGlobalTransform(parentB);
+                    CadNode* parentOfB = const_cast<CadNode*>(customModel->getParentNode(parentB));
+                    TopLoc_Location parentOfBGlobal = parentOfB ? getGlobalTransform(parentOfB) : TopLoc_Location();
+                    // Transform faceB's center and normal to world
+                    gp_Pnt centerB_world = centerB.Transformed(faceBGlobalLoc.Transformation());
+                    gp_Pnt centerA_world = centerA.Transformed(faceAGlobalLoc.Transformation());
+                    gp_Vec normalB_world(normalB.X(), normalB.Y(), normalB.Z());
+                    normalB_world.Transform(faceBGlobalLoc.Transformation());
+                    gp_Vec normalA_world(normalA.X(), normalA.Y(), normalA.Z());
+                    normalA_world.Transform(faceAGlobalLoc.Transformation());
+                    // Compute rotation to align normals in world
+                    gp_Vec axis = normalB_world.Crossed(normalA_world);
+                    Standard_Real angle = normalB_world.Angle(normalA_world);
                     gp_Trsf rotTrsf;
                     if (axis.SquareMagnitude() > 1e-10 && angle > 1e-10) {
-                        rotTrsf.SetRotation(gp_Ax1(centerB, axis), angle);
+                        rotTrsf.SetRotation(gp_Ax1(centerB_world, axis), angle);
                     } else {
                         rotTrsf = gp_Trsf();
                     }
-                    // Compute translation to align centers (after rotation)
-                    gp_Pnt centerB_rot = centerB.Transformed(rotTrsf);
-                    gp_Vec translation(centerB_rot, centerA);
-                    gp_Trsf trsf;
-                    trsf.SetRotation(rotTrsf.GetRotation());
-                    trsf.SetTranslationPart(translation);
-                    // Compute parentB's global transform before
-                    TopLoc_Location parentBGlobal = getGlobalTransform(parentB);
-                    // Compute desired global transform after alignment
-                    TopLoc_Location desiredGlobal = TopLoc_Location(trsf * parentBGlobal.Transformation());
-                    // Compute parent's global transform (parent of parentB)
-                    CadNode* parentOfB = const_cast<CadNode*>(customModel->getParentNode(parentB));
-                    TopLoc_Location parentOfBGlobal = parentOfB ? getGlobalTransform(parentOfB) : TopLoc_Location();
-                    // Set parentB->loc so that parentOfBGlobal * parentB->loc == desiredGlobal
-                    TopLoc_Location newLocal = parentOfBGlobal.IsIdentity() ? desiredGlobal : TopLoc_Location(parentOfBGlobal.Transformation().Inverted() * desiredGlobal.Transformation());
-                    parentB->loc = newLocal;
+                    // Rotate centerB_world to new position
+                    gp_Pnt centerB_rot = centerB_world.Transformed(rotTrsf);
+                    gp_Vec translation(centerB_rot, centerA_world);
+                    gp_Trsf alignTrsf;
+                    alignTrsf.SetRotation(rotTrsf.GetRotation());
+                    alignTrsf.SetTranslationPart(translation);
+                    // The transform to apply to parentB's global transform
+                    gp_Trsf newParentBGlobalTrsf = alignTrsf * parentBGlobal.Transformation();
+                    TopLoc_Location newParentBGlobal(newParentBGlobalTrsf);
+                    // Set parentB->loc so that parentOfBGlobal * parentB->loc == newParentBGlobal
+                    parentB->loc = TopLoc_Location(parentOfBGlobal.Transformation().Inverted() * newParentBGlobal.Transformation());
+                    // Debug output
+                    qDebug() << "centerA_world:" << centerA_world.X() << centerA_world.Y() << centerA_world.Z();
+                    qDebug() << "centerB_world (before):" << centerB_world.X() << centerB_world.Y() << centerB_world.Z();
+                    qDebug() << "normalA_world:" << normalA_world.X() << normalA_world.Y() << normalA_world.Z();
+                    qDebug() << "normalB_world (before):" << normalB_world.X() << normalB_world.Y() << normalB_world.Z();
                     customPartViewer->markCacheDirty();
                     customModel->layoutChanged();
                     customPartViewer->setRootTreeNode(customModelRoot.get());

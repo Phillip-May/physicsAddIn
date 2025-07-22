@@ -365,15 +365,15 @@ void CadOpenGLWidget::traverseAndRender(const CadNode* node, CADNodeColor inheri
             renderConnectionPoint(node, nodeColor);
         }
     }
-    for (const auto& child : node->children) {
-        if (child) {
-            traverseAndRender(child.get(), node->color, accumulateNodeTransform(node, accumulatedLoc), true);
-        }
-    }
     if (node->type == CadNodeType::Physics) {
         const PhysicsNodeData* physData = node->asPhysics();
         if (physData && physData->convexHullGenerated && !physData->hulls.empty()) {
-            renderConvexHulls(physData, accumulateNodeTransform(node, accumulatedLoc));
+            renderConvexHulls(physData);
+        }
+    }    
+    for (const auto& child : node->children) {
+        if (child) {
+            traverseAndRender(child.get(), node->color, accumulateNodeTransform(node, accumulatedLoc), true);
         }
     }
     if (needsTransform) {
@@ -2037,7 +2037,7 @@ void CadOpenGLWidget::drawReferenceFrame(const TopLoc_Location& loc, float axisL
 }
 
 // Add this function near other rendering helpers
-void CadOpenGLWidget::renderConvexHulls(const PhysicsNodeData* physData, const TopLoc_Location&) {
+void CadOpenGLWidget::renderConvexHulls(const PhysicsNodeData* physData) {
     if (!physData) return;
     // No transform application here; rely on OpenGL stack
     for (const auto& hull : physData->hulls) {
