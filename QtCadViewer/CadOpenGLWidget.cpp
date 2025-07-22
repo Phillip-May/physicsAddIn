@@ -2039,6 +2039,8 @@ void CadOpenGLWidget::drawReferenceFrame(const TopLoc_Location& loc, float axisL
 // Add this function near other rendering helpers
 void CadOpenGLWidget::renderConvexHulls(const PhysicsNodeData* physData) {
     if (!physData) return;
+    // Only render if collision mesh is visible
+    if (!physData->collisionMeshVisible) return;
     // No transform application here; rely on OpenGL stack
     for (const auto& hull : physData->hulls) {
         // Draw filled hull

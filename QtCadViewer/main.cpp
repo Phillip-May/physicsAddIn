@@ -53,8 +53,6 @@
 #include <QTextEdit>
 #include <unordered_map>
 
-
-
 // Helper to recursively build XCAFLabelNode tree with sub-assembly detection
 std::unique_ptr<XCAFLabelNode> buildLabelTree(const TDF_Label& label, const Handle(XCAFDoc_ShapeTool)& shapeTool = nullptr) {
     auto node = std::make_unique<XCAFLabelNode>(label);
@@ -371,6 +369,15 @@ TopLoc_Location getEffectiveTransform(const TDF_Label& label,
     return effectiveLoc;
 }
 
+// Place this above build_tree_xcaf
+struct FaceEdgeKeyHash {
+    std::size_t operator()(const std::pair<const void*, const void*>& k) const noexcept {
+        std::size_t h1 = std::hash<const void*>{}(k.first);
+        std::size_t h2 = std::hash<const void*>{}(k.second);
+        return h1 ^ (h2 << 1);
+    }
+};
+
 // Improved tree building function for STEP 214 compatibility
 std::shared_ptr<CadNode> build_tree_xcaf(const TDF_Label& label,
                    const Handle(XCAFDoc_ShapeTool)& shapeTool,
@@ -532,6 +539,10 @@ std::shared_ptr<CadNode> build_tree_xcaf(const TDF_Label& label,
         xData->type = shape.ShapeType();
     }
     
+    // --- SHARING MAP FOR FACE/EDGE NODES ---
+    // Static to persist across recursive calls (lifetime: whole build)
+    using FaceEdgeKey = std::pair<const void*, const void*>; // (parent shape, face/edge TShape)
+    static std::unordered_map<FaceEdgeKey, std::shared_ptr<CadNode>, FaceEdgeKeyHash> faceEdgeNodeMap;
     // Add face/edge children for solids that don't have other solid children
     // This allows faces/edges to be shown even when the solid has reference children
     if (!shape.IsNull() && shape.ShapeType() == TopAbs_SOLID && !isAssembly(label, shapeTool)) {
@@ -544,47 +555,60 @@ std::shared_ptr<CadNode> build_tree_xcaf(const TDF_Label& label,
                 break;
             }
         }
-        
         // Add faces and edges if this solid doesn't have other solid children
-        // Note: We removed the isCompoundAssembly check to allow faces on solids within compounds
         if (!hasSolidChildren) {
-            // Add face children with proper color extraction
             int faceIdx = 0;
             int faceCount = 0;
             for (TopExp_Explorer exp(shape, TopAbs_FACE); exp.More(); exp.Next(), ++faceIdx) {
                 TopoDS_Face face = TopoDS::Face(exp.Current());
-                auto faceNode = std::make_shared<CadNode>();
-                faceNode->type = CadNodeType::XCAF;
-                auto faceData = std::make_shared<XCAFNodeData>();
-                faceData->shape = face;
-                faceData->type = TopAbs_FACE;
-                faceNode->data = faceData;
-                // Use the enhanced color extraction for faces
-                faceNode->color = get_shape_color(face, label, shapeTool, colorTool, color);
-                faceNode->loc = nodeLoc;
-                faceNode->name = QString("Face %1 of %2").arg(faceIdx).arg(QString::fromStdString(node->name)).toStdString();
+                const void* parentKey = shape.TShape().get();
+                const void* faceKey = face.TShape().get();
+                FaceEdgeKey key = std::make_pair(parentKey, faceKey);
+                std::shared_ptr<CadNode> faceNode;
+                auto it = faceEdgeNodeMap.find(key);
+                if (it != faceEdgeNodeMap.end()) {
+                    faceNode = it->second;
+                } else {
+                    faceNode = std::make_shared<CadNode>();
+                    faceNode->type = CadNodeType::XCAF;
+                    auto faceData = std::make_shared<XCAFNodeData>();
+                    faceData->shape = face;
+                    faceData->type = TopAbs_FACE;
+                    faceNode->data = faceData;
+                    faceNode->color = get_shape_color(face, label, shapeTool, colorTool, color);
+                    faceNode->loc = nodeLoc;
+                    faceNode->name = QString("Face %1 of %2").arg(faceIdx).arg(QString::fromStdString(node->name)).toStdString();
+                    faceEdgeNodeMap[key] = faceNode;
+                }
                 node->children.push_back(faceNode);
                 faceCount++;
             }
-            
-            // Add edge children
             int edgeIdx = 0;
             int edgeCount = 0;
             for (TopExp_Explorer exp(shape, TopAbs_EDGE); exp.More(); exp.Next(), ++edgeIdx) {
                 TopoDS_Shape edge = exp.Current();
-                auto edgeNode = std::make_shared<CadNode>();
-                edgeNode->type = CadNodeType::XCAF;
-                auto edgeData = std::make_shared<XCAFNodeData>();
-                edgeData->shape = edge;
-                edgeData->type = TopAbs_EDGE;
-                edgeNode->data = edgeData;
-                edgeNode->color = color;
-                edgeNode->loc = nodeLoc;
-                edgeNode->name = QString("Edge %1 of %2").arg(edgeIdx).arg(QString::fromStdString(node->name)).toStdString();
+                const void* parentKey = shape.TShape().get();
+                const void* edgeKey = edge.TShape().get();
+                FaceEdgeKey key = std::make_pair(parentKey, edgeKey);
+                std::shared_ptr<CadNode> edgeNode;
+                auto it = faceEdgeNodeMap.find(key);
+                if (it != faceEdgeNodeMap.end()) {
+                    edgeNode = it->second;
+                } else {
+                    edgeNode = std::make_shared<CadNode>();
+                    edgeNode->type = CadNodeType::XCAF;
+                    auto edgeData = std::make_shared<XCAFNodeData>();
+                    edgeData->shape = edge;
+                    edgeData->type = TopAbs_EDGE;
+                    edgeNode->data = edgeData;
+                    edgeNode->color = color;
+                    edgeNode->loc = nodeLoc;
+                    edgeNode->name = QString("Edge %1 of %2").arg(edgeIdx).arg(QString::fromStdString(node->name)).toStdString();
+                    faceEdgeNodeMap[key] = edgeNode;
+                }
                 node->children.push_back(edgeNode);
                 edgeCount++;
             }
-            
             qDebug() << "Added" << faceCount << "faces and" << edgeCount << "edges to solid at label" << label.Tag();
         }
     }
@@ -1120,6 +1144,128 @@ void adjustSubtreeTransforms(const CadNode* src, CadNode* copy, const TopLoc_Loc
     }
 }
 
+// Helper: Compute the bounding box length along a given axis for a node
+static double computeBoundingBoxLength(const CadNode* node, const QVector3D& axis) {
+    if (!node) return 0.0;
+    Bnd_Box bbox;
+    std::function<void(const CadNode*, const TopLoc_Location&)> accumulate;
+    accumulate = [&](const CadNode* n, const TopLoc_Location& accLoc) {
+        if (!n) return;
+        TopLoc_Location newLoc = accLoc * n->loc;
+        const XCAFNodeData* xData = n->asXCAF();
+        if (xData && xData->type == TopAbs_FACE && xData->hasFace()) {
+            TopoDS_Face locatedFace = TopoDS::Face(xData->getFace().Located(newLoc));
+            BRepBndLib::Add(locatedFace, bbox);
+        }
+        for (const auto& child : n->children) {
+            accumulate(child.get(), newLoc);
+        }
+    };
+    accumulate(node, TopLoc_Location());
+    if (bbox.IsVoid()) return 0.0;
+    Standard_Real xmin, ymin, zmin, xmax, ymax, zmax;
+    bbox.Get(xmin, ymin, zmin, xmax, ymax, zmax);
+    QVector3D min(xmin, ymin, zmin);
+    QVector3D max(xmax, ymax, zmax);
+    QVector3D delta = max - min;
+    return std::abs(QVector3D::dotProduct(delta, axis.normalized()));
+}
+
+// Function to add a Rail to the physics simulation with tiling
+void addRailToPhysicsPreview(CadNode* railNode, std::shared_ptr<CadNode> physicsPreviewRoot) {
+    if (!railNode || !physicsPreviewRoot) return;
+    // Parse JSON for numSegments and axisOfTravel
+    RailNodeData* railData = railNode->asRail();
+    int numSegments = 1;
+    QVector3D axis(1,0,0);
+    if (railData && !railData->jsonString.isEmpty()) {
+        QJsonDocument doc = QJsonDocument::fromJson(railData->jsonString.toUtf8());
+        if (doc.isObject()) {
+            QJsonObject obj = doc.object();
+            if (obj.contains("numSegments")) numSegments = obj["numSegments"].toInt(1);
+            if (obj.contains("axisOfTravel")) {
+                QJsonArray arr = obj["axisOfTravel"].toArray();
+                if (arr.size() == 3) axis = QVector3D(arr[0].toDouble(), arr[1].toDouble(), arr[2].toDouble());
+            }
+        }
+    }
+    // Find carriage, start, middle, end segments
+    CadNode* carriage = nullptr;
+    CadNode* startSeg = nullptr;
+    CadNode* middleSeg = nullptr;
+    CadNode* endSeg = nullptr;
+    for (const auto& child : railNode->children) {
+        if (!child) continue;
+        if (child->name.find("Carriage") != std::string::npos) carriage = child.get();
+        else if (child->name.find("Start Segment") != std::string::npos) startSeg = child.get();
+        else if (child->name.find("Middle Segment") != std::string::npos) middleSeg = child.get();
+        else if (child->name.find("End Segment") != std::string::npos) endSeg = child.get();
+    }
+    if (!middleSeg) {
+        QMessageBox::warning(nullptr, "Rail Error", "Rail must have at least a Middle Segment.");
+        return;
+    }
+    // Compute the length of the middle segment along the axis
+    double segLength = computeBoundingBoxLength(middleSeg, axis);
+    if (segLength < 1e-6) segLength = 1000.0; // Fallback if bbox fails
+    // Clear previous children
+    physicsPreviewRoot->children.clear();
+    // Deep copy the rail node as a container
+    auto railCopy = std::make_shared<CadNode>(*railNode);
+    railCopy->children.clear();
+    QVector3D currentOffset(0,0,0);
+    // Add carriage if present
+    if (carriage) {
+        auto carriageCopy = deepCopyNodeNonExcluded(carriage);
+        if (carriageCopy) {
+            gp_Trsf offsetTrsf;
+            offsetTrsf.SetTranslationPart(gp_XYZ(currentOffset.x(), currentOffset.y(), currentOffset.z()));
+            gp_Trsf finalTrsf = carriage->loc.Transformation() * offsetTrsf;
+            carriageCopy->loc = TopLoc_Location(finalTrsf);
+            railCopy->children.push_back(carriageCopy);
+        }
+    }
+    // Add start segment if present
+    if (startSeg) {
+        auto startCopy = deepCopyNodeNonExcluded(startSeg);
+        if (startCopy) {
+            gp_Trsf offsetTrsf;
+            offsetTrsf.SetTranslationPart(gp_XYZ(currentOffset.x(), currentOffset.y(), currentOffset.z()));
+            gp_Trsf finalTrsf = startSeg->loc.Transformation() * offsetTrsf;
+            startCopy->loc = TopLoc_Location(finalTrsf);
+            railCopy->children.push_back(startCopy);
+            // Do NOT increment currentOffset here
+        }
+    }
+    // Add tiled middle segments
+    for (int i = 0; i < numSegments; ++i) {
+        auto midCopy = deepCopyNodeNonExcluded(middleSeg);
+        if (midCopy) {
+            gp_Trsf offsetTrsf;
+            offsetTrsf.SetTranslationPart(gp_XYZ(currentOffset.x(), currentOffset.y(), currentOffset.z()));
+            gp_Trsf finalTrsf = middleSeg->loc.Transformation() * offsetTrsf;
+            midCopy->loc = TopLoc_Location(finalTrsf);
+            railCopy->children.push_back(midCopy);
+            currentOffset += axis * segLength;
+        }
+    }
+    // Add end segment if present
+    if (endSeg) {
+        currentOffset -= axis * segLength; // Move back by one segment
+        auto endCopy = deepCopyNodeNonExcluded(endSeg);
+        if (endCopy) {
+            gp_Trsf offsetTrsf;
+            offsetTrsf.SetTranslationPart(gp_XYZ(currentOffset.x(), currentOffset.y(), currentOffset.z()));
+            gp_Trsf finalTrsf = endSeg->loc.Transformation() * offsetTrsf;
+            endCopy->loc = TopLoc_Location(finalTrsf);
+            railCopy->children.push_back(endCopy);
+        }
+    }
+    // Add the new rail as the only child of the physics preview root
+    physicsPreviewRoot->children.clear();
+    physicsPreviewRoot->children.push_back(railCopy);
+}
+
 int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
@@ -1354,6 +1500,30 @@ int main(int argc, char *argv[])
         edgeSelectionBtn->setStyleSheet("QPushButton { background-color: #4CAF50; color: white; font-weight: bold; }");
     });
     
+    // --- Physics Preview Tree and OpenGL Widget ---
+    // 1. Create root node and model for physics preview
+    auto physicsPreviewRoot = std::make_shared<CadNode>();
+    physicsPreviewRoot->name = "Physics Preview Root";
+    physicsPreviewRoot->type = CadNodeType::Physics;
+    physicsPreviewRoot->visible = true;
+    CustomModelTreeModel* physicsPreviewModel = new CustomModelTreeModel(physicsPreviewRoot);
+    QTreeView* physicsPreviewTreeView = new QTreeView;
+    physicsPreviewTreeView->setModel(physicsPreviewModel);
+    physicsPreviewTreeView->setHeaderHidden(false);
+    physicsPreviewTreeView->setSelectionMode(QAbstractItemView::ExtendedSelection);
+
+    // 2. Create OpenGL widget for physics preview
+    CadOpenGLWidget* physicsPreviewViewer = new CadOpenGLWidget;
+    physicsPreviewViewer->setRootTreeNode(physicsPreviewRoot.get());
+
+    // 3. Add to UI: add tree to tabWidget, viewer to viewTabWidget
+    int physicsTreeTabIdx = tabWidget->addTab(physicsPreviewTreeView, "Physics Preview Tree");
+    int physicsViewTabIdx = viewTabWidget->addTab(physicsPreviewViewer, "Physics Preview");
+
+    // 4. Connect selection sync
+    connectTreeAndViewer(physicsPreviewTreeView, physicsPreviewViewer, physicsPreviewModel);
+
+
     // Add Reframe button
     QPushButton* reframeBtn = new QPushButton("Reframe");
     buttonLayout->addWidget(reframeBtn);
@@ -1365,6 +1535,9 @@ int main(int argc, char *argv[])
         } else if (idx == 1) {
             qDebug() << "Reframe sub";
             customPartViewer->reframeCamera();
+        } else if (idx == 2) {
+            qDebug() << "Reframe physics preview";
+            physicsPreviewViewer->reframeCamera();
         }
     });
     
@@ -1507,7 +1680,6 @@ int main(int argc, char *argv[])
     labelTreeView->setHeaderHidden(false);
     labelTreeView->setSelectionMode(QAbstractItemView::ExtendedSelection); // Allow multi-selection and clear selection by clicking below
     tabWidget->addTab(labelTreeView, "XCAF Tree");
-    
 
 
     // Context menu for show/hide and debug info
@@ -2562,46 +2734,6 @@ int main(int argc, char *argv[])
             if (n && n->asXCAF() && n->asXCAF()->type == TopAbs_FACE) {
                 QAction* addConnectionPointAction = menu.addAction("Add Connection Point");
                 QObject::connect(addConnectionPointAction, &QAction::triggered, customModelTreeView, [=]() {
-                    // Calculate face center
-                    XCAFNodeData* xData = n->asXCAF();
-                    TopoDS_Face face = TopoDS::Face(xData->getFace());
-                    
-                    // Calculate bounding box center as approximation of face center
-                    Bnd_Box bbox;
-                    BRepBndLib::Add(face, bbox);
-                    Standard_Real xmin, ymin, zmin, xmax, ymax, zmax;
-                    bbox.Get(xmin, ymin, zmin, xmax, ymax, zmax);
-                    
-                    // Calculate center point
-                    double centerX = (xmin + xmax) * 0.5;
-                    double centerY = (ymin + ymax) * 0.5;
-                    double centerZ = (zmin + zmax) * 0.5;
-                    
-                    // Create connection point node
-                    auto connectionPointNode = std::make_shared<CadNode>();
-                    connectionPointNode->name = QString("Connection Point | Face Center: (%1, %2, %3)")
-                        .arg(QString::number(centerX, 'f', 2))
-                        .arg(QString::number(centerY, 'f', 2))
-                        .arg(QString::number(centerZ, 'f', 2))
-                        .toStdString();
-                    
-                    // Set location to face center
-                    gp_Trsf transform;
-                    transform.SetTranslation(gp_Vec(centerX, centerY, centerZ));
-                    connectionPointNode->loc = TopLoc_Location(transform);
-                    
-                    // Set color (bright green for connection points)
-                    connectionPointNode->color = CADNodeColor::fromSRGB(0, 255, 0, 255);
-                    connectionPointNode->type = CadNodeType::ConnectionPoint;
-                    connectionPointNode->visible = true;
-                    
-                    // Create connection point data with default cable connection
-                    auto connectionData = std::make_shared<ConnectionPointData>();
-                    connectionData->connectionFlags = ConnectionFlags::Cables;
-                    connectionData->description = "Connection point created from face center";
-                    connectionPointNode->data = connectionData;
-                    
-                    // Find nearest ancestor Physics node
                     QModelIndex ancestorIdx = selIdx.parent();
                     CadNode* physicsAncestor = nullptr;
                     while (ancestorIdx.isValid()) {
@@ -2612,12 +2744,76 @@ int main(int argc, char *argv[])
                         }
                         ancestorIdx = ancestorIdx.parent();
                     }
+                    
                     if (physicsAncestor) {
+                        // Calculate face center
+                        XCAFNodeData* xData = n->asXCAF();
+                        TopoDS_Face face = TopoDS::Face(xData->getFace());
+                        Bnd_Box bbox;
+                        BRepBndLib::Add(face, bbox);
+                        Standard_Real xmin, ymin, zmin, xmax, ymax, zmax;
+                        bbox.Get(xmin, ymin, zmin, xmax, ymax, zmax);
+                        double centerX = (xmin + xmax) * 0.5;
+                        double centerY = (ymin + ymax) * 0.5;
+                        double centerZ = (zmin + zmax) * 0.5;
+
+                        // Compute world transform of the face node
+                        TopLoc_Location faceWorldLoc;
+                        {
+                            CadNode* cur = n;
+                            std::vector<CadNode*> ancestry;
+                            while (cur) {
+                                ancestry.push_back(cur);
+                                cur = const_cast<CadNode*>(customModel->getParentNode(cur));
+                            }
+                            for (auto it = ancestry.rbegin(); it != ancestry.rend(); ++it) {
+                                faceWorldLoc = faceWorldLoc * (*it)->loc;
+                            }
+                        }
+                        // Compute world transform of the physics node
+                        TopLoc_Location physicsWorldLoc;
+                        {
+                            CadNode* cur = physicsAncestor;
+                            std::vector<CadNode*> ancestry;
+                            while (cur) {
+                                ancestry.push_back(cur);
+                                cur = const_cast<CadNode*>(customModel->getParentNode(cur));
+                            }
+                            for (auto it = ancestry.rbegin(); it != ancestry.rend(); ++it) {
+                                physicsWorldLoc = physicsWorldLoc * (*it)->loc;
+                            }
+                        }
+                        // Compute face center in world coordinates
+                        gp_Pnt faceCenter(centerX, centerY, centerZ);
+                        faceCenter.Transform(faceWorldLoc.Transformation());
+                        // Create a transform for the face center in world coordinates
+                        gp_Trsf faceCenterTrsf;
+                        faceCenterTrsf.SetTranslationPart(faceCenter.XYZ());
+                        TopLoc_Location faceCenterLoc(faceCenterTrsf);
+
+                        // Create connection point node
+                        auto connectionPointNode = std::make_shared<CadNode>();
+                        connectionPointNode->name = QString("Connection Point | Face Center: (%1, %2, %3)")
+                            .arg(QString::number(faceCenter.X(), 'f', 2))
+                            .arg(QString::number(faceCenter.Y(), 'f', 2))
+                            .arg(QString::number(faceCenter.Z(), 'f', 2))
+                            .toStdString();
+                        connectionPointNode->color = CADNodeColor::fromSRGB(0, 255, 0, 255);
+                        connectionPointNode->type = CadNodeType::ConnectionPoint;
+                        connectionPointNode->visible = true;
+                        auto connectionData = std::make_shared<ConnectionPointData>();
+                        connectionData->connectionFlags = ConnectionFlags::Cables;
+                        connectionData->description = "Connection point created from face center";
+                        connectionPointNode->data = connectionData;
+
+                        // Set connection point loc relative to physics node
+                        connectionPointNode->loc = physicsWorldLoc.Inverted() * faceCenterLoc;
+
                         physicsAncestor->children.push_back(connectionPointNode);
                         customModel->layoutChanged();
                         customPartViewer->setRootTreeNode(customModelRoot.get());
                         customPartViewer->update();
-                        qDebug() << "Added connection point at:" << centerX << centerY << centerZ;
+                        qDebug() << "Added connection point at:" << faceCenter.X() << faceCenter.Y() << faceCenter.Z();
                     } else {
                         QMessageBox::warning(nullptr, "No Physics Node", "No Physics node found in the ancestry. Please add a Physics node first.");
                     }
@@ -2906,11 +3102,56 @@ int main(int argc, char *argv[])
                 QObject::connect(cancelBtn, &QPushButton::clicked, dialog, &QDialog::reject);
                 dialog->exec();
             });
+
+            // --- Add Rail to Physics Preview ---
+            QAction* addToPhysicsPreviewAction = menu.addAction("Add Rail to Physics Preview");
+            QObject::connect(addToPhysicsPreviewAction, &QAction::triggered, customModelTreeView, [=]() {
+                addRailToPhysicsPreview(node, physicsPreviewRoot);
+                physicsPreviewModel->layoutChanged();
+                physicsPreviewViewer->setRootTreeNode(physicsPreviewRoot.get());
+                physicsPreviewViewer->update();
+            });
         }
         if (!menu.isEmpty()) menu.exec(customModelTreeView->viewport()->mapToGlobal(pos));
     });
 
     mainWindow.resize(1200, 800);
     mainWindow.show();
+
+    // Add this after the context menu setup for physicsPreviewTreeView
+    physicsPreviewTreeView->setContextMenuPolicy(Qt::CustomContextMenu);
+    QObject::connect(physicsPreviewTreeView, &QTreeView::customContextMenuRequested, physicsPreviewTreeView, [=](const QPoint& pos) {
+        QModelIndex idx = physicsPreviewTreeView->indexAt(pos);
+        if (!idx.isValid()) return;
+        CadNode* node = const_cast<CadNode*>(physicsPreviewModel->getNode(idx));
+        if (!node) return;
+        QMenu menu;
+        // Only show for physics nodes
+        if (node->type == CadNodeType::Physics) {
+            // Add collision mesh visibility toggle
+            QAction* toggleCollisionMeshAction = nullptr;
+            if (node->asPhysics()->collisionMeshVisible) {
+                toggleCollisionMeshAction = menu.addAction("Hide Collision Mesh");
+            } else {
+                toggleCollisionMeshAction = menu.addAction("Show Collision Mesh");
+            }
+            QObject::connect(toggleCollisionMeshAction, &QAction::triggered, physicsPreviewTreeView, [=]() {
+                node->asPhysics()->collisionMeshVisible = !node->asPhysics()->collisionMeshVisible;
+                physicsPreviewModel->dataChanged(idx, idx);
+                physicsPreviewViewer->update();
+            });
+        }
+        if (!menu.isEmpty()) menu.exec(physicsPreviewTreeView->viewport()->mapToGlobal(pos));
+    });
+
+    // After creating a new Rail node (e.g., customModelRoot or any new Rail node):
+    if (customModelRoot->type == CadNodeType::Rail) {
+        RailNodeData* railData = customModelRoot->asRail();
+        if (railData && railData->jsonString.isEmpty()) {
+            railData->jsonString = R"({"axisOfTravel":[1,0,0],"numSegments":10,"travelLength":10000,"buildJointPosition":0})";
+        }
+    }
+    // If there are other places where Rail nodes are created, apply the same logic after creation.
+
     return app.exec();
 }

@@ -106,6 +106,8 @@ struct PhysicsNodeData : public CadNodeDataBase {
     bool convexHullGenerated = false;
     std::vector<ConvexHullData> hulls;
     // Add more fields as needed (e.g., material, mass, etc.)
+    // Add this field for collision mesh visibility
+    bool collisionMeshVisible = true;
 };
 
 // 4c. Rail node data
