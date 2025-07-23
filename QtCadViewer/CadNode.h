@@ -89,6 +89,9 @@ struct CadNodeDataBase {
 struct XCAFNodeData : public CadNodeDataBase {
     TopAbs_ShapeEnum type = TopAbs_SHAPE;
     TopoDS_Shape shape;
+    // XCAF relinking fields
+    int xcafLabelTag = -1; // -1 means not linked to XCAF
+    TopoDS_Shape originalXCAFShape; // Not serialized, used for relinking
     // Optionally: TopoDS_Face, TopoDS_Edge, etc.
     // Add more XCAF-specific fields as needed
 
@@ -284,9 +287,6 @@ struct CadNode {
     CadNodeType type = CadNodeType::Unknown; // Must be set explicitly
     std::shared_ptr<CadNodeDataBase> data; // Holds type-specific data
 
-    // New: Optional XCAF label tag for relinking geometry
-    int xcafLabelTag = -1; // -1 means not linked to XCAF
-
     // Helper to get XCAF data safely
     XCAFNodeData* asXCAF() {
         return type == CadNodeType::XCAF ? static_cast<XCAFNodeData*>(data.get()) : nullptr;
@@ -370,12 +370,14 @@ struct CadNode {
         obj["visible"] = visible;
         obj["excludedFromDecomposition"] = excludedFromDecomposition;
         obj["type"] = static_cast<int>(type);
-        if (xcafLabelTag >= 0) obj["xcafLabelTag"] = xcafLabelTag;
         // Data
         QJsonObject dataObj;
         if (type == CadNodeType::Rail && data) dataObj = static_cast<RailNodeData*>(data.get())->toJson();
         else if (type == CadNodeType::Physics && data) dataObj = static_cast<PhysicsNodeData*>(data.get())->toJson();
         else if (type == CadNodeType::ConnectionPoint && data) dataObj = static_cast<ConnectionPointData*>(data.get())->toJson();
+        else if (type == CadNodeType::XCAF && asXCAF()) {
+            dataObj["xcafLabelTag"] = asXCAF()->xcafLabelTag;
+        }
         obj["data"] = dataObj;
         // Children
         QJsonArray childrenArr;
@@ -403,11 +405,15 @@ struct CadNode {
         node->visible = obj["visible"].toBool(true);
         node->excludedFromDecomposition = obj["excludedFromDecomposition"].toBool(false);
         node->type = static_cast<CadNodeType>(obj["type"].toInt());
-        node->xcafLabelTag = obj.contains("xcafLabelTag") ? obj["xcafLabelTag"].toInt() : -1;
         QJsonObject dataObj = obj["data"].toObject();
         if (node->type == CadNodeType::Rail) node->data = RailNodeData::fromJson(dataObj);
         else if (node->type == CadNodeType::Physics) node->data = PhysicsNodeData::fromJson(dataObj);
         else if (node->type == CadNodeType::ConnectionPoint) node->data = ConnectionPointData::fromJson(dataObj);
+        else if (node->type == CadNodeType::XCAF && dataObj.contains("xcafLabelTag")) {
+            auto xData = std::make_shared<XCAFNodeData>();
+            xData->xcafLabelTag = dataObj["xcafLabelTag"].toInt();
+            node->data = xData;
+        }
         // Children
         QJsonArray childrenArr = obj["children"].toArray();
         for (const auto& childVal : childrenArr) {

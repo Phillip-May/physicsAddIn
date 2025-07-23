@@ -56,6 +56,11 @@ QVariant CustomModelTreeModel::data(const QModelIndex& index, int role) const {
         QString display = QString::fromStdString(node->name);
         return display;
     }
+    if (role == Qt::BackgroundRole) {
+        QColor c = node->color.toQColor();
+        c.setAlphaF(c.alphaF() / 3.0); // Make it 1/3 as opaque
+        return c;
+    }
     return QVariant();
 }
 
@@ -93,4 +98,33 @@ QModelIndex CustomModelTreeModel::indexForNode(const NodeType* node, int column)
         }
     }
     return QModelIndex();
+}
+
+void CustomModelTreeModel::resetModelAndAddNode(std::shared_ptr<NodeType> newNode) {
+    beginResetModel();
+    if (root_->children.size() == 1) {
+        root_->children[0]->children.push_back(newNode);
+    } else {
+        root_->children.push_back(newNode);
+    }
+    endResetModel();
+} 
+
+// Remove a node from the tree given a pointer to the node
+bool CustomModelTreeModel::removeNode(const NodeType* node) {
+    if (!node || node == root_.get()) return false;
+    NodeType* parent = const_cast<NodeType*>(getParentNode(node));
+    if (!parent) return false;
+    auto& siblings = parent->children;
+    auto it = std::find_if(siblings.begin(), siblings.end(), [node](const std::shared_ptr<NodeType>& child) {
+        return child.get() == node;
+    });
+    if (it != siblings.end()) {
+        int row = static_cast<int>(std::distance(siblings.begin(), it));
+        beginRemoveRows(indexForNode(parent), row, row);
+        siblings.erase(it);
+        endRemoveRows();
+        return true;
+    }
+    return false;
 } 

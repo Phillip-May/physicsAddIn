@@ -438,9 +438,6 @@ void CadOpenGLWidget::renderFaceOptimized(const CadNode* node, const CADNodeColo
         auto it = std::find(selectedFaceNodes_.begin(), selectedFaceNodes_.end(), node);
         if (it != selectedFaceNodes_.end()) {
             isSelected = true;
-            if (m_frameCount % 60 == 0) {
-                qDebug() << "[MultiSelect] Rendering selected face, total selected:" << selectedFaceNodes_.size() << "node:" << xData;
-            }
         }
     }
     
