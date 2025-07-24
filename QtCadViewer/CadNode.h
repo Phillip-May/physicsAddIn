@@ -276,6 +276,7 @@ struct CadNode {
     std::string name;
     CADNodeColor color;
     TopLoc_Location loc;
+    TopLoc_Location globalLoc; // Cached global transform
     std::vector<std::shared_ptr<CadNode>> children;
     bool visible = true;
     bool excludedFromDecomposition = false; // Exclude from VHACD/CoACD mesh generation

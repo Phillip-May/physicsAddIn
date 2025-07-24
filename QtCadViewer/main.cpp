@@ -202,6 +202,18 @@ std::unique_ptr<XCAFLabelNode> buildLabelTreeWithReferences(const TDF_Label& lab
 #include <XmlXCAFDrivers.hxx>
 #include <GProp_GProps.hxx>
 
+
+// Helper to recursively set globalLoc for each node
+// (Moved here to ensure it's declared before use)
+template<typename NodeType>
+void setGlobalLocRecursive(NodeType* node, const TopLoc_Location& parentGlobalLoc = TopLoc_Location()) {
+    if (!node) return;
+    node->globalLoc = parentGlobalLoc * node->loc;
+    for (auto& child : node->children) {
+        setGlobalLocRecursive(child.get(), node->globalLoc);
+    }
+}
+
 // qHash overload for TDF_Label to allow use in QSet/QHash
 #include <TDF_Label.hxx>
 inline uint qHash(const TDF_Label& label, uint seed = 0) {
@@ -764,33 +776,76 @@ void connectTreeAndViewer(QTreeView* tree, CadOpenGLWidget* viewer, ModelType* m
     };
     // Tree -> Viewer
     QObject::connect(tree->selectionModel(), &QItemSelectionModel::selectionChanged, viewer, [=](const QItemSelection &, const QItemSelection &) {
+        qDebug() << "[PROFILE] selectionChanged: start";
+        auto t0 = std::chrono::high_resolution_clock::now();
         viewer->clearSelection();
         QModelIndexList selectedIndexes = tree->selectionModel()->selectedIndexes();
         QSet<CadNode*> allNodesToSelect;
+        auto t_descendants_start = std::chrono::high_resolution_clock::now();
+        int descendantCalls = 0;
+        long long totalDescendantTime = 0;
+        long long maxDescendantTime = 0;
         for (const QModelIndex& index : selectedIndexes) {
             CadNode* node = const_cast<CadNode*>(model->getNode(index));
             if (node) {
                 allNodesToSelect.insert(node);
                 // Optionally add descendants
                 std::function<void(CadNode*)> addDescendants = [&](CadNode* currentNode) {
+                    auto t1 = std::chrono::high_resolution_clock::now();
                     for (const auto& child : currentNode->children) {
                         if (child) {
                             allNodesToSelect.insert(child.get());
                             addDescendants(child.get());
                         }
                     }
+                    auto t2 = std::chrono::high_resolution_clock::now();
+                    long long dt = std::chrono::duration_cast<std::chrono::microseconds>(t2-t1).count();
+                    totalDescendantTime += dt;
+                    if (dt > maxDescendantTime) maxDescendantTime = dt;
+                    descendantCalls++;
                 };
                 addDescendants(node);
             }
         }
+        auto t_descendants_end = std::chrono::high_resolution_clock::now();
+        qDebug() << "[PROFILE] selectionChanged: allNodesToSelect size =" << allNodesToSelect.size();
+        qDebug() << "[PROFILE] addDescendants: total time ="
+                 << std::chrono::duration_cast<std::chrono::milliseconds>(t_descendants_end-t_descendants_start).count() << "ms,"
+                 << "calls:" << descendantCalls << ", total us:" << totalDescendantTime << ", max us:" << maxDescendantTime;
         // Helper to get parent node from model
         auto getParent = [=](CadNode* n) -> CadNode* {
             return const_cast<CadNode*>(model->getParentNode(n));
         };
+        int count = 0;
+        long long totalAccumulateTime = 0, maxAccumulateTime = 0;
+        long long totalAddToSelectionTime = 0, maxAddToSelectionTime = 0;
         for (CadNode* node : allNodesToSelect) {
-            TopLoc_Location accLoc = accumulateTransform(node, getParent);
+            auto t_acc_start = std::chrono::high_resolution_clock::now();
+            TopLoc_Location accLoc = node->globalLoc;
+            auto t_acc_end = std::chrono::high_resolution_clock::now();
+            long long accTime = std::chrono::duration_cast<std::chrono::microseconds>(t_acc_end-t_acc_start).count();
+            totalAccumulateTime += accTime;
+            if (accTime > maxAccumulateTime) maxAccumulateTime = accTime;
+            if (count < 5) {
+                qDebug() << "[PROFILE] accumulateTransform node" << count << "took" << accTime << "us";
+            }
+            auto t_sel_start = std::chrono::high_resolution_clock::now();
             viewer->addToSelection(node, accLoc);
+            auto t_sel_end = std::chrono::high_resolution_clock::now();
+            long long selTime = std::chrono::duration_cast<std::chrono::microseconds>(t_sel_end-t_sel_start).count();
+            totalAddToSelectionTime += selTime;
+            if (selTime > maxAddToSelectionTime) maxAddToSelectionTime = selTime;
+            if (count < 5) {
+                qDebug() << "[PROFILE] addToSelection node" << count << "took" << selTime << "us";
+            }
+            ++count;
         }
+        qDebug() << "[PROFILE] accumulateTransform: total us =" << totalAccumulateTime << ", max us =" << maxAccumulateTime;
+        qDebug() << "[PROFILE] addToSelection: total us =" << totalAddToSelectionTime << ", max us =" << maxAddToSelectionTime;
+        auto t3 = std::chrono::high_resolution_clock::now();
+        qDebug() << "[PROFILE] selectionChanged: total time ="
+                 << std::chrono::duration_cast<std::chrono::milliseconds>(t3-t0).count() << "ms for"
+                 << allNodesToSelect.size() << "nodes.";
     });
 
     // Viewer -> Tree
@@ -1421,6 +1476,7 @@ bool loadFromJsonAndBin(const QString& railJsonFile,
         auto child = build_tree_xcaf(rootLabel, shapeTool, colorTool, defaultColor, identityLoc, doc);
         if (child) {
             cadRoot->children.push_back(std::move(child));
+            setGlobalLocRecursive(cadRoot->children.back().get(), cadRoot->globalLoc);
         }
     }
     // Build XCAF label tree
@@ -1527,6 +1583,7 @@ bool loadFromStep(const QString& stepFile,
         auto child = build_tree_xcaf(rootLabel, shapeTool, colorTool, defaultColor, identityLoc, doc);
         if (child) {
             cadRoot->children.push_back(std::move(child));
+            setGlobalLocRecursive(cadRoot->children.back().get(), cadRoot->globalLoc);
         }
     }
     // Build XCAF label tree
@@ -1891,6 +1948,74 @@ void initTreeAndOpenGLWidget(std::shared_ptr<CadNode> &inputRoot,
             CadNode* selNode = const_cast<CadNode*>(qtModel->getNode(selIdx));
             if (selNode && selNode->asXCAF() && selNode->asXCAF()->type == TopAbs_FACE) {
                 selectedFaces.push_back(selNode);
+            }
+        }
+        // --- Add Connection Point Action ---
+        // Only show for a single selected face node under a Physics ancestor
+        if (selectedFaces.size() == 1) {
+            CadNode* faceNode = selectedFaces[0];
+            // Find the nearest Physics ancestor
+            CadNode* physicsAncestor = const_cast<CadNode*>(qtModel->getParentNode(faceNode));
+            while (physicsAncestor && physicsAncestor->type != CadNodeType::Physics) {
+                CadNode* next = const_cast<CadNode*>(qtModel->getParentNode(physicsAncestor));
+                if (!next || next == physicsAncestor) break;
+                physicsAncestor = next;
+            }
+            if (physicsAncestor && physicsAncestor->type == CadNodeType::Physics) {
+                QAction* addConnPtAction = menu.addAction("Add Connection Point");
+                QObject::connect(addConnPtAction, &QAction::triggered, treeView, [=]() {
+                    // Compute global transform of face node
+                    auto accumulateTransform = [qtModel](CadNode* node) -> TopLoc_Location {
+                        TopLoc_Location acc;
+                        std::vector<CadNode*> ancestry;
+                        CadNode* cur = node;
+                        while (cur) {
+                            ancestry.push_back(cur);
+                            cur = const_cast<CadNode*>(qtModel->getParentNode(cur));
+                        }
+                        for (auto it = ancestry.rbegin(); it != ancestry.rend(); ++it) {
+                            acc = acc * (*it)->loc;
+                        }
+                        return acc;
+                    };
+                    TopLoc_Location faceGlobal = accumulateTransform(faceNode);
+                    TopLoc_Location physicsGlobal = accumulateTransform(physicsAncestor);
+                    // Get face center in world coordinates
+                    XCAFNodeData* xData = faceNode->asXCAF();
+                    if (!xData || !xData->hasFace()) {
+                        QMessageBox::warning(nullptr, "Add Connection Point", "Selected node is not a valid face.");
+                        return;
+                    }
+                    TopoDS_Face face = xData->getFace();
+                    TopoDS_Face locatedFace = TopoDS::Face(face.Located(faceGlobal));
+                    Bnd_Box bbox;
+                    BRepBndLib::Add(locatedFace, bbox);
+                    Standard_Real xmin, ymin, zmin, xmax, ymax, zmax;
+                    bbox.Get(xmin, ymin, zmin, xmax, ymax, zmax);
+                    gp_Pnt center((xmin + xmax) / 2, (ymin + ymax) / 2, (zmin + zmax) / 2);
+                    // Compute local transform for the connection point relative to the physics node
+                    gp_Trsf connTrsf;
+                    gp_Pnt origin(0, 0, 0);
+                    gp_Vec offset(origin, center);
+                    connTrsf.SetTranslation(offset);
+                    // The local transform is from the physics node's global to the face center
+                    TopLoc_Location connLoc = physicsGlobal.Inverted() * TopLoc_Location(connTrsf) * physicsGlobal;
+                    // Create the connection point node
+                    auto connNode = std::make_shared<CadNode>();
+                    connNode->name = "Connection Point";
+                    connNode->type = CadNodeType::ConnectionPoint;
+                    connNode->color = CADNodeColor::fromSRGB(255, 0, 255); // Magenta for visibility
+                    connNode->loc = physicsGlobal.Inverted() * TopLoc_Location(connTrsf) * physicsGlobal;
+                    connNode->visible = true;
+                    connNode->data = std::make_shared<ConnectionPointData>();
+                    // Add as child of the physics node
+                    physicsAncestor->children.push_back(connNode);
+                    setParentPointersRecursive(physicsAncestor);
+                    // Refresh the tree model
+                    QModelIndex physIdx = qtModel->indexForNode(physicsAncestor);
+                    qtModel->dataChanged(physIdx, physIdx);
+                    QMessageBox::information(nullptr, "Add Connection Point", "Connection point added under Physics node.");
+                });
             }
         }
         QAction* alignFacesAction = nullptr;
