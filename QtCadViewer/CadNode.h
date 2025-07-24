@@ -199,8 +199,8 @@ struct RailNodeData : public CadNodeDataBase {
     QVector3D axisOfTravel{1,0,0};
     QVector3D buildJointPosition{0,0,0};
     double travelLength = 0.0;
-    int numSegments = 1;
-    QString jsonString; // For custom JSON editing
+    int numSegments = 10;
+    // jsonString field removed
 
     QJsonObject toJson() const override {
         QJsonObject obj;
@@ -210,7 +210,6 @@ struct RailNodeData : public CadNodeDataBase {
         obj["buildJointPosition"] = jointArr;
         obj["travelLength"] = travelLength;
         obj["numSegments"] = numSegments;
-        obj["jsonString"] = jsonString;
         return obj;
     }
     static std::shared_ptr<RailNodeData> fromJson(const QJsonObject& obj) {
@@ -221,7 +220,6 @@ struct RailNodeData : public CadNodeDataBase {
         if (jointArr.size() == 3) data->buildJointPosition = QVector3D(jointArr[0].toDouble(), jointArr[1].toDouble(), jointArr[2].toDouble());
         data->travelLength = obj["travelLength"].toDouble();
         data->numSegments = obj["numSegments"].toInt();
-        data->jsonString = obj["jsonString"].toString();
         return data;
     }
 };
