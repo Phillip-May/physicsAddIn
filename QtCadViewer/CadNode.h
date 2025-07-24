@@ -134,13 +134,62 @@ struct PhysicsNodeData : public CadNodeDataBase {
         QJsonObject obj;
         obj["convexHullGenerated"] = convexHullGenerated;
         obj["collisionMeshVisible"] = collisionMeshVisible;
-        // Hulls not serialized for now (can add if needed)
+        // Serialize hulls
+        QJsonArray hullsArr;
+        for (const auto& hull : hulls) {
+            QJsonObject hullObj;
+            QJsonArray vertsArr;
+            for (const auto& v : hull.vertices) {
+                QJsonArray vArr;
+                vArr.append(v[0]);
+                vArr.append(v[1]);
+                vArr.append(v[2]);
+                vertsArr.append(vArr);
+            }
+            hullObj["vertices"] = vertsArr;
+            QJsonArray indsArr;
+            for (const auto& tri : hull.indices) {
+                QJsonArray triArr;
+                triArr.append(static_cast<qint64>(tri[0]));
+                triArr.append(static_cast<qint64>(tri[1]));
+                triArr.append(static_cast<qint64>(tri[2]));
+                indsArr.append(triArr);
+            }
+            hullObj["indices"] = indsArr;
+            hullsArr.append(hullObj);
+        }
+        obj["hulls"] = hullsArr;
         return obj;
     }
     static std::shared_ptr<PhysicsNodeData> fromJson(const QJsonObject& obj) {
         auto data = std::make_shared<PhysicsNodeData>();
         data->convexHullGenerated = obj["convexHullGenerated"].toBool();
         data->collisionMeshVisible = obj["collisionMeshVisible"].toBool(true);
+        // Deserialize hulls
+        QJsonArray hullsArr = obj["hulls"].toArray();
+        for (const auto& hullVal : hullsArr) {
+            QJsonObject hullObj = hullVal.toObject();
+            ConvexHullData hull;
+            QJsonArray vertsArr = hullObj["vertices"].toArray();
+            for (const auto& vVal : vertsArr) {
+                QJsonArray vArr = vVal.toArray();
+                if (vArr.size() == 3) {
+                    hull.vertices.push_back({vArr[0].toDouble(), vArr[1].toDouble(), vArr[2].toDouble()});
+                }
+            }
+            QJsonArray indsArr = hullObj["indices"].toArray();
+            for (const auto& triVal : indsArr) {
+                QJsonArray triArr = triVal.toArray();
+                if (triArr.size() == 3) {
+                    hull.indices.push_back({
+                        static_cast<uint32_t>(triArr[0].toInt()),
+                        static_cast<uint32_t>(triArr[1].toInt()),
+                        static_cast<uint32_t>(triArr[2].toInt())
+                    });
+                }
+            }
+            data->hulls.push_back(std::move(hull));
+        }
         return data;
     }
 };
@@ -280,6 +329,7 @@ struct CadNode {
     std::vector<std::shared_ptr<CadNode>> children;
     bool visible = true;
     bool excludedFromDecomposition = false; // Exclude from VHACD/CoACD mesh generation
+    bool needsGlobalLocUpdate = false;
 
     CadNodeType type = CadNodeType::Unknown; // Must be set explicitly
     std::shared_ptr<CadNodeDataBase> data; // Holds type-specific data

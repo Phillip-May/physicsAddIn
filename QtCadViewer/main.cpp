@@ -57,6 +57,7 @@
 #include <vector>
 #include "RailJsonEditorDialog.h"
 #include <QVariant>
+#include <BRepPrimAPI_MakePrism.hxx>
 
 // Helper to set parent pointers recursively in a CadNode tree
 void setParentPointersRecursive(CadNode* node, CadNode* parent = nullptr) {
@@ -1544,6 +1545,32 @@ bool loadFromJsonAndBin(const QString& railJsonFile,
     return true;
 }
 
+// Extrude a face by a given distance along its normal
+TopoDS_Shape extrudeFace(const TopoDS_Face& face, double distance) {
+    // Compute the normal at the center of the face
+    Bnd_Box bbox;
+    BRepBndLib::Add(face, bbox);
+    Standard_Real xmin, ymin, zmin, xmax, ymax, zmax;
+    bbox.Get(xmin, ymin, zmin, xmax, ymax, zmax);
+    gp_Pnt center((xmin + xmax) / 2, (ymin + ymax) / 2, (zmin + zmax) / 2);
+    // Get surface and UV bounds
+    Handle(Geom_Surface) surf = BRep_Tool::Surface(face);
+    Standard_Real umin, umax, vmin, vmax;
+    BRepTools::UVBounds(face, umin, umax, vmin, vmax);
+    Standard_Real ucenter = (umin + umax) / 2.0;
+    Standard_Real vcenter = (vmin + vmax) / 2.0;
+    GeomLProp_SLProps props(surf, ucenter, vcenter, 1, 1e-6);
+    gp_Dir normal(0, 0, 1);
+    if (props.IsNormalDefined()) {
+        normal = props.Normal();
+    }
+    gp_Vec dir(normal);
+    dir *= distance;
+    // Extrude the face
+    TopoDS_Shape prism = BRepPrimAPI_MakePrism(face, dir);
+    return prism;
+}
+
 bool loadFromStep(const QString& stepFile,
                   Handle(TDocStd_Document)& doc,
                   std::shared_ptr<CadNode>& cadRoot,
@@ -1724,13 +1751,9 @@ void initTreeAndOpenGLWidget(std::shared_ptr<CadNode> &inputRoot,
                         TDF_Label label = findLabelByPath(doc, xData->labelPath);
                         QVariantList labelPathDebug;
                         for (int tag : xData->labelPath) labelPathDebug << tag;
-                        qDebug() << "[Relink] Node:" << QString::fromStdString(n->name)
-                                 << "labelPath:" << labelPathDebug
-                                 << "label.IsNull():" << label.IsNull();
                         if (!label.IsNull()) {
                             auto shapeToolLocal = XCAFDoc_DocumentTool::ShapeTool(doc->Main());
                             TopoDS_Shape occShape = shapeToolLocal->GetShape(label);
-                            qDebug() << "[Relink]   OCC shape isNull:" << occShape.IsNull();
                             if (xData->type == TopAbs_FACE || xData->type == TopAbs_EDGE) {
                                 if (xData->shapeIndex >= 0) {
                                     int idx = 0;
@@ -1742,25 +1765,25 @@ void initTreeAndOpenGLWidget(std::shared_ptr<CadNode> &inputRoot,
                                         }
                                     }
                                     xData->shape = foundShape;
-                                    qDebug() << "[Relink]   Set subshape for index" << xData->shapeIndex << "isNull:" << foundShape.IsNull();
                                 } else {
                                     // shapeIndex == -1: assign the main shape
                                     xData->shape = occShape;
-                                    qDebug() << "[Relink]   Set main shape for FACE/EDGE node with shapeIndex -1, isNull:" << occShape.IsNull();
                                 }
                             } else {
                                 xData->shape = occShape;
-                                qDebug() << "[Relink]   Set main shape isNull:" << occShape.IsNull();
                             }
                         } else {
                             xData->shape.Nullify();
-                            qDebug() << "[Relink]   Label not found, shape nullified";
                         }
                     }
                 }
                 for (auto& child : n->children) relinkXCAF(child.get());
             };
             relinkXCAF(node);
+            // Always update parent pointers and global transforms after loading from JSON
+            setParentPointersRecursive(node);
+            setGlobalLocRecursive(node, node->parent ? node->parent->globalLoc : TopLoc_Location());
+            openGLViewer->clearSelection();
             openGLViewer->markCacheDirty();
             QMessageBox::information(nullptr, "Success", "Node loaded and replaced from:\n" + fileName);
         });
@@ -1776,6 +1799,89 @@ void initTreeAndOpenGLWidget(std::shared_ptr<CadNode> &inputRoot,
                 node->asPhysics()->collisionMeshVisible = !node->asPhysics()->collisionMeshVisible;
                 qtModel->dataChanged(idx, idx);
                 // Optionally update viewer if needed
+            });
+            // --- Add VHACD and CoACD generation actions ---
+            QAction* vhacdAction = menu.addAction("Generate Collision Mesh (VHACD)");
+            QObject::connect(vhacdAction, &QAction::triggered, treeView, [=]() {
+                // Default parameters as JSON
+                QJsonObject defaultParams{
+                    {"resolution", 100000},
+                    {"maxHulls", 16},
+                    {"minVolume", 0.01}
+                };
+                QJsonDocument doc(defaultParams);
+                RailJsonEditorDialog dlg(QString::fromUtf8(doc.toJson(QJsonDocument::Indented)), treeView);
+                if (dlg.exec() == QDialog::Accepted) {
+                    QJsonDocument userDoc = QJsonDocument::fromJson(dlg.getJsonString().toUtf8());
+                    if (!userDoc.isObject()) {
+                        QMessageBox::warning(nullptr, "VHACD", "Invalid JSON for VHACD parameters.");
+                        return;
+                    }
+                    QJsonObject obj = userDoc.object();
+                    int resolution = obj.value("resolution").toInt(100000);
+                    int maxHulls = obj.value("maxHulls").toInt(16);
+                    double minVolume = obj.value("minVolume").toDouble(0.01);
+                    generateVHACDStub(QString::fromStdString(node->name), resolution, maxHulls, minVolume, node);
+                    openGLViewer->markCacheDirty();
+                    QMessageBox::information(nullptr, "VHACD", "VHACD collision mesh generation complete.");
+                }
+            });
+            QAction* coacdAction = menu.addAction("Generate Collision Mesh (CoACD)");
+            QObject::connect(coacdAction, &QAction::triggered, treeView, [=]() {
+                // Default parameters as JSON
+                QJsonObject defaultParams{
+                    {"concavity", 0.0025},
+                    {"alpha", 0.05},
+                    {"beta", 0.05},
+                    {"maxConvexHull", 16},
+                    {"preprocess", "voxel"},
+                    {"prepRes", 64},
+                    {"sampleRes", 10000},
+                    {"mctsNodes", 100},
+                    {"mctsIter", 100},
+                    {"mctsDepth", 10},
+                    {"pca", true},
+                    {"merge", true},
+                    {"decimate", true},
+                    {"maxChVertex", 64},
+                    {"extrude", false},
+                    {"extrudeMargin", 0.0},
+                    {"apxMode", "fast"},
+                    {"seed", 42}
+                };
+                QJsonDocument doc(defaultParams);
+                RailJsonEditorDialog dlg(QString::fromUtf8(doc.toJson(QJsonDocument::Indented)), treeView);
+                if (dlg.exec() == QDialog::Accepted) {
+                    QJsonDocument userDoc = QJsonDocument::fromJson(dlg.getJsonString().toUtf8());
+                    if (!userDoc.isObject()) {
+                        QMessageBox::warning(nullptr, "CoACD", "Invalid JSON for CoACD parameters.");
+                        return;
+                    }
+                    QJsonObject obj = userDoc.object();
+                    double concavity = obj.value("concavity").toDouble(0.0025);
+                    double alpha = obj.value("alpha").toDouble(0.05);
+                    double beta = obj.value("beta").toDouble(0.05);
+                    int maxConvexHull = obj.value("maxConvexHull").toInt(16);
+                    std::string preprocess = obj.value("preprocess").toString("voxel").toStdString();
+                    int prepRes = obj.value("prepRes").toInt(64);
+                    int sampleRes = obj.value("sampleRes").toInt(10000);
+                    int mctsNodes = obj.value("mctsNodes").toInt(100);
+                    int mctsIter = obj.value("mctsIter").toInt(100);
+                    int mctsDepth = obj.value("mctsDepth").toInt(10);
+                    bool pca = obj.value("pca").toBool(true);
+                    bool merge = obj.value("merge").toBool(true);
+                    bool decimate = obj.value("decimate").toBool(true);
+                    int maxChVertex = obj.value("maxChVertex").toInt(64);
+                    bool extrude = obj.value("extrude").toBool(false);
+                    double extrudeMargin = obj.value("extrudeMargin").toDouble(0.0);
+                    std::string apxMode = obj.value("apxMode").toString("fast").toStdString();
+                    int seed = obj.value("seed").toInt(42);
+                    generateCoACDStub(QString::fromStdString(node->name), concavity, alpha, beta, node,
+                        maxConvexHull, preprocess, prepRes, sampleRes, mctsNodes, mctsIter, mctsDepth,
+                        pca, merge, decimate, maxChVertex, extrude, extrudeMargin, apxMode, seed);
+                    openGLViewer->markCacheDirty();
+                    QMessageBox::information(nullptr, "CoACD", "CoACD collision mesh generation complete.");
+                }
             });
         }
         // Exclude by color submenu (unified for all CadNode-based trees)
@@ -1857,6 +1963,22 @@ void initTreeAndOpenGLWidget(std::shared_ptr<CadNode> &inputRoot,
                 }
                 qDebug() << "[Debug]     shape face count:" << faceCount;
                 qDebug() << "[Debug]     shape edge count:" << edgeCount;
+            }
+            if (auto physData = node->asPhysics()) {
+                qDebug() << "[Debug]   PHYSICS info:";
+                qDebug() << "[Debug]     convexHullGenerated:" << physData->convexHullGenerated;
+                qDebug() << "[Debug]     collisionMeshVisible:" << physData->collisionMeshVisible;
+                qDebug() << "[Debug]     hulls.size():" << physData->hulls.size();
+                qDebug() << "[Debug]     node name:" << QString::fromStdString(node->name);
+                if (!physData->hulls.empty()) {
+                    const auto& hull = physData->hulls[0];
+                    qDebug() << "[Debug]     First hull vertex count:" << hull.vertices.size();
+                    qDebug() << "[Debug]     First hull triangle count:" << hull.indices.size();
+                    for (int i = 0; i < std::min<int>(3, hull.vertices.size()); ++i) {
+                        const auto& v = hull.vertices[i];
+                        qDebug() << "[Debug]       Vertex" << i << ":" << v[0] << v[1] << v[2];
+                    }
+                }
             }
         });
         // Add relink to XCAF node action (always for XCAF nodes)
@@ -1951,17 +2073,17 @@ void initTreeAndOpenGLWidget(std::shared_ptr<CadNode> &inputRoot,
             }
         }
         // --- Add Connection Point Action ---
-        // Only show for a single selected face node under a Physics ancestor
+        // Only show for a single selected face node under a Rail ancestor
         if (selectedFaces.size() == 1) {
             CadNode* faceNode = selectedFaces[0];
-            // Find the nearest Physics ancestor
-            CadNode* physicsAncestor = const_cast<CadNode*>(qtModel->getParentNode(faceNode));
-            while (physicsAncestor && physicsAncestor->type != CadNodeType::Physics) {
-                CadNode* next = const_cast<CadNode*>(qtModel->getParentNode(physicsAncestor));
-                if (!next || next == physicsAncestor) break;
-                physicsAncestor = next;
+            // Find the nearest Rail ancestor
+            CadNode* railAncestor = const_cast<CadNode*>(qtModel->getParentNode(faceNode));
+            while (railAncestor && railAncestor->type != CadNodeType::Rail) {
+                CadNode* next = const_cast<CadNode*>(qtModel->getParentNode(railAncestor));
+                if (!next || next == railAncestor) break;
+                railAncestor = next;
             }
-            if (physicsAncestor && physicsAncestor->type == CadNodeType::Physics) {
+            if (railAncestor && railAncestor->type == CadNodeType::Rail) {
                 QAction* addConnPtAction = menu.addAction("Add Connection Point");
                 QObject::connect(addConnPtAction, &QAction::triggered, treeView, [=]() {
                     // Compute global transform of face node
@@ -1979,7 +2101,7 @@ void initTreeAndOpenGLWidget(std::shared_ptr<CadNode> &inputRoot,
                         return acc;
                     };
                     TopLoc_Location faceGlobal = accumulateTransform(faceNode);
-                    TopLoc_Location physicsGlobal = accumulateTransform(physicsAncestor);
+                    TopLoc_Location railGlobal = accumulateTransform(railAncestor);
                     // Get face center in world coordinates
                     XCAFNodeData* xData = faceNode->asXCAF();
                     if (!xData || !xData->hasFace()) {
@@ -1993,28 +2115,28 @@ void initTreeAndOpenGLWidget(std::shared_ptr<CadNode> &inputRoot,
                     Standard_Real xmin, ymin, zmin, xmax, ymax, zmax;
                     bbox.Get(xmin, ymin, zmin, xmax, ymax, zmax);
                     gp_Pnt center((xmin + xmax) / 2, (ymin + ymax) / 2, (zmin + zmax) / 2);
-                    // Compute local transform for the connection point relative to the physics node
+                    // Compute local transform for the connection point relative to the rail node
                     gp_Trsf connTrsf;
                     gp_Pnt origin(0, 0, 0);
                     gp_Vec offset(origin, center);
                     connTrsf.SetTranslation(offset);
-                    // The local transform is from the physics node's global to the face center
-                    TopLoc_Location connLoc = physicsGlobal.Inverted() * TopLoc_Location(connTrsf) * physicsGlobal;
+                    // The local transform is from the rail node's global to the face center
+                    TopLoc_Location connLoc = railGlobal.Inverted() * TopLoc_Location(connTrsf) * railGlobal;
                     // Create the connection point node
                     auto connNode = std::make_shared<CadNode>();
                     connNode->name = "Connection Point";
                     connNode->type = CadNodeType::ConnectionPoint;
                     connNode->color = CADNodeColor::fromSRGB(255, 0, 255); // Magenta for visibility
-                    connNode->loc = physicsGlobal.Inverted() * TopLoc_Location(connTrsf) * physicsGlobal;
+                    connNode->loc = railGlobal.Inverted() * TopLoc_Location(connTrsf) * railGlobal;
                     connNode->visible = true;
                     connNode->data = std::make_shared<ConnectionPointData>();
-                    // Add as child of the physics node
-                    physicsAncestor->children.push_back(connNode);
-                    setParentPointersRecursive(physicsAncestor);
+                    // Add as child of the rail node
+                    railAncestor->children.push_back(connNode);
+                    setParentPointersRecursive(railAncestor);
                     // Refresh the tree model
-                    QModelIndex physIdx = qtModel->indexForNode(physicsAncestor);
-                    qtModel->dataChanged(physIdx, physIdx);
-                    QMessageBox::information(nullptr, "Add Connection Point", "Connection point added under Physics node.");
+                    QModelIndex railIdx = qtModel->indexForNode(railAncestor);
+                    qtModel->dataChanged(railIdx, railIdx);
+                    QMessageBox::information(nullptr, "Add Connection Point", "Connection point added under Rail node.");
                 });
             }
         }
@@ -2122,6 +2244,14 @@ void initTreeAndOpenGLWidget(std::shared_ptr<CadNode> &inputRoot,
                 qtModel->dataChanged(qtModel->indexForNode(physicsAncestor), qtModel->indexForNode(physicsAncestor));
                 openGLViewer->markCacheDirty();
                 QMessageBox::information(nullptr, "Align Faces", "Aligned parent of second face to first face.");
+                if (physicsAncestor->needsGlobalLocUpdate) {
+                    setGlobalLocRecursive(physicsAncestor, physicsAncestor->parent ? physicsAncestor->parent->globalLoc : TopLoc_Location());
+                    std::function<void(CadNode*)> clearFlag = [&](CadNode* n) {
+                        n->needsGlobalLocUpdate = false;
+                        for (auto& child : n->children) clearFlag(child.get());
+                    };
+                    clearFlag(physicsAncestor);
+                }
             });
         }
         // Add to Custom Model Tree submenu (only for CAD tree)
@@ -2258,6 +2388,68 @@ void initTreeAndOpenGLWidget(std::shared_ptr<CadNode> &inputRoot,
                     qtModel->dataChanged(idx, idx);
                 }
             });
+        }
+        // --- Extrude Face and Add to Convex Hulls (for faces under any Physics ancestor) ---
+        if (node->type == CadNodeType::XCAF && node->asXCAF() && node->asXCAF()->type == TopAbs_FACE) {
+            // Traverse up to find the nearest Physics ancestor
+            CadNode* ancestor = const_cast<CadNode*>(qtModel->getParentNode(node));
+            while (ancestor && ancestor->type != CadNodeType::Physics) {
+                ancestor = const_cast<CadNode*>(qtModel->getParentNode(ancestor));
+            }
+            if (ancestor && ancestor->type == CadNodeType::Physics && ancestor->asPhysics()) {
+                QAction* extrudeAction = menu.addAction("Extrude Face and Add to Convex Hulls");
+                QObject::connect(extrudeAction, &QAction::triggered, treeView, [=]() {
+                    bool ok = false;
+                    double distance = QInputDialog::getDouble(nullptr, "Extrude Face", "Extrusion distance (mm):", 10.0, -10000, 10000, 2, &ok);
+                    if (!ok) return;
+                    XCAFNodeData* xData = node->asXCAF();
+                    if (!xData || !xData->hasFace()) {
+                        QMessageBox::warning(nullptr, "Extrude Face", "Selected node is not a valid face.");
+                        return;
+                    }
+                    TopoDS_Face face = xData->getFace();
+                    // Extrude the face
+                    TopoDS_Shape extruded = extrudeFace(face, distance);
+                    // Mesh the extruded shape
+                    BRepMesh_IncrementalMesh mesher(extruded, 0.5);
+                    // Collect vertices and triangles
+                    std::vector<std::array<double, 3>> vertices;
+                    std::vector<std::array<uint32_t, 3>> indices;
+                    uint32_t vertOffset = 0;
+                    for (TopExp_Explorer exp(extruded, TopAbs_FACE); exp.More(); exp.Next()) {
+                        TopoDS_Face f = TopoDS::Face(exp.Current());
+                        TopLoc_Location loc;
+                        Handle(Poly_Triangulation) tri = BRep_Tool::Triangulation(f, loc);
+                        if (tri.IsNull() || tri->NbTriangles() == 0) continue;
+                        std::vector<uint32_t> localIndices(tri->NbNodes());
+                        for (int i = 1; i <= tri->NbNodes(); ++i) {
+                            gp_Pnt p = tri->Node(i);
+                            p.Transform(loc.Transformation());
+                            vertices.push_back({p.X(), p.Y(), p.Z()});
+                            localIndices[i-1] = vertOffset++;
+                        }
+                        for (int i = tri->Triangles().Lower(); i <= tri->Triangles().Upper(); ++i) {
+                            int n1, n2, n3;
+                            tri->Triangles()(i).Get(n1, n2, n3);
+                            indices.push_back({localIndices[n1-1], localIndices[n2-1], localIndices[n3-1]});
+                        }
+                    }
+                    if (vertices.empty() || indices.empty()) {
+                        QMessageBox::warning(nullptr, "Extrude Face", "Failed to mesh the extruded geometry.");
+                        return;
+                    }
+                    // Add to Physics ancestor's PhysicsNodeData hulls
+                    PhysicsNodeData* physData = ancestor->asPhysics();
+                    ConvexHullData hullData;
+                    hullData.vertices = std::move(vertices);
+                    hullData.indices = std::move(indices);
+                    physData->hulls.push_back(std::move(hullData));
+                    physData->convexHullGenerated = true;
+                    qtModel->dataChanged(qtModel->indexForNode(ancestor), qtModel->indexForNode(ancestor));
+                    openGLViewer->markCacheDirty();
+                    QMessageBox::information(nullptr, "Extrude Face", "Extruded geometry added to convex hulls.");
+                });
+            }
         }
         if (!menu.isEmpty()) menu.exec(treeView->viewport()->mapToGlobal(pos));
     });

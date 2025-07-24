@@ -42,6 +42,17 @@
 #include <functional> // For std::hash
 
 namespace {
+
+// Helper to recursively set globalLoc for each node
+// (Defined here so it is available in this translation unit)
+template<typename NodeType>
+void setGlobalLocRecursive(NodeType* node, const TopLoc_Location& parentGlobalLoc = TopLoc_Location()) {
+    if (!node) return;
+    node->globalLoc = parentGlobalLoc * node->loc;
+    for (auto& child : node->children) {
+        setGlobalLocRecursive(child.get(), node->globalLoc);
+    }
+}
 // Helper: Find FaceInstance for a given node
 static CadOpenGLWidget::FaceInstance* findFaceInstance(std::vector<CadOpenGLWidget::FaceInstance>& faceCache, CadNode* node) {
     for (auto& inst : faceCache) {
@@ -348,20 +359,6 @@ void CadOpenGLWidget::traverseAndRender(const CadNode* node, CADNodeColor inheri
     }
     if (node->visible) {
         CADNodeColor nodeColor = (node->color.a >= 0.0f) ? node->color : inheritedColor;
-        // If this is a transform-like node, just traverse children and return
-        if (isTransformLikeNode(node)) {
-            // If this is a reference node, propagate it as parentReferenceNode
-            const CadNode* newParentReferenceNode = (node->type == CadNodeType::XCAF && node->children.size() == 1 && node->children[0] && node->children[0].get() != node && node->children[0]->type == CadNodeType::XCAF) ? node : parentReferenceNode;
-            for (const auto& child : node->children) {
-                if (child) {
-                    traverseAndRender(child.get(), node->color, newAccumulatedLoc, true, newParentReferenceNode);
-                }
-            }
-            if (needsTransform) {
-                glPopMatrix();
-            }
-            return;
-        }
         // Only render XCAF nodes as geometry
         if (node->type == CadNodeType::XCAF) {
             const XCAFNodeData* xData = node->asXCAF();
@@ -393,7 +390,9 @@ void CadOpenGLWidget::traverseAndRender(const CadNode* node, CADNodeColor inheri
     }
     if (node->type == CadNodeType::Physics) {
         const PhysicsNodeData* physData = node->asPhysics();
+        qDebug() << "[Render] Rendering convex hulls for node:" << node->name.c_str();
         if (physData && physData->convexHullGenerated && !physData->hulls.empty()) {
+            qDebug() << "[Render] Rendering convex hulls for node valid:" << node->name.c_str();
             renderConvexHulls(physData);
         }
     }    
@@ -1971,6 +1970,22 @@ void CadOpenGLWidget::setCameraState(const CameraState& state) {
 }
 
 void CadOpenGLWidget::markCacheDirty() {
+    // Walk the tree and update globalLoc for any node needing it
+    if (rootNode_) {
+        std::function<void(CadNode*, CadNode*)> updateIfNeeded = [&](CadNode* node, CadNode* parent) {
+            if (!node) return;
+            if (node->needsGlobalLocUpdate) {
+                setGlobalLocRecursive(node, parent ? parent->globalLoc : TopLoc_Location());
+                std::function<void(CadNode*)> clearFlag = [&](CadNode* n) {
+                    n->needsGlobalLocUpdate = false;
+                    for (auto& child : n->children) clearFlag(child.get());
+                };
+                clearFlag(node);
+            }
+            for (auto& child : node->children) updateIfNeeded(child.get(), node);
+        };
+        updateIfNeeded(rootNode_, nullptr);
+    }
     m_cacheDirty = true;
     update();
 }
@@ -2109,6 +2124,8 @@ void CadOpenGLWidget::setSelectedFaceNode(CadNode* node, const TopLoc_Location& 
     }
     update();
 }
+
+
 
 
 
