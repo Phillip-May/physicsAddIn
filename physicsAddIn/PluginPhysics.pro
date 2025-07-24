@@ -84,30 +84,12 @@ CONFIG(release, debug|release) {
 # This can be modified manually or automatically by Qt Creator
 HEADERS += \
     IPhysicsEngine.h \
-    PhysXEngine.h \
-    MaterialManager.h \
-    MaterialEditorDialog.h \
-    ObjectPropertiesDialog.h \
-    ObjectPropertiesManager.h \
-    SceneConfigurationDialog.h \
-    SoftBodyConfigDialog.h \
-    SnippetImmUtils.h \
-    SnippetPVD.h \
-    SnippetPrint.h \
-    SnippetUtils.h \
     pluginPhysics.h
 
 SOURCES += \
-    PhysXEngine.cpp \
-    MaterialManager.cpp \
-    MaterialEditorDialog.cpp \
-    ObjectPropertiesDialog.cpp \
-    ObjectPropertiesManager.cpp \
-    SceneConfigurationDialog.cpp \
-    SoftBodyConfigDialog.cpp \
-    SnippetImmUtils.cpp \
-    SnippetUtils.cpp \
     pluginPhysics.cpp
+
+include(../Common/Common.pri)
 
 
 #--------------------------
@@ -123,6 +105,8 @@ HEADERS += \
 SOURCES += \
     ../robodk_interface/robodktools.cpp \
     ../robodk_interface/robodktypes.cpp
+
+INCLUDEPATH += ../Common
 
 INCLUDEPATH += ../robodk_interface
 
