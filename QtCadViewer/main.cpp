@@ -385,13 +385,11 @@ std::shared_ptr<CadNode> build_tree_xcaf(const TDF_Label& label,
                    const Handle(XCAFDoc_ShapeTool)& shapeTool,
                    const Handle(XCAFDoc_ColorTool)& colorTool,
                    const CADNodeColor& parentColor,
-                   const TopLoc_Location& parentLoc,
-                   std::unordered_map<const void*, std::shared_ptr<CadNode>>& sharedNodeMap)
+                   const TopLoc_Location& parentLoc)
 {
     TopoDS_Shape shape = shapeTool->GetShape(label);
-    const void* shapeKey = (!shape.IsNull()) ? shape.TShape().get() : nullptr;
     bool isReference = shapeTool->IsReference(label);
-    if (isReference && shapeKey) {
+    if (isReference && !shape.IsNull()) {
         // 1. Create a new CadNode for the reference node (the parent)
         auto refNode = std::make_shared<CadNode>();
         refNode->type = CadNodeType::XCAF;
@@ -411,20 +409,17 @@ std::shared_ptr<CadNode> build_tree_xcaf(const TDF_Label& label,
             .arg(transformStr)
             .arg(name)
             .toStdString();
-        // 2. Get the shared child (the actual geometry/assembly)
+        // 2. Get the unique child (the actual geometry/assembly)
         TDF_Label refLabel;
         if (shapeTool->GetReferredShape(label, refLabel)) {
-            // Always build the shared child with parentLoc=identity
-            auto sharedChild = build_tree_xcaf(refLabel, shapeTool, colorTool, refNode->color, TopLoc_Location(), sharedNodeMap);
-            if (sharedChild) {
-                refNode->children.push_back(sharedChild);
+            auto uniqueChild = build_tree_xcaf(refLabel, shapeTool, colorTool, refNode->color, TopLoc_Location());
+            if (uniqueChild) {
+                refNode->children.push_back(uniqueChild);
             }
         }
         return refNode;
     }
-    
     CADNodeColor color = get_shape_color(shape, label, shapeTool, colorTool, parentColor);
-    
     // Debug color propagation for important nodes
     if (!shape.IsNull() && (shape.ShapeType() == TopAbs_SOLID || shape.ShapeType() == TopAbs_COMPOUND)) {
         qDebug() << "Label" << label.Tag() << "color: RGB(" << color.r << "," << color.g << "," << color.b << ")";
@@ -434,12 +429,10 @@ std::shared_ptr<CadNode> build_tree_xcaf(const TDF_Label& label,
             qDebug() << "  -> Own color";
         }
     }
-    
     // Skip edge shapes entirely
     if (!shape.IsNull() && shape.ShapeType() == TopAbs_EDGE) {
         return nullptr;
     }
-    
     QString name;
     Handle(TDataStd_Name) nameAttr;
     if (label.FindAttribute(TDataStd_Name::GetID(), nameAttr) && !nameAttr.IsNull()) {
@@ -447,10 +440,8 @@ std::shared_ptr<CadNode> build_tree_xcaf(const TDF_Label& label,
     } else {
         name = QString("Label %1").arg(label.Tag());
     }
-    
     // Get effective transform for this node
     TopLoc_Location nodeLoc = getEffectiveTransform(label, shapeTool, parentLoc);
-    
     auto node = std::make_shared<CadNode>();
     node->color = color;
     node->loc = nodeLoc;
@@ -461,9 +452,7 @@ std::shared_ptr<CadNode> build_tree_xcaf(const TDF_Label& label,
     xData->xcafLabelTag = label.Tag();
     xData->originalXCAFShape = shape;
     node->data = xData;
-    
     QString typeName = shapeTypeToString(xData->type);
-    
     // Enhanced assembly detection and handling
     bool isCompoundAssembly = false;
     if (!shape.IsNull() && shape.ShapeType() == TopAbs_COMPOUND) {
@@ -471,7 +460,6 @@ std::shared_ptr<CadNode> build_tree_xcaf(const TDF_Label& label,
         bool hasDirectGeometry = false;
         int refChildCount = 0;
         int totalChildCount = 0;
-        
         for (TDF_ChildIterator it(label); it.More(); it.Next()) {
             totalChildCount++;
             TDF_Label childLabel = it.Value();
@@ -485,14 +473,12 @@ std::shared_ptr<CadNode> build_tree_xcaf(const TDF_Label& label,
                 }
             }
         }
-        
         // If this is an assembly with references but no direct geometry
         if (!hasDirectGeometry && refChildCount > 0) {
             isCompoundAssembly = true;
             qDebug() << "Found assembly compound at label" << label.Tag() << "with" << refChildCount << "references";
         }
     }
-    
     // Enhanced name for STEP 214 debugging
     QString assemblyInfo = "";
     if (isAssembly(label, shapeTool)) {
@@ -504,7 +490,6 @@ std::shared_ptr<CadNode> build_tree_xcaf(const TDF_Label& label,
     if (shapeTool->IsReference(label)) {
         assemblyInfo += " | REFERENCE";
     }
-    
     // Compose a detailed name string
     node->name = QString("Label %1 | Type: %2 | Transform: %3%4%5")
         .arg(label.Tag())
@@ -513,16 +498,13 @@ std::shared_ptr<CadNode> build_tree_xcaf(const TDF_Label& label,
         .arg(name.isEmpty() ? "" : QString(" | OCC Name: %1").arg(name))
         .arg(assemblyInfo)
         .toStdString();
-
     // Enhanced reference handling for STEP 214 assemblies
     if (isReference) {
         TDF_Label refLabel;
         if (shapeTool->GetReferredShape(label, refLabel)) {
             qDebug() << "Following reference from label" << label.Tag() << "to" << refLabel.Tag();
             TopLoc_Location refLoc = nodeLoc; // Use the effective transform
-            
-            // For references, just point to the shared node for the referred label
-            auto child = build_tree_xcaf(refLabel, shapeTool, colorTool, color, refLoc, sharedNodeMap);
+            auto child = build_tree_xcaf(refLabel, shapeTool, colorTool, color, refLoc);
             if (child) {
                 // Mark this as a reference node in the name
                 child->name = QString("REF->%1 | %2").arg(refLabel.Tag()).arg(QString::fromStdString(child->name)).toStdString();
@@ -530,23 +512,16 @@ std::shared_ptr<CadNode> build_tree_xcaf(const TDF_Label& label,
             }
         }
     }
-
     // Recurse into children (for all labels)
     for (TDF_ChildIterator it(label); it.More(); it.Next()) {
-        auto child = build_tree_xcaf(it.Value(), shapeTool, colorTool, color, nodeLoc, sharedNodeMap);
+        auto child = build_tree_xcaf(it.Value(), shapeTool, colorTool, color, nodeLoc);
         if (child) node->children.push_back(child);
     }
-    
     // After node is created and type is set
     if (!shape.IsNull()) {
         xData->shape = shape;
         xData->type = shape.ShapeType();
     }
-    
-    // --- SHARING MAP FOR FACE/EDGE NODES ---
-    // Static to persist across recursive calls (lifetime: whole build)
-    using FaceEdgeKey = std::pair<const void*, const void*>; // (parent shape, face/edge TShape)
-    static std::unordered_map<FaceEdgeKey, std::shared_ptr<CadNode>, FaceEdgeKeyHash> faceEdgeNodeMap;
     // Add face/edge children for solids that don't have other solid children
     // This allows faces/edges to be shown even when the solid has reference children
     if (!shape.IsNull() && shape.ShapeType() == TopAbs_SOLID && !isAssembly(label, shapeTool)) {
@@ -565,25 +540,15 @@ std::shared_ptr<CadNode> build_tree_xcaf(const TDF_Label& label,
             int faceCount = 0;
             for (TopExp_Explorer exp(shape, TopAbs_FACE); exp.More(); exp.Next(), ++faceIdx) {
                 TopoDS_Face face = TopoDS::Face(exp.Current());
-                const void* parentKey = shape.TShape().get();
-                const void* faceKey = face.TShape().get();
-                FaceEdgeKey key = std::make_pair(parentKey, faceKey);
-                std::shared_ptr<CadNode> faceNode;
-                auto it = faceEdgeNodeMap.find(key);
-                if (it != faceEdgeNodeMap.end()) {
-                    faceNode = it->second;
-                } else {
-                    faceNode = std::make_shared<CadNode>();
-                    faceNode->type = CadNodeType::XCAF;
-                    auto faceData = std::make_shared<XCAFNodeData>();
-                    faceData->shape = face;
-                    faceData->type = TopAbs_FACE;
-                    faceNode->data = faceData;
-                    faceNode->color = get_shape_color(face, label, shapeTool, colorTool, color);
-                    faceNode->loc = nodeLoc;
-                    faceNode->name = QString("Face %1 of %2").arg(faceIdx).arg(QString::fromStdString(node->name)).toStdString();
-                    faceEdgeNodeMap[key] = faceNode;
-                }
+                auto faceNode = std::make_shared<CadNode>();
+                faceNode->type = CadNodeType::XCAF;
+                auto faceData = std::make_shared<XCAFNodeData>();
+                faceData->shape = face;
+                faceData->type = TopAbs_FACE;
+                faceNode->data = faceData;
+                faceNode->color = get_shape_color(face, label, shapeTool, colorTool, color);
+                faceNode->loc = nodeLoc;
+                faceNode->name = QString("Face %1 of %2").arg(faceIdx).arg(QString::fromStdString(node->name)).toStdString();
                 node->children.push_back(faceNode);
                 faceCount++;
             }
@@ -591,37 +556,21 @@ std::shared_ptr<CadNode> build_tree_xcaf(const TDF_Label& label,
             int edgeCount = 0;
             for (TopExp_Explorer exp(shape, TopAbs_EDGE); exp.More(); exp.Next(), ++edgeIdx) {
                 TopoDS_Shape edge = exp.Current();
-                const void* parentKey = shape.TShape().get();
-                const void* edgeKey = edge.TShape().get();
-                FaceEdgeKey key = std::make_pair(parentKey, edgeKey);
-                std::shared_ptr<CadNode> edgeNode;
-                auto it = faceEdgeNodeMap.find(key);
-                if (it != faceEdgeNodeMap.end()) {
-                    edgeNode = it->second;
-                } else {
-                    edgeNode = std::make_shared<CadNode>();
-                    edgeNode->type = CadNodeType::XCAF;
-                    auto edgeData = std::make_shared<XCAFNodeData>();
-                    edgeData->shape = edge;
-                    edgeData->type = TopAbs_EDGE;
-                    edgeNode->data = edgeData;
-                    edgeNode->color = color;
-                    edgeNode->loc = nodeLoc;
-                    edgeNode->name = QString("Edge %1 of %2").arg(edgeIdx).arg(QString::fromStdString(node->name)).toStdString();
-                    faceEdgeNodeMap[key] = edgeNode;
-                }
+                auto edgeNode = std::make_shared<CadNode>();
+                edgeNode->type = CadNodeType::XCAF;
+                auto edgeData = std::make_shared<XCAFNodeData>();
+                edgeData->shape = edge;
+                edgeData->type = TopAbs_EDGE;
+                edgeNode->data = edgeData;
+                edgeNode->color = color;
+                edgeNode->loc = nodeLoc;
+                edgeNode->name = QString("Edge %1 of %2").arg(edgeIdx).arg(QString::fromStdString(node->name)).toStdString();
                 node->children.push_back(edgeNode);
                 edgeCount++;
             }
             qDebug() << "Added" << faceCount << "faces and" << edgeCount << "edges to solid at label" << label.Tag();
         }
     }
-    
-    // Only store in map for non-reference nodes (for sharing by reference nodes)
-    if (shapeKey) {
-        sharedNodeMap[shapeKey] = node;
-    }
-    
     return node;
 }
 
@@ -716,6 +665,20 @@ void compareFileSizes(const QString& baseName) {
 // ModelType must provide getNode(QModelIndex) and indexForNode(CadNode*)
 template <typename ModelType>
 void connectTreeAndViewer(QTreeView* tree, CadOpenGLWidget* viewer, ModelType* model) {
+    // Helper to accumulate transform from root to node
+    auto accumulateTransform = [](CadNode* node, std::function<CadNode*(CadNode*)> getParent) -> TopLoc_Location {
+        TopLoc_Location acc;
+        std::vector<CadNode*> ancestry;
+        CadNode* cur = node;
+        while (cur) {
+            ancestry.push_back(cur);
+            cur = getParent(cur);
+        }
+        for (auto it = ancestry.rbegin(); it != ancestry.rend(); ++it) {
+            acc = acc * (*it)->loc;
+        }
+        return acc;
+    };
     // Tree -> Viewer
     QObject::connect(tree->selectionModel(), &QItemSelectionModel::selectionChanged, viewer, [=](const QItemSelection &, const QItemSelection &) {
         viewer->clearSelection();
@@ -737,8 +700,13 @@ void connectTreeAndViewer(QTreeView* tree, CadOpenGLWidget* viewer, ModelType* m
                 addDescendants(node);
             }
         }
+        // Helper to get parent node from model
+        auto getParent = [=](CadNode* n) -> CadNode* {
+            return const_cast<CadNode*>(model->getParentNode(n));
+        };
         for (CadNode* node : allNodesToSelect) {
-            viewer->addToSelection(node);
+            TopLoc_Location accLoc = accumulateTransform(node, getParent);
+            viewer->addToSelection(node, accLoc);
         }
     });
 
@@ -1432,7 +1400,7 @@ bool loadFromJsonAndBin(const QString& railJsonFile,
     std::unordered_map<const void*, std::shared_ptr<CadNode>> sharedNodeMap;
     for (Standard_Integer i = 1; i <= roots.Length(); ++i) {
         TDF_Label rootLabel = roots.Value(i);
-        auto child = build_tree_xcaf(rootLabel, shapeTool, colorTool, defaultColor, identityLoc, sharedNodeMap);
+        auto child = build_tree_xcaf(rootLabel, shapeTool, colorTool, defaultColor, identityLoc);
         if (child) {
             cadRoot->children.push_back(std::move(child));
         }
@@ -1538,7 +1506,7 @@ bool loadFromStep(const QString& stepFile,
     std::unordered_map<const void*, std::shared_ptr<CadNode>> sharedNodeMap;
     for (Standard_Integer i = 1; i <= roots.Length(); ++i) {
         TDF_Label rootLabel = roots.Value(i);
-        auto child = build_tree_xcaf(rootLabel, shapeTool, colorTool, defaultColor, identityLoc, sharedNodeMap);
+        auto child = build_tree_xcaf(rootLabel, shapeTool, colorTool, defaultColor, identityLoc);
         if (child) {
             cadRoot->children.push_back(std::move(child));
         }
@@ -1597,7 +1565,8 @@ void initTreeAndOpenGLWidget(std::shared_ptr<CadNode> &inputRoot,
                              QTabWidget* treeTabWidget,
                              QTabWidget* openGLTabWidget,
                              std::string name,
-                             const Handle(TDocStd_Document)& doc) {
+                             const Handle(TDocStd_Document)& doc,
+                             CadTreeModel* cadTreeModel = nullptr) {
     inputRoot->name = "Tree Root " + name;
     inputRoot->type = CadNodeType::Custom;
     inputRoot->visible = true;
@@ -1683,6 +1652,11 @@ void initTreeAndOpenGLWidget(std::shared_ptr<CadNode> &inputRoot,
         // Add generic info action for all nodes
         QAction* infoAction = menu.addAction(QString("Node type: %1").arg((int)node->type));
         infoAction->setEnabled(false);
+        // Add debug action to print node pointer
+        QAction* printPtrAction = menu.addAction("Print Node Pointer (Debug)");
+        QObject::connect(printPtrAction, &QAction::triggered, treeView, [=]() {
+            qDebug() << "[Debug] Node pointer:" << static_cast<const void*>(node);
+        });
         // Add relink to XCAF node action (always for XCAF nodes)
         if (node->asXCAF()) {
             QAction* relinkAction = menu.addAction("Relink to XCAF Node (Debug)");
@@ -1804,8 +1778,42 @@ void initTreeAndOpenGLWidget(std::shared_ptr<CadNode> &inputRoot,
                         }
                         newNode->name = segType.toStdString();
                         qDebug() << "[AddToCustomModel] Copying node with name:" << QString::fromStdString(node->name) << "as" << segType;
-                        // Always add to the root of the selected custom model tree using the model's reset method
+                        // --- Preserve global transform ---
+                        // Get parent-getter for source and destination
+                        auto srcGetParent = [=](const CadNode* n) { return qtModel->getParentNode(n); };
+                        auto dstGetParent = [=](const CadNode* n) { return customModel->getParentNode(n); };
+                        // Compute global transform of source node
+                        TopLoc_Location srcGlobal;
+                        {
+                            std::vector<const CadNode*> ancestry;
+                            const CadNode* cur = node;
+                            while (cur) {
+                                ancestry.push_back(cur);
+                                cur = srcGetParent(cur);
+                            }
+                            for (auto it = ancestry.rbegin(); it != ancestry.rend(); ++it) {
+                                srcGlobal = srcGlobal * (*it)->loc;
+                            }
+                        }
+                        // Compute global transform of destination parent (custom model root)
                         CadNode* customRoot = const_cast<CadNode*>(customModel->getRootNodePointer());
+                        TopLoc_Location dstParentGlobal;
+                        {
+                            std::vector<const CadNode*> ancestry;
+                            const CadNode* cur = customRoot;
+                            while (cur) {
+                                ancestry.push_back(cur);
+                                cur = dstGetParent(cur);
+                            }
+                            for (auto it = ancestry.rbegin(); it != ancestry.rend(); ++it) {
+                                dstParentGlobal = dstParentGlobal * (*it)->loc;
+                            }
+                        }
+                        // Adjust the copied node so its global transform matches the original
+                        adjustSubtreeTransforms(
+                            node, newNode.get(), dstParentGlobal, srcGetParent
+                        );
+                        // Always add to the root of the selected custom model tree using the model's reset method
                         int beforeCount = static_cast<int>(customRoot->children.size());
                         qDebug() << "[AddToCustomModel] Children before insertion:" << beforeCount;
                         customModel->resetModelAndAddNode(newNode);
@@ -1821,6 +1829,31 @@ void initTreeAndOpenGLWidget(std::shared_ptr<CadNode> &inputRoot,
                             } else {
                                 qDebug() << "[AddToCustomModel] New index is not valid!";
                             }
+                        }
+                        // --- Debug: Print global transforms ---
+                        auto getGlobalTransform = [](const CadNode* node, std::function<const CadNode*(const CadNode*)> getParent) {
+                            TopLoc_Location acc;
+                            std::vector<const CadNode*> ancestry;
+                            const CadNode* cur = node;
+                            while (cur) {
+                                ancestry.push_back(cur);
+                                cur = getParent(cur);
+                            }
+                            for (auto it = ancestry.rbegin(); it != ancestry.rend(); ++it) {
+                                acc = acc * (*it)->loc;
+                            }
+                            return acc;
+                        };
+                        TopLoc_Location srcGlobalDbg = getGlobalTransform(node, srcGetParent);
+                        TopLoc_Location dstGlobalDbg = getGlobalTransform(newNode.get(), dstGetParent);
+                        qDebug() << "[DEBUG] Source global transform:" << makeTransformString(srcGlobalDbg);
+                        qDebug() << "[DEBUG] Dest global transform:" << makeTransformString(dstGlobalDbg);
+                        // --- Debug: Print root node transforms ---
+                        if (qtModel && customModel) {
+                            const CadNode* srcRoot = qtModel->getRootNodePointer();
+                            const CadNode* dstRoot = customModel->getRootNodePointer();
+                            qDebug() << "[DEBUG] Source tree root loc:" << makeTransformString(srcRoot ? srcRoot->loc : TopLoc_Location());
+                            qDebug() << "[DEBUG] Dest tree root loc:" << makeTransformString(dstRoot ? dstRoot->loc : TopLoc_Location());
                         }
                     });
                 }
@@ -1999,8 +2032,11 @@ int main(int argc, char *argv[])
         customModelRootContainer->children.push_back(customModelRoot);
     }
     // Always use the common code for the custom model tree and 3D view
-    initTreeAndOpenGLWidget(cadRootShared,tabWidget,viewTabWidget,"CAD", doc);
-    initTreeAndOpenGLWidget(customModelRootContainer, tabWidget, viewTabWidget, "Custom Model", doc);
+    CadTreeModel* cadTreeModel = nullptr;
+    // Pass cadTreeModel to initTreeAndOpenGLWidget for the CAD tree
+    initTreeAndOpenGLWidget(cadRootShared, tabWidget, viewTabWidget, "CAD", doc, cadTreeModel);
+    // For other trees, pass nullptr
+    initTreeAndOpenGLWidget(customModelRootContainer, tabWidget, viewTabWidget, "Custom Model", doc, nullptr);
 
     // Custom model part OpenGL widget
     relinkCadNodeXCAFGeometry(customModelRoot, doc);

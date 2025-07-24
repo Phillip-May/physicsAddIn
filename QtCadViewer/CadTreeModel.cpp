@@ -3,39 +3,60 @@
 #include <CadNode.h>
 
 CadTreeModel::CadTreeModel(std::unique_ptr<CadNode> root, QObject* parent)
-    : QAbstractItemModel(parent), m_root(std::move(root)) {}
+    : QAbstractItemModel(parent), m_root(std::move(root)) {
+    m_rootItem = std::make_unique<CadTreeItem>();
+    m_rootItem->node = m_root.get();
+    m_rootItem->accumulatedLoc = TopLoc_Location();
+    m_rootItem->parent = nullptr;
+    m_rootItem->row = 0;
+    buildTree(m_root.get(), TopLoc_Location(), m_rootItem.get());
+}
+
+void CadTreeModel::buildTree(CadNode* node, const TopLoc_Location& parentLoc, CadTreeItem* parentItem) {
+    int row = 0;
+    for (const auto& child : node->children) {
+        auto item = std::make_unique<CadTreeItem>();
+        item->node = child.get();
+        item->accumulatedLoc = parentLoc * child->loc;
+        item->parent = parentItem;
+        item->row = row++;
+        buildTree(child.get(), item->accumulatedLoc, item.get());
+        parentItem->children.push_back(std::move(item));
+    }
+}
+
+CadTreeItem* CadTreeModel::getItem(const QModelIndex& index) const {
+    if (!index.isValid()) return m_rootItem.get();
+    return static_cast<CadTreeItem*>(index.internalPointer());
+}
+
+CadNode* CadTreeModel::getNode(const QModelIndex& index) const {
+    return getItem(index)->node;
+}
+
+TopLoc_Location CadTreeModel::getAccumulatedLoc(const QModelIndex& index) const {
+    return getItem(index)->accumulatedLoc;
+}
 
 QModelIndex CadTreeModel::index(int row, int column, const QModelIndex& parent) const {
-    auto parentNode = nodeFromIndex(parent);
-    if (!parentNode || row < 0 || row >= static_cast<int>(parentNode->children.size()))
+    CadTreeItem* parentItem = getItem(parent);
+    if (!parentItem || row < 0 || row >= static_cast<int>(parentItem->children.size()))
         return QModelIndex();
-    return createIndex(row, column, parentNode->children[row].get());
+    return createIndex(row, column, parentItem->children[row].get());
 }
 
 QModelIndex CadTreeModel::parent(const QModelIndex& index) const {
-    CadNode* childNode = getNode(index);
-    if (!childNode || childNode == m_root.get())
+    CadTreeItem* childItem = getItem(index);
+    if (!childItem || !childItem->parent || childItem == m_rootItem.get())
         return QModelIndex();
-    // Recursively search for the parent and its row
-    std::function<QModelIndex(CadNode*, const QModelIndex&)> findParent = [&](CadNode* parent, const QModelIndex& parentIdx) -> QModelIndex {
-        for (int row = 0; row < static_cast<int>(parent->children.size()); ++row) {
-            CadNode* child = parent->children[row].get();
-            if (child == childNode) {
-                // Return the index of the parent node (as a child of its own parent)
-                return parentIdx;
-            }
-            QModelIndex idx = this->index(row, 0, parentIdx);
-            QModelIndex found = findParent(child, idx);
-            if (found.isValid()) return found;
-        }
-        return QModelIndex();
-    };
-    return findParent(m_root.get(), QModelIndex());
+    CadTreeItem* parentItem = childItem->parent;
+    if (!parentItem->parent) return QModelIndex();
+    return createIndex(parentItem->row, 0, parentItem);
 }
 
 int CadTreeModel::rowCount(const QModelIndex& parent) const {
-    auto parentNode = nodeFromIndex(parent);
-    return parentNode ? static_cast<int>(parentNode->children.size()) : 0;
+    CadTreeItem* parentItem = getItem(parent);
+    return parentItem ? static_cast<int>(parentItem->children.size()) : 0;
 }
 
 int CadTreeModel::columnCount(const QModelIndex&) const {
@@ -43,11 +64,11 @@ int CadTreeModel::columnCount(const QModelIndex&) const {
 }
 
 QVariant CadTreeModel::data(const QModelIndex& index, int role) const {
-    auto node = getNode(index);
-    if (!node) return QVariant();
-    if (role == Qt::DisplayRole) return QString::fromStdString(node->name);
+    auto item = getItem(index);
+    if (!item || !item->node) return QVariant();
+    if (role == Qt::DisplayRole) return QString::fromStdString(item->node->name);
     if (role == Qt::BackgroundRole) {
-        QColor originalColor = node->color.toQColor();
+        QColor originalColor = item->node->color.toQColor();
         originalColor.setAlphaF(originalColor.alphaF() / 3.0f);
         return originalColor;
     }
@@ -59,36 +80,26 @@ Qt::ItemFlags CadTreeModel::flags(const QModelIndex& index) const {
     return Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsUserCheckable;
 }
 
-CadNode* CadTreeModel::getNode(const QModelIndex& index) const {
-    if (!index.isValid()) return m_root.get();
-    return static_cast<CadNode*>(index.internalPointer());
-}
-
-CadNode* CadTreeModel::nodeFromIndex(const QModelIndex& index) const {
-    if (!index.isValid()) return m_root.get();
-    return static_cast<CadNode*>(index.internalPointer());
-}
-
 QModelIndex CadTreeModel::indexForNode(CadNode* target) const {
-    std::function<QModelIndex(CadNode*, const QModelIndex&)> find = [&](CadNode* node, const QModelIndex& parent) -> QModelIndex {
-        if (node == target) return parent;
-        for (int row = 0; row < static_cast<int>(node->children.size()); ++row) {
-            CadNode* child = node->children[row].get();
+    std::function<QModelIndex(CadTreeItem*, const QModelIndex&)> find = [&](CadTreeItem* item, const QModelIndex& parent) -> QModelIndex {
+        if (item->node == target) return parent;
+        for (int row = 0; row < static_cast<int>(item->children.size()); ++row) {
+            CadTreeItem* child = item->children[row].get();
             QModelIndex idx = index(row, 0, parent);
             QModelIndex found = find(child, idx);
             if (found.isValid()) return found;
         }
         return QModelIndex();
     };
-    return find(m_root.get(), QModelIndex());
+    return find(m_rootItem.get(), QModelIndex());
 }
 
 // Recursively find the parent of a given node
 CadNode* CadTreeModel::getParentNode(const CadNode* node) const {
     if (!m_root || node == m_root.get()) return nullptr;
-    std::function<CadNode*(CadNode*)> findParent = [&](CadNode* current) -> CadNode* {
+    std::function<CadNode*(CadTreeItem*)> findParent = [&](CadTreeItem* current) -> CadNode* {
         for (const auto& child : current->children) {
-            if (child.get() == node) return current;
+            if (child->node == node) return current->node;
             if (child) {
                 CadNode* res = findParent(child.get());
                 if (res) return res;
@@ -96,5 +107,5 @@ CadNode* CadTreeModel::getParentNode(const CadNode* node) const {
         }
         return nullptr;
     };
-    return findParent(m_root.get());
+    return findParent(m_rootItem.get());
 } 

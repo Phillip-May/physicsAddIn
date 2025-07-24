@@ -21,6 +21,14 @@ enum class SelectionMode {
     Edges
 };
 
+// Highlight state for faces/edges
+enum class HighlightState {
+    Normal,
+    Hovered,
+    Selected,
+    Excluded
+};
+
 // Geometry cache structure using legacy OpenGL
 struct CachedGeometry {
     GLuint displayList = 0;
@@ -77,7 +85,7 @@ class CadOpenGLWidget : public QOpenGLWidget, protected QOpenGLFunctions {
 public:
     explicit CadOpenGLWidget(QWidget *parent = nullptr);
     ~CadOpenGLWidget();
-    void setRootTreeNode(const CadNode* root);
+    void setRootTreeNode(CadNode* root);
     void setPivotSphere(const QVector3D& worldPos);
     void clearCache(); // Clear geometry cache to free memory
     int getCacheSize() const; // Get number of cached geometries
@@ -89,10 +97,27 @@ public:
     void setCameraState(const CameraState& state);
     // Add this slot for tree selection
     static void collectFaceNodes(CadNode *node, std::vector<CadNode*> &out);
-    const CadNode* getRootTreeNode() const { return rootNode_; }
+    CadNode* getRootTreeNode() const { return rootNode_; }
+    // Add this slot for tree selection
+    Q_SLOT void setSelectedFaceNode(CadNode* node, const TopLoc_Location& accLoc);
+    struct FaceInstance {
+        CadNode* node;
+        TopLoc_Location accumulatedLoc;
+    };
+    struct EdgeInstance {
+        CadNode* node;
+        TopLoc_Location accumulatedLoc;
+    };
+    struct SelectedInstance {
+        CadNode* node;
+        TopLoc_Location accumulatedLoc;
+        bool operator==(const SelectedInstance& other) const {
+            return node == other.node && accumulatedLoc == other.accumulatedLoc;
+        }
+    };
 public slots:
     void clearSelection();
-    void addToSelection(CadNode* node);
+    void addToSelection(CadNode* node, const TopLoc_Location& accLoc);
     void removeFromSelection(CadNode* node);
     void setCamera(const QVector3D& pos, const QQuaternion& rot, float zoom = 1.0f);
     void reframeCamera();
@@ -113,8 +138,11 @@ protected:
     void focusInEvent(QFocusEvent* event) override;
     void focusOutEvent(QFocusEvent* event) override;
 private:
+    static HighlightState getFaceHighlightState(const CadNode* node, const TopLoc_Location& accumulatedLoc, const CadNode* parentReferenceNode, const std::vector<SelectedInstance>& selectedFaceInstances_, const SelectedInstance& hoveredFaceInstance_);
+    static HighlightState getEdgeHighlightState(const CadNode* node, const TopLoc_Location& accumulatedLoc, const std::vector<SelectedInstance>& selectedEdgeInstances_, const SelectedInstance& hoveredEdgeInstance_);
+    static void getHighlightColorAndLineWidth(HighlightState state, CADNodeColor baseColor, float& outR, float& outG, float& outB, float& outA, float& outLineWidth);
     void setupOpenGLState(); // Unified OpenGL state setup
-    const CadNode* rootNode_ = nullptr;
+    CadNode* rootNode_ = nullptr;
     CameraState camera_;
     std::vector<ColorBatch> m_colorBatches;
     std::vector<std::pair<QVector3D, QVector3D>> m_wireframeLines; // Tessellated wireframe lines
@@ -125,15 +153,15 @@ private:
     TopoDS_Face hoveredFace_;
     TopoDS_Edge hoveredEdge_;
     CadNode* selectedFaceNode_ = nullptr;
-    CadNode* hoveredFaceNode_ = nullptr;
     CadNode* selectedEdgeNode_ = nullptr;
-    CadNode* hoveredEdgeNode_ = nullptr;
     CadNode* selectedFrameNode_ = nullptr;
     TopLoc_Location selectedFrameNodeAccumulatedLoc_;
     
-    // Multi-selection support
-    std::vector<CadNode*> selectedFaceNodes_;
-    std::vector<CadNode*> selectedEdgeNodes_;
+    // Multi-selection support (instance-aware)
+    std::vector<SelectedInstance> selectedFaceInstances_;
+    std::vector<SelectedInstance> selectedEdgeInstances_;
+    SelectedInstance hoveredFaceInstance_;
+    SelectedInstance hoveredEdgeInstance_;
     
     // Selection mode
     SelectionMode m_selectionMode = SelectionMode::None;
@@ -143,22 +171,14 @@ private:
     bool m_windowActive = true;
     
     // Flat cache of all visible faces (per instance)
-    struct FaceInstance {
-        CadNode* node;
-        TopLoc_Location accumulatedLoc;
-    };
     std::vector<FaceInstance> faceCache_;
     void buildFaceCache();
     
     // Flat cache of all visible edges (per instance)
-    struct EdgeInstance {
-        CadNode* node;
-        TopLoc_Location accumulatedLoc;
-    };
     std::vector<EdgeInstance> edgeCache_;
     void buildEdgeCache();
     // Update: Add accumulatedLoc parameter for hierarchical transform
-    void traverseAndRender(const CadNode *node, CADNodeColor inheritedColor, const TopLoc_Location& accumulatedLoc, bool ancestorsVisible);
+    void traverseAndRender(const CadNode *node, CADNodeColor inheritedColor, const TopLoc_Location& accumulatedLoc, bool ancestorsVisible, const CadNode* parentReferenceNode = nullptr);
     void renderEdge(const TopoDS_Edge &edge, const CADNodeColor &color);
     // Overload: pick and output intersection point (returns true if hit)
     bool pickElementAt(const QPoint& pos, QVector3D* outIntersection = nullptr);
@@ -185,8 +205,8 @@ private:
     // Optimized rendering functions
     void renderBatchedGeometry();
     void buildColorBatches();
-    void renderFaceOptimized(const CadNode* node, const CADNodeColor& color, const TopLoc_Location& accumulatedLoc);
-    void renderEdgeOptimized(const CadNode* node, const CADNodeColor& color);
+    void renderFaceOptimized(const CadNode* node, const TopLoc_Location& accumulatedLoc, const CadNode* parentReferenceNode = nullptr);
+    void renderEdgeOptimized(const CadNode* node, const TopLoc_Location& accumulatedLoc);
     void renderHighlightedEdges();
     CachedGeometry& getOrCreateCachedGeometry(const TopoDS_Face& face);
     
@@ -209,6 +229,6 @@ private:
     void renderConvexHulls(const PhysicsNodeData* physData);
     void renderConnectionPoint(const CadNode* node, const CADNodeColor& color);
 signals:
-    void facePicked(CadNode* node);
+    void facePicked(CadNode* node, const TopLoc_Location& accLoc);
     void edgePicked(CadNode* node);
 };
