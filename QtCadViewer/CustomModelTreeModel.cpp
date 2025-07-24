@@ -128,3 +128,15 @@ bool CustomModelTreeModel::removeNode(const NodeType* node) {
     }
     return false;
 } 
+
+void CustomModelTreeModel::addNodeWithReset(std::shared_ptr<NodeType> newNode) {
+    beginResetModel();
+    if (root_->children.size() == 1 && root_->children[0]) {
+        // Add to the first child's children
+        root_->children[0]->children.push_back(newNode);
+    } else {
+        // Add to the root's children
+        root_->children.push_back(newNode);
+    }
+    endResetModel();
+} 

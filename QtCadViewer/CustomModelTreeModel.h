@@ -44,6 +44,7 @@ public:
 
     // Transform nodes are supported in the custom model tree. They apply a transform to all children without duplicating geometry.
     void resetModelAndAddNode(std::shared_ptr<NodeType> newNode);
+    void addNodeWithReset(std::shared_ptr<NodeType> newNode);
 
     // Remove a node from the tree given a pointer to the node
     bool removeNode(const NodeType* node);

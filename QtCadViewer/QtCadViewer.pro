@@ -28,6 +28,7 @@ LIBS += C:/Users/Admin/Documents/physicsAddIn/external/CoACD/buildMD/Release/coa
 
 
 SOURCES += \
+    RailJsonEditorDialog.cpp \
     main.cpp \
     CadOpenGLWidget.cpp \
     CadTreeModel.cpp \
@@ -39,6 +40,7 @@ HEADERS += \
     CadNode.h \
     CadOpenGLWidget.h \
     CadTreeModel.h \
+    RailJsonEditorDialog.h \
     XCAFLabelTreeModel.h \
     CustomModelTreeModel.h
 FORMS += 

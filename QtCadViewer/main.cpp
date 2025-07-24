@@ -36,6 +36,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonDocument>
+#include <GeomLProp_SLProps.hxx>
 
 #include "CadNode.h"
 #include "XCAFLabelTreeModel.h"
@@ -54,11 +55,22 @@
 #include <unordered_map>
 #include <TDF_Tool.hxx>
 #include <vector>
+#include "RailJsonEditorDialog.h"
+#include <QVariant>
+
+// Helper to set parent pointers recursively in a CadNode tree
+void setParentPointersRecursive(CadNode* node, CadNode* parent = nullptr) {
+    if (!node) return;
+    node->parent = parent;
+    for (auto& child : node->children) {
+        setParentPointersRecursive(child.get(), node);
+    }
+}
 
 // Helper to recursively build XCAFLabelNode tree with sub-assembly detection
 std::unique_ptr<XCAFLabelNode> buildLabelTree(const TDF_Label& label, const Handle(XCAFDoc_ShapeTool)& shapeTool = nullptr) {
     auto node = std::make_unique<XCAFLabelNode>(label);
-    
+
     // Check if this is a compound that might contain sub-assemblies
     bool isCompoundWithSubAssemblies = false;
     if (!shapeTool.IsNull() && !label.IsNull()) {
@@ -81,7 +93,7 @@ std::unique_ptr<XCAFLabelNode> buildLabelTree(const TDF_Label& label, const Hand
             }
         }
     }
-    
+
     // Recursively build children
     for (TDF_ChildIterator it(label); it.More(); it.Next()) {
         TDF_Label childLabel = it.Value();
@@ -90,14 +102,15 @@ std::unique_ptr<XCAFLabelNode> buildLabelTree(const TDF_Label& label, const Hand
             node->children.push_back(std::move(childNode));
         }
     }
-    
+
     return node;
 }
+
 
 // Enhanced tree building that follows reference chains for STEP 214 assemblies
 std::unique_ptr<XCAFLabelNode> buildLabelTreeWithReferences(const TDF_Label& label, const Handle(XCAFDoc_ShapeTool)& shapeTool = nullptr) {
     auto node = std::make_unique<XCAFLabelNode>(label);
-    
+
     if (!shapeTool.IsNull() && !label.IsNull()) {
         // If this is a reference, also add the referred shape as a child
         if (shapeTool->IsReference(label)) {
@@ -109,13 +122,13 @@ std::unique_ptr<XCAFLabelNode> buildLabelTreeWithReferences(const TDF_Label& lab
                 node->children.push_back(std::move(refNode));
             }
         }
-        
+
         // Check if this compound has no direct geometry but might be an assembly
         TopoDS_Shape shape = shapeTool->GetShape(label);
         if (!shape.IsNull() && shape.ShapeType() == TopAbs_COMPOUND) {
             bool hasDirectGeometry = false;
             int refChildCount = 0;
-            
+
             // Check children for direct geometry vs references
             for (TDF_ChildIterator it(label); it.More(); it.Next()) {
                 TDF_Label childLabel = it.Value();
@@ -129,14 +142,14 @@ std::unique_ptr<XCAFLabelNode> buildLabelTreeWithReferences(const TDF_Label& lab
                     }
                 }
             }
-            
+
             // If this is an assembly with references, explore the reference chain
             if (!hasDirectGeometry && refChildCount > 0) {
                 qDebug() << "Found assembly with" << refChildCount << "references at label" << label.Tag();
             }
         }
     }
-    
+
     // Recursively build children
     for (TDF_ChildIterator it(label); it.More(); it.Next()) {
         TDF_Label childLabel = it.Value();
@@ -145,7 +158,7 @@ std::unique_ptr<XCAFLabelNode> buildLabelTreeWithReferences(const TDF_Label& lab
             node->children.push_back(std::move(childNode));
         }
     }
-    
+
     return node;
 }
 
@@ -241,22 +254,17 @@ CADNodeColor getEffectiveFaceColor(const TopoDS_Face& face,
 }
 
 
-
-
-
-
-
 // Enhanced color extraction that traverses up the label hierarchy
 CADNodeColor get_label_color(const TDF_Label& label, const Handle(XCAFDoc_ColorTool)& colorTool, const CADNodeColor& parentColor) {
     Quantity_Color occColor;
-    
+
     // First try to get color from the current label
     if (colorTool->GetColor(label, XCAFDoc_ColorSurf, occColor) ||
         colorTool->GetColor(label, XCAFDoc_ColorGen, occColor) ||
         colorTool->GetColor(label, XCAFDoc_ColorCurv, occColor)) {
         return CADNodeColor(occColor.Red(), occColor.Green(), occColor.Blue());
     }
-    
+
     // If no color found, traverse up the label tree to find inherited color
     TDF_Label current = label;
     while (!current.IsNull()) {
@@ -269,13 +277,13 @@ CADNodeColor get_label_color(const TDF_Label& label, const Handle(XCAFDoc_ColorT
             }
         }
     }
-    
+
     // If still no color found, return the provided parent color
     return parentColor;
 }
 
 // Enhanced color extraction for specific shape types
-CADNodeColor get_shape_color(const TopoDS_Shape& shape, 
+CADNodeColor get_shape_color(const TopoDS_Shape& shape,
                            const TDF_Label& label,
                            const Handle(XCAFDoc_ShapeTool)& shapeTool,
                            const Handle(XCAFDoc_ColorTool)& colorTool,
@@ -283,13 +291,13 @@ CADNodeColor get_shape_color(const TopoDS_Shape& shape,
     if (shape.IsNull()) {
         return get_label_color(label, colorTool, parentColor);
     }
-    
+
     // For faces, use the sophisticated face color extraction
     if (shape.ShapeType() == TopAbs_FACE) {
         TopoDS_Face face = TopoDS::Face(shape);
         return getEffectiveFaceColor(face, shapeTool, colorTool);
     }
-    
+
     // For other shapes, use the enhanced label color extraction
     return get_label_color(label, colorTool, parentColor);
 }
@@ -335,7 +343,7 @@ bool isAssembly(const TDF_Label& label, const Handle(XCAFDoc_ShapeTool)& shapeTo
     if (shape.IsNull() || shape.ShapeType() != TopAbs_COMPOUND) {
         return false;
     }
-    
+
     // Check if this compound has multiple direct shape children
     int shapeCount = 0;
     for (TDF_ChildIterator it(label); it.More(); it.Next()) {
@@ -349,17 +357,88 @@ bool isAssembly(const TDF_Label& label, const Handle(XCAFDoc_ShapeTool)& shapeTo
     return false;
 }
 
+// Helper to get label path from root to label (excluding doc->Main())
+std::vector<int> getLabelPath(const TDF_Label& label, const Handle(TDocStd_Document)& doc) {
+    std::vector<int> path;
+    TDF_Label current = label;
+    TDF_Label mainLabel = doc->Main();
+    while (!current.IsNull() && current != mainLabel) {
+        path.push_back(current.Tag());
+        current = current.Father();
+    }
+    std::reverse(path.begin(), path.end());
+    return path;
+}
+
+// Helper to find label by path (relative to doc->Main())
+TDF_Label findLabelByPath(const Handle(TDocStd_Document)& doc, const std::vector<int>& path) {
+    TDF_Label label = doc->Main();
+    QVariantList pathDebug;
+    for (int tag : path) pathDebug << tag;
+    qDebug() << "[findLabelByPath] doc->Main().Tag():" << label.Tag() << ", path:" << pathDebug;
+    for (size_t i = 0; i < path.size(); ++i) {
+        bool found = false;
+        for (TDF_ChildIterator it(label); it.More(); it.Next()) {
+            if (it.Value().Tag() == path[i]) {
+                label = it.Value();
+                found = true;
+                break;
+            }
+        }
+        if (!found) return TDF_Label(); // Not found
+    }
+    return label;
+}
+
+// Add this helper for debug printing XCAF relink info
+void debugPrintXCAFRelinkInfo(const CadNode* node, const Handle(TDocStd_Document)& doc, int depth = 0) {
+    if (!node) return;
+    QString indent(depth * 2, ' ');
+    if (node->type == CadNodeType::XCAF) {
+        const XCAFNodeData* xData = node->asXCAF();
+        qDebug() << indent << "[XCAF] Node name:" << QString::fromStdString(node->name);
+        if (xData) {
+            QVariantList labelPathList;
+            for (int tag : xData->labelPath) labelPathList << tag;
+            qDebug() << indent << "  labelPath:" << labelPathList;
+            qDebug() << indent << "  shapeIndex:" << xData->shapeIndex;
+            qDebug() << indent << "  type:" << shapeTypeToString(xData->type);
+            qDebug() << indent << "  shape isNull:" << xData->shape.IsNull();
+            if (!xData->labelPath.empty()) {
+                TDF_Label label = findLabelByPath(doc, xData->labelPath);
+                qDebug() << indent << "  label found:" << (!label.IsNull());
+                if (!label.IsNull()) {
+                    TopoDS_Shape occShape = XCAFDoc_DocumentTool::ShapeTool(doc->Main())->GetShape(label);
+                    qDebug() << indent << "  OCC shape isNull:" << occShape.IsNull();
+                    if (xData->shapeIndex >= 0 && (xData->type == TopAbs_FACE || xData->type == TopAbs_EDGE)) {
+                        int idx = 0;
+                        TopoDS_Shape foundShape;
+                        for (TopExp_Explorer exp(occShape, xData->type); exp.More(); exp.Next(), ++idx) {
+                            if (idx == xData->shapeIndex) {
+                                foundShape = exp.Current();
+                                break;
+                            }
+                        }
+                        qDebug() << indent << "  relinked shape isNull:" << foundShape.IsNull();
+                    }
+                }
+            }
+        }
+    }
+    for (const auto& child : node->children) debugPrintXCAFRelinkInfo(child.get(), doc, depth + 1);
+}
+
 // Helper to get the effective transform for a label, considering STEP 214 assembly structure
-TopLoc_Location getEffectiveTransform(const TDF_Label& label, 
+TopLoc_Location getEffectiveTransform(const TDF_Label& label,
                                      const Handle(XCAFDoc_ShapeTool)& shapeTool,
                                      const TopLoc_Location& parentLoc) {
     TopLoc_Location effectiveLoc = parentLoc;
-    
+
     // Check if this is a reference
     if (shapeTool->IsReference(label)) {
         effectiveLoc = parentLoc * shapeTool->GetLocation(label);
     }
-    
+
     // For STEP 214, also check if there's a product definition context
     // that might affect the transform
     Handle(TDataStd_TreeNode) treeNode;
@@ -367,7 +446,7 @@ TopLoc_Location getEffectiveTransform(const TDF_Label& label,
         // Handle product definition context if present
         // This is specific to STEP 214 assembly structure
     }
-    
+
     return effectiveLoc;
 }
 
@@ -385,7 +464,8 @@ std::shared_ptr<CadNode> build_tree_xcaf(const TDF_Label& label,
                    const Handle(XCAFDoc_ShapeTool)& shapeTool,
                    const Handle(XCAFDoc_ColorTool)& colorTool,
                    const CADNodeColor& parentColor,
-                   const TopLoc_Location& parentLoc)
+                   const TopLoc_Location& parentLoc,
+                   const Handle(TDocStd_Document)& doc)
 {
     TopoDS_Shape shape = shapeTool->GetShape(label);
     bool isReference = shapeTool->IsReference(label);
@@ -412,15 +492,25 @@ std::shared_ptr<CadNode> build_tree_xcaf(const TDF_Label& label,
         // 2. Get the unique child (the actual geometry/assembly)
         TDF_Label refLabel;
         if (shapeTool->GetReferredShape(label, refLabel)) {
-            auto uniqueChild = build_tree_xcaf(refLabel, shapeTool, colorTool, refNode->color, TopLoc_Location());
+            auto uniqueChild = build_tree_xcaf(refLabel, shapeTool, colorTool, refNode->color, parentLoc, doc);
             if (uniqueChild) {
                 refNode->children.push_back(uniqueChild);
             }
         }
+        // Always set labelPath for reference node
+        auto xData = std::make_shared<XCAFNodeData>();
+        xData->shape = shape;
+        xData->type = !shape.IsNull() ? shape.ShapeType() : TopAbs_SHAPE;
+        xData->labelPath = getLabelPath(label, doc);
+        xData->originalXCAFShape = shape;
+        refNode->data = xData;
+        // Fix debug output for labelPath
+        QVariantList labelPathDebug;
+        for (int tag : xData->labelPath) labelPathDebug.push_back(QVariant(tag));
+        qDebug() << "[build_tree_xcaf] Created reference node labelPath:" << labelPathDebug;
         return refNode;
     }
     CADNodeColor color = get_shape_color(shape, label, shapeTool, colorTool, parentColor);
-    // Debug color propagation for important nodes
     if (!shape.IsNull() && (shape.ShapeType() == TopAbs_SOLID || shape.ShapeType() == TopAbs_COMPOUND)) {
         qDebug() << "Label" << label.Tag() << "color: RGB(" << color.r << "," << color.g << "," << color.b << ")";
         if (color.r == parentColor.r && color.g == parentColor.g && color.b == parentColor.b) {
@@ -429,7 +519,6 @@ std::shared_ptr<CadNode> build_tree_xcaf(const TDF_Label& label,
             qDebug() << "  -> Own color";
         }
     }
-    // Skip edge shapes entirely
     if (!shape.IsNull() && shape.ShapeType() == TopAbs_EDGE) {
         return nullptr;
     }
@@ -440,7 +529,6 @@ std::shared_ptr<CadNode> build_tree_xcaf(const TDF_Label& label,
     } else {
         name = QString("Label %1").arg(label.Tag());
     }
-    // Get effective transform for this node
     TopLoc_Location nodeLoc = getEffectiveTransform(label, shapeTool, parentLoc);
     auto node = std::make_shared<CadNode>();
     node->color = color;
@@ -449,9 +537,13 @@ std::shared_ptr<CadNode> build_tree_xcaf(const TDF_Label& label,
     auto xData = std::make_shared<XCAFNodeData>();
     xData->shape = shape;
     xData->type = !shape.IsNull() ? shape.ShapeType() : TopAbs_SHAPE;
-    xData->xcafLabelTag = label.Tag();
+    xData->labelPath = getLabelPath(label, doc); // Always set labelPath for every XCAF node
     xData->originalXCAFShape = shape;
     node->data = xData;
+    // Fix debug output for labelPath
+    QVariantList labelPathDebug;
+    for (int tag : xData->labelPath) labelPathDebug.push_back(QVariant(tag));
+    qDebug() << "[build_tree_xcaf] Created node labelPath:" << labelPathDebug;
     QString typeName = shapeTypeToString(xData->type);
     // Enhanced assembly detection and handling
     bool isCompoundAssembly = false;
@@ -504,7 +596,7 @@ std::shared_ptr<CadNode> build_tree_xcaf(const TDF_Label& label,
         if (shapeTool->GetReferredShape(label, refLabel)) {
             qDebug() << "Following reference from label" << label.Tag() << "to" << refLabel.Tag();
             TopLoc_Location refLoc = nodeLoc; // Use the effective transform
-            auto child = build_tree_xcaf(refLabel, shapeTool, colorTool, color, refLoc);
+            auto child = build_tree_xcaf(refLabel, shapeTool, colorTool, color, parentLoc, doc);
             if (child) {
                 // Mark this as a reference node in the name
                 child->name = QString("REF->%1 | %2").arg(refLabel.Tag()).arg(QString::fromStdString(child->name)).toStdString();
@@ -514,7 +606,7 @@ std::shared_ptr<CadNode> build_tree_xcaf(const TDF_Label& label,
     }
     // Recurse into children (for all labels)
     for (TDF_ChildIterator it(label); it.More(); it.Next()) {
-        auto child = build_tree_xcaf(it.Value(), shapeTool, colorTool, color, nodeLoc);
+        auto child = build_tree_xcaf(it.Value(), shapeTool, colorTool, color, nodeLoc, doc);
         if (child) node->children.push_back(child);
     }
     // After node is created and type is set
@@ -522,54 +614,45 @@ std::shared_ptr<CadNode> build_tree_xcaf(const TDF_Label& label,
         xData->shape = shape;
         xData->type = shape.ShapeType();
     }
-    // Add face/edge children for solids that don't have other solid children
-    // This allows faces/edges to be shown even when the solid has reference children
-    if (!shape.IsNull() && shape.ShapeType() == TopAbs_SOLID && !isAssembly(label, shapeTool)) {
-        // Check if any existing children are solids (to avoid intermediate solids)
-        bool hasSolidChildren = false;
-        for (const auto& child : node->children) {
-            auto childXCAF = child->asXCAF();
-            if (childXCAF && childXCAF->type == TopAbs_SOLID) {
-                hasSolidChildren = true;
-                break;
-            }
+    // Add face/edge children for shapes that aren't assemblies (SOLID, COMPOUND, etc.)
+    if (!shape.IsNull() && !isAssembly(label, shapeTool)) {
+        int faceIdx = 0;
+        int faceCount = 0;
+        for (TopExp_Explorer exp(shape, TopAbs_FACE); exp.More(); exp.Next(), ++faceIdx) {
+            TopoDS_Face face = TopoDS::Face(exp.Current());
+            auto faceNode = std::make_shared<CadNode>();
+            faceNode->type = CadNodeType::XCAF;
+            auto faceData = std::make_shared<XCAFNodeData>();
+            faceData->shape = face;
+            faceData->type = TopAbs_FACE;
+            faceData->labelPath = getLabelPath(label, doc);
+            faceData->shapeIndex = faceIdx;
+            faceNode->data = faceData;
+            faceNode->color = get_shape_color(face, label, shapeTool, colorTool, color);
+            faceNode->loc = nodeLoc;
+            faceNode->name = QString("Face %1 of %2").arg(faceIdx).arg(QString::fromStdString(node->name)).toStdString();
+            node->children.push_back(faceNode);
+            faceCount++;
         }
-        // Add faces and edges if this solid doesn't have other solid children
-        if (!hasSolidChildren) {
-            int faceIdx = 0;
-            int faceCount = 0;
-            for (TopExp_Explorer exp(shape, TopAbs_FACE); exp.More(); exp.Next(), ++faceIdx) {
-                TopoDS_Face face = TopoDS::Face(exp.Current());
-                auto faceNode = std::make_shared<CadNode>();
-                faceNode->type = CadNodeType::XCAF;
-                auto faceData = std::make_shared<XCAFNodeData>();
-                faceData->shape = face;
-                faceData->type = TopAbs_FACE;
-                faceNode->data = faceData;
-                faceNode->color = get_shape_color(face, label, shapeTool, colorTool, color);
-                faceNode->loc = nodeLoc;
-                faceNode->name = QString("Face %1 of %2").arg(faceIdx).arg(QString::fromStdString(node->name)).toStdString();
-                node->children.push_back(faceNode);
-                faceCount++;
-            }
-            int edgeIdx = 0;
-            int edgeCount = 0;
-            for (TopExp_Explorer exp(shape, TopAbs_EDGE); exp.More(); exp.Next(), ++edgeIdx) {
-                TopoDS_Shape edge = exp.Current();
-                auto edgeNode = std::make_shared<CadNode>();
-                edgeNode->type = CadNodeType::XCAF;
-                auto edgeData = std::make_shared<XCAFNodeData>();
-                edgeData->shape = edge;
-                edgeData->type = TopAbs_EDGE;
-                edgeNode->data = edgeData;
-                edgeNode->color = color;
-                edgeNode->loc = nodeLoc;
-                edgeNode->name = QString("Edge %1 of %2").arg(edgeIdx).arg(QString::fromStdString(node->name)).toStdString();
-                node->children.push_back(edgeNode);
-                edgeCount++;
-            }
-            qDebug() << "Added" << faceCount << "faces and" << edgeCount << "edges to solid at label" << label.Tag();
+        int edgeIdx = 0;
+        int edgeCount = 0;
+        for (TopExp_Explorer exp(shape, TopAbs_EDGE); exp.More(); exp.Next(), ++edgeIdx) {
+            TopoDS_Shape edge = exp.Current();
+            auto edgeNode = std::make_shared<CadNode>();
+            edgeNode->type = CadNodeType::XCAF;
+            auto edgeData = std::make_shared<XCAFNodeData>();
+            edgeData->shape = edge;
+            edgeData->type = TopAbs_EDGE;
+            edgeData->labelPath = getLabelPath(label, doc);
+            edgeData->shapeIndex = edgeIdx;
+            edgeNode->data = edgeData;
+            edgeNode->color = color;
+            edgeNode->loc = nodeLoc;
+            edgeNode->name = QString("Edge %1 of %2").arg(edgeIdx).arg(QString::fromStdString(node->name)).toStdString();
+            node->children.push_back(edgeNode);
+            edgeCount++;
         }
+        qDebug() << "Added" << faceCount << "faces and" << edgeCount << "edges to shape at label" << label.Tag();
     }
     return node;
 }
@@ -581,7 +664,7 @@ bool saveXCAFToSTEP(const Handle(TDocStd_Document)& doc, const QString& filename
         writer.SetColorMode(true);
         writer.SetNameMode(true);
         writer.SetLayerMode(true);
-        
+
         if (writer.Transfer(doc, STEPControl_AsIs)) {
             IFSelect_ReturnStatus status = writer.Write(filename.toStdString().c_str());
             if (status == IFSelect_RetDone) {
@@ -627,32 +710,32 @@ void compareFileSizes(const QString& baseName) {
     QFileInfo stepFile(baseName + ".step");
     QFileInfo binaryFile(baseName + ".bin");
     QFileInfo xmlFile(baseName + ".xml");
-    
+
     qDebug() << "\n=== FILE SIZE COMPARISON ===";
-    
+
     if (stepFile.exists()) {
         qDebug() << "STEP file:" << stepFile.fileName() << "-" << stepFile.size() << "bytes";
     }
-    
+
     if (binaryFile.exists()) {
         qDebug() << "Binary file:" << binaryFile.fileName() << "-" << binaryFile.size() << "bytes";
     }
-    
+
     if (xmlFile.exists()) {
         qDebug() << "XML file:" << xmlFile.fileName() << "-" << xmlFile.size() << "bytes";
     }
-    
+
     // Calculate ratios
     if (stepFile.exists() && binaryFile.exists()) {
         double ratio = (double)stepFile.size() / binaryFile.size();
         qDebug() << "STEP/Binary ratio:" << QString::number(ratio, 'f', 2) << "x";
     }
-    
+
     if (xmlFile.exists() && binaryFile.exists()) {
         double ratio = (double)xmlFile.size() / binaryFile.size();
         qDebug() << "XML/Binary ratio:" << QString::number(ratio, 'f', 2) << "x";
     }
-    
+
     qDebug() << "=== END COMPARISON ===\n";
 }
 
@@ -1060,7 +1143,24 @@ static void generateCoACDStub(const QString& nodeName, double concavity, double 
 std::shared_ptr<CadNode> deepCopyNodeNonExcluded(const CadNode* src) {
     if (!src || src->excludedFromDecomposition) return nullptr;
     auto copy = std::make_shared<CadNode>(*src);
-    if (copy->asXCAF() && src->asXCAF()) copy->asXCAF()->xcafLabelTag = src->asXCAF()->xcafLabelTag; // Explicitly copy label tag for XCAF nodes
+    // Copy data by value for all known types
+    if (src->data) {
+        if (src->type == CadNodeType::XCAF) {
+            copy->data = std::make_shared<XCAFNodeData>(*static_cast<const XCAFNodeData*>(src->data.get()));
+        } else if (src->type == CadNodeType::Rail) {
+            copy->data = std::make_shared<RailNodeData>(*static_cast<const RailNodeData*>(src->data.get()));
+        } else if (src->type == CadNodeType::Physics) {
+            copy->data = std::make_shared<PhysicsNodeData>(*static_cast<const PhysicsNodeData*>(src->data.get()));
+        } else if (src->type == CadNodeType::Custom) {
+            copy->data = std::make_shared<CustomNodeData>(*static_cast<const CustomNodeData*>(src->data.get()));
+        } else if (src->type == CadNodeType::ConnectionPoint) {
+            copy->data = std::make_shared<ConnectionPointData>(*static_cast<const ConnectionPointData*>(src->data.get()));
+        } else if (src->type == CadNodeType::Transform) {
+            copy->data = std::make_shared<TransformNodeData>(*static_cast<const TransformNodeData*>(src->data.get()));
+        } else {
+            copy->data = nullptr;
+        }
+    }
     copy->children.clear();
     for (const auto& child : src->children) {
         auto childCopy = deepCopyNodeNonExcluded(child.get());
@@ -1252,88 +1352,6 @@ TDF_Label findLabelForShape(const Handle(XCAFDoc_ShapeTool)& shapeTool, const TD
     return TDF_Label();
 }
 
-void relinkCadNodeXCAFGeometry(std::shared_ptr<CadNode>& node, const Handle(TDocStd_Document)& doc) {
-    Handle(XCAFDoc_ShapeTool) shapeTool = XCAFDoc_DocumentTool::ShapeTool(doc->Main());
-    Handle(XCAFDoc_ColorTool) colorTool = XCAFDoc_DocumentTool::ColorTool(doc->Main());
-    TDF_Label label;
-    bool found = false;
-    if ((node->asXCAF() ? node->asXCAF()->xcafLabelTag : -1) >= 0) {
-        TDF_Tool::Label(doc->GetData(), node->asXCAF()->xcafLabelTag, label);
-        if (!label.IsNull()) {
-            TopoDS_Shape shape = shapeTool->GetShape(label);
-            if (!shape.IsNull()) {
-                auto xData = std::make_shared<XCAFNodeData>();
-                xData->shape = shape;
-                xData->type = shape.ShapeType();
-                xData->xcafLabelTag = label.Tag();
-                xData->originalXCAFShape = shape;
-                node->data = xData;
-                node->type = CadNodeType::XCAF;
-                found = true;
-                // Set color using get_shape_color
-                CADNodeColor parentColor = CADNodeColor::fromSRGB(200, 200, 200); // fallback
-                node->color = get_shape_color(shape, label, shapeTool, colorTool, parentColor);
-                // Set name as in build_tree_xcaf
-                QString typeName = shapeTypeToString(xData->type);
-                QString occName;
-                Handle(TDataStd_Name) nameAttr;
-                if (label.FindAttribute(TDataStd_Name::GetID(), nameAttr) && !nameAttr.IsNull()) {
-                    occName = QString::fromStdWString(nameAttr->Get().ToWideString());
-                } else {
-                    occName = QString("Label %1").arg(label.Tag());
-                }
-                QString transformStr = makeTransformString(node->loc);
-                node->name = QString("Label %1 | Type: %2 | Transform: %3%4%5")
-                    .arg(label.Tag())
-                    .arg(typeName)
-                    .arg(transformStr)
-                    .arg(occName.isEmpty() ? "" : QString(" | OCC Name: %1").arg(occName))
-                    .arg("")
-                    .toStdString();
-            }
-        }
-    }
-    // If not found, and node->data is a face/edge, search for the label by shape pointer
-    XCAFNodeData* xData = dynamic_cast<XCAFNodeData*>(node->data.get());
-    if (!found && xData && (xData->type == TopAbs_FACE || xData->type == TopAbs_EDGE)) {
-        TopoDS_Shape targetShape = xData->shape;
-        TDF_Label foundLabel = findLabelForShape(shapeTool, doc->Main(), targetShape);
-        if (!foundLabel.IsNull()) {
-            TopoDS_Shape shape = shapeTool->GetShape(foundLabel);
-            if (!shape.IsNull()) {
-                auto newXData = std::make_shared<XCAFNodeData>();
-                newXData->shape = shape;
-                newXData->type = shape.ShapeType();
-                newXData->xcafLabelTag = foundLabel.Tag();
-                newXData->originalXCAFShape = shape;
-                node->data = newXData;
-                node->type = CadNodeType::XCAF;
-                // Set color using get_shape_color
-                CADNodeColor parentColor = CADNodeColor::fromSRGB(200, 200, 200); // fallback
-                node->color = get_shape_color(shape, foundLabel, shapeTool, colorTool, parentColor);
-                // Set name as in build_tree_xcaf
-                QString typeName = shapeTypeToString(newXData->type);
-                QString occName;
-                Handle(TDataStd_Name) nameAttr;
-                if (foundLabel.FindAttribute(TDataStd_Name::GetID(), nameAttr) && !nameAttr.IsNull()) {
-                    occName = QString::fromStdWString(nameAttr->Get().ToWideString());
-                } else {
-                    occName = QString("Label %1").arg(foundLabel.Tag());
-                }
-                QString transformStr = makeTransformString(node->loc);
-                node->name = QString("Label %1 | Type: %2 | Transform: %3%4%5")
-                    .arg(foundLabel.Tag())
-                    .arg(typeName)
-                    .arg(transformStr)
-                    .arg(occName.isEmpty() ? "" : QString(" | OCC Name: %1").arg(occName))
-                    .arg("")
-                    .toStdString();
-            }
-        }
-    }
-    for (auto& child : node->children) relinkCadNodeXCAFGeometry(child, doc);
-}
-
 // Recursively search for a label whose shape contains a face/edge IsSame to the given shape
 TDF_Label findLabelForFaceOrEdge(const Handle(XCAFDoc_ShapeTool)& shapeTool, const TDF_Label& label, const TopoDS_Shape& targetShape) {
     TopoDS_Shape shape = shapeTool->GetShape(label);
@@ -1400,7 +1418,7 @@ bool loadFromJsonAndBin(const QString& railJsonFile,
     std::unordered_map<const void*, std::shared_ptr<CadNode>> sharedNodeMap;
     for (Standard_Integer i = 1; i <= roots.Length(); ++i) {
         TDF_Label rootLabel = roots.Value(i);
-        auto child = build_tree_xcaf(rootLabel, shapeTool, colorTool, defaultColor, identityLoc);
+        auto child = build_tree_xcaf(rootLabel, shapeTool, colorTool, defaultColor, identityLoc, doc);
         if (child) {
             cadRoot->children.push_back(std::move(child));
         }
@@ -1506,7 +1524,7 @@ bool loadFromStep(const QString& stepFile,
     std::unordered_map<const void*, std::shared_ptr<CadNode>> sharedNodeMap;
     for (Standard_Integer i = 1; i <= roots.Length(); ++i) {
         TDF_Label rootLabel = roots.Value(i);
-        auto child = build_tree_xcaf(rootLabel, shapeTool, colorTool, defaultColor, identityLoc);
+        auto child = build_tree_xcaf(rootLabel, shapeTool, colorTool, defaultColor, identityLoc, doc);
         if (child) {
             cadRoot->children.push_back(std::move(child));
         }
@@ -1577,12 +1595,118 @@ void initTreeAndOpenGLWidget(std::shared_ptr<CadNode> &inputRoot,
     treeView->setSelectionMode(QAbstractItemView::ExtendedSelection);
     // --- Context menu support for all custom model/physics trees ---
     treeView->setContextMenuPolicy(Qt::CustomContextMenu);
+    CadOpenGLWidget* openGLViewer = new CadOpenGLWidget;
     QObject::connect(treeView, &QTreeView::customContextMenuRequested, treeView, [=](const QPoint& pos) {
         QModelIndex idx = treeView->indexAt(pos);
         if (!idx.isValid()) return;
         CadNode* node = const_cast<CadNode*>(qtModel->getNode(idx));
         if (!node) return;
         QMenu menu;
+        // --- Save/Load Node to/from JSON ---
+        QAction* saveNodeAction = menu.addAction("Save Node to JSON...");
+        QObject::connect(saveNodeAction, &QAction::triggered, treeView, [=]() {
+            QString fileName = QFileDialog::getSaveFileName(nullptr, "Save Node as JSON", "", "JSON Files (*.json)");
+            if (fileName.isEmpty()) return;
+            if (!fileName.endsWith(".json")) fileName += ".json";
+            std::shared_ptr<CadNode> nodeToSave = std::make_shared<CadNode>(*node);
+            // Debug print for XCAF face/edge nodes
+            std::function<void(const CadNode*)> printIndex;
+            printIndex = [&](const CadNode* n) {
+                if (!n) return;
+                if (n->type == CadNodeType::XCAF && n->asXCAF() && n->asXCAF()->shapeIndex >= 0) {
+                    qDebug() << "[SaveNode] Will save shapeIndex for node:" << QString::fromStdString(n->name) << "index:" << n->asXCAF()->shapeIndex;
+                }
+                for (const auto& child : n->children) printIndex(child.get());
+            };
+            printIndex(nodeToSave.get());
+            QJsonObject obj = nodeToSave->toJson();
+            QJsonDocument jsondoc(obj);
+            QFile file(fileName);
+            if (!file.open(QIODevice::WriteOnly)) {
+                QMessageBox::warning(nullptr, "Error", "Failed to open file for writing: " + fileName);
+                return;
+            }
+            file.write(jsondoc.toJson(QJsonDocument::Indented));
+            file.close();
+            QMessageBox::information(nullptr, "Success", "Node saved to:\n" + fileName);
+        });
+        QAction* loadNodeAction = menu.addAction("Load Node from JSON...");
+        QObject::connect(loadNodeAction, &QAction::triggered, treeView, [=]() {
+            qDebug() << "[LoadNode] Triggered load from JSON";
+            QString fileName = QFileDialog::getOpenFileName(nullptr, "Load Node from JSON", "", "JSON Files (*.json)");
+            if (fileName.isEmpty()) { qDebug() << "[LoadNode] Cancelled: no file selected"; return; }
+            QFile file(fileName);
+            if (!file.open(QIODevice::ReadOnly)) { qDebug() << "[LoadNode] Failed to open file"; return; }
+            QByteArray data = file.readAll();
+            file.close();
+            QJsonParseError err;
+            QJsonDocument docJSON = QJsonDocument::fromJson(data, &err);
+            if (docJSON.isNull() || !docJSON.isObject()) { qDebug() << "[LoadNode] Invalid JSON"; return; }
+            std::shared_ptr<CadNode> loadedNode = CadNode::fromJson(docJSON.object());
+            if (!loadedNode) { qDebug() << "[LoadNode] Failed to deserialize node"; return; }
+            // Clear the selected node's children and update its properties
+            node->children.clear();
+            for (auto& child : loadedNode->children) {
+                node->children.push_back(child);
+            }
+            node->name = loadedNode->name;
+            node->type = loadedNode->type;
+            node->color = loadedNode->color;
+            node->loc = loadedNode->loc;
+            node->visible = loadedNode->visible;
+            node->excludedFromDecomposition = loadedNode->excludedFromDecomposition;
+            node->data = loadedNode->data;
+            qtModel->dataChanged(idx, idx);
+            setParentPointersRecursive(node); // Ensure parent pointers are set
+            qDebug() << "[LoadNode] About to relink XCAF nodes";
+            std::function<void(CadNode*)> relinkXCAF = [&](CadNode* n) {
+                if (!n) return;
+                if (n->type == CadNodeType::XCAF) {
+                    XCAFNodeData* xData = n->asXCAF();
+                    if (xData && !xData->labelPath.empty()) {
+                        TDF_Label label = findLabelByPath(doc, xData->labelPath);
+                        QVariantList labelPathDebug;
+                        for (int tag : xData->labelPath) labelPathDebug << tag;
+                        qDebug() << "[Relink] Node:" << QString::fromStdString(n->name)
+                                 << "labelPath:" << labelPathDebug
+                                 << "label.IsNull():" << label.IsNull();
+                        if (!label.IsNull()) {
+                            auto shapeToolLocal = XCAFDoc_DocumentTool::ShapeTool(doc->Main());
+                            TopoDS_Shape occShape = shapeToolLocal->GetShape(label);
+                            qDebug() << "[Relink]   OCC shape isNull:" << occShape.IsNull();
+                            if (xData->type == TopAbs_FACE || xData->type == TopAbs_EDGE) {
+                                if (xData->shapeIndex >= 0) {
+                                    int idx = 0;
+                                    TopoDS_Shape foundShape;
+                                    for (TopExp_Explorer exp(occShape, xData->type); exp.More(); exp.Next(), ++idx) {
+                                        if (idx == xData->shapeIndex) {
+                                            foundShape = exp.Current();
+                                            break;
+                                        }
+                                    }
+                                    xData->shape = foundShape;
+                                    qDebug() << "[Relink]   Set subshape for index" << xData->shapeIndex << "isNull:" << foundShape.IsNull();
+                                } else {
+                                    // shapeIndex == -1: assign the main shape
+                                    xData->shape = occShape;
+                                    qDebug() << "[Relink]   Set main shape for FACE/EDGE node with shapeIndex -1, isNull:" << occShape.IsNull();
+                                }
+                            } else {
+                                xData->shape = occShape;
+                                qDebug() << "[Relink]   Set main shape isNull:" << occShape.IsNull();
+                            }
+                        } else {
+                            xData->shape.Nullify();
+                            qDebug() << "[Relink]   Label not found, shape nullified";
+                        }
+                    }
+                }
+                for (auto& child : n->children) relinkXCAF(child.get());
+            };
+            relinkXCAF(node);
+            openGLViewer->markCacheDirty();
+            QMessageBox::information(nullptr, "Success", "Node loaded and replaced from:\n" + fileName);
+        });
         // Physics node: collision mesh toggle
         if (node->type == CadNodeType::Physics) {
             QAction* toggleCollisionMeshAction = nullptr;
@@ -1656,21 +1780,41 @@ void initTreeAndOpenGLWidget(std::shared_ptr<CadNode> &inputRoot,
         QAction* printPtrAction = menu.addAction("Print Node Pointer (Debug)");
         QObject::connect(printPtrAction, &QAction::triggered, treeView, [=]() {
             qDebug() << "[Debug] Node pointer:" << static_cast<const void*>(node);
+            if (auto xData = node->asXCAF()) {
+                QString typeStr = shapeTypeToString(xData->type);
+                bool isNull = xData->shape.IsNull();
+                qDebug() << "[Debug]   XCAF info:";
+                qDebug() << "[Debug]     shapeIndex:" << xData->shapeIndex; // <-- Added line
+                qDebug() << "[Debug]     shape type:" << typeStr;
+                qDebug() << "[Debug]     shape isNull:" << isNull;
+                // Print shape pointer (TShape pointer) and address
+                const void* shapePtr = xData->shape.IsNull() ? nullptr : xData->shape.TShape().get();
+                qDebug() << "[Debug]     shape TShape pointer:" << shapePtr;
+                // Print shape address (handle)
+                qDebug() << "[Debug]     shape handle address:" << static_cast<const void*>(&xData->shape);
+                // Print number of faces/edges if possible
+                int faceCount = 0, edgeCount = 0;
+                if (!xData->shape.IsNull()) {
+                    for (TopExp_Explorer exp(xData->shape, TopAbs_FACE); exp.More(); exp.Next()) ++faceCount;
+                    for (TopExp_Explorer exp(xData->shape, TopAbs_EDGE); exp.More(); exp.Next()) ++edgeCount;
+                }
+                qDebug() << "[Debug]     shape face count:" << faceCount;
+                qDebug() << "[Debug]     shape edge count:" << edgeCount;
+            }
         });
         // Add relink to XCAF node action (always for XCAF nodes)
         if (node->asXCAF()) {
             QAction* relinkAction = menu.addAction("Relink to XCAF Node (Debug)");
             QObject::connect(relinkAction, &QAction::triggered, treeView, [=]() {
                 std::shared_ptr<CadNode> nodePtr = std::make_shared<CadNode>(*node);
-                qDebug() << "[Relink] Starting relink for node:" << QString::fromStdString(node->name)
-                         << ", xcafLabelTag:" << (node->asXCAF() ? node->asXCAF()->xcafLabelTag : -1);
-                relinkCadNodeXCAFGeometry(nodePtr, doc);
+                qDebug() << "[Relink] Starting relink for node:" << QString::fromStdString(node->name);
+                setParentPointersRecursive(nodePtr.get()); // Ensure parent pointers are set
                 qDebug() << "[Relink] Finished relink for node:" << QString::fromStdString(nodePtr->name)
                          << ", new type:" << int(nodePtr->type)
                          << ", new data valid:" << (nodePtr->data != nullptr);
                 for (const auto& child : nodePtr->children) {
                     qDebug() << "[Relink] Child node:" << QString::fromStdString(child->name)
-                             << ", type:" << int(child->type) << ", xcafLabelTag:" << (child->asXCAF() ? child->asXCAF()->xcafLabelTag : -1);
+                             << ", type:" << int(child->type);
                 }
                 QMessageBox::information(nullptr, "Relink Complete", "Relinked node to XCAF geometry. See debug output for details.");
             });
@@ -1739,6 +1883,122 @@ void initTreeAndOpenGLWidget(std::shared_ptr<CadNode> &inputRoot,
                 }
             });
         }
+        // --- Align Second Face to First Action ---
+        // Only enable if exactly two faces are selected
+        QModelIndexList selectedIndexes = treeView->selectionModel()->selectedIndexes();
+        std::vector<CadNode*> selectedFaces;
+        for (const QModelIndex& selIdx : selectedIndexes) {
+            CadNode* selNode = const_cast<CadNode*>(qtModel->getNode(selIdx));
+            if (selNode && selNode->asXCAF() && selNode->asXCAF()->type == TopAbs_FACE) {
+                selectedFaces.push_back(selNode);
+            }
+        }
+        QAction* alignFacesAction = nullptr;
+        if (selectedFaces.size() == 2) {
+            alignFacesAction = menu.addAction("Align Second Face to First");
+            alignFacesAction->setEnabled(true);
+            QObject::connect(alignFacesAction, &QAction::triggered, treeView, [=]() {
+                // Get the two face nodes
+                CadNode* face1 = selectedFaces[0];
+                CadNode* face2 = selectedFaces[1];
+                // Find the topmost ancestor of type Physics for the second face
+                CadNode* physicsAncestor = const_cast<CadNode*>(qtModel->getParentNode(face2));
+                while (physicsAncestor && physicsAncestor->type != CadNodeType::Physics) {
+                    CadNode* next = const_cast<CadNode*>(qtModel->getParentNode(physicsAncestor));
+                    if (!next || next == physicsAncestor) break;
+                    physicsAncestor = next;
+                }
+                if (!face1 || !face2 || !physicsAncestor || physicsAncestor->type != CadNodeType::Physics) {
+                    QMessageBox::warning(nullptr, "Align Faces", "Could not find a Physics ancestor for the second face.");
+                    return;
+                }
+                // Get face geometry (center and normal)
+                XCAFNodeData* xData1 = face1->asXCAF();
+                XCAFNodeData* xData2 = face2->asXCAF();
+                if (!xData1 || !xData2 || !xData1->hasFace() || !xData2->hasFace()) {
+                    QMessageBox::warning(nullptr, "Align Faces", "Selected nodes are not valid faces.");
+                    return;
+                }
+                TopoDS_Face topoFace1 = xData1->getFace();
+                TopoDS_Face topoFace2 = xData2->getFace();
+                // Apply accumulated transforms
+                auto accumulateTransform = [qtModel](CadNode* node) -> TopLoc_Location {
+                    TopLoc_Location acc;
+                    std::vector<CadNode*> ancestry;
+                    CadNode* cur = node;
+                    while (cur) {
+                        ancestry.push_back(cur);
+                        cur = const_cast<CadNode*>(qtModel->getParentNode(cur));
+                    }
+                    for (auto it = ancestry.rbegin(); it != ancestry.rend(); ++it) {
+                        acc = acc * (*it)->loc;
+                    }
+                    return acc;
+                };
+                TopLoc_Location loc1 = accumulateTransform(face1);
+                TopLoc_Location loc2 = accumulateTransform(face2);
+                TopoDS_Face face1Located = TopoDS::Face(topoFace1.Located(loc1));
+                TopoDS_Face face2Located = TopoDS::Face(topoFace2.Located(loc2));
+                // Get surface and compute center and normal for each face
+                Handle(Geom_Surface) surf1 = BRep_Tool::Surface(face1Located);
+                Handle(Geom_Surface) surf2 = BRep_Tool::Surface(face2Located);
+                if (surf1.IsNull() || surf2.IsNull()) {
+                    QMessageBox::warning(nullptr, "Align Faces", "Could not get face surfaces.");
+                    return;
+                }
+                // Compute center (use face bounding box center)
+                Bnd_Box bbox1, bbox2;
+                BRepBndLib::Add(face1Located, bbox1);
+                BRepBndLib::Add(face2Located, bbox2);
+                Standard_Real xmin, ymin, zmin, xmax, ymax, zmax;
+                bbox1.Get(xmin, ymin, zmin, xmax, ymax, zmax);
+                gp_Pnt center1((xmin + xmax) / 2, (ymin + ymax) / 2, (zmin + zmax) / 2);
+                bbox2.Get(xmin, ymin, zmin, xmax, ymax, zmax);
+                gp_Pnt center2((xmin + xmax) / 2, (ymin + ymax) / 2, (zmin + zmax) / 2);
+                // Get normal at center (project to surface)
+                Standard_Real umin1, umax1, vmin1, vmax1;
+                BRepTools::UVBounds(face1Located, umin1, umax1, vmin1, vmax1);
+                Standard_Real ucenter1 = (umin1 + umax1) / 2.0;
+                Standard_Real vcenter1 = (vmin1 + vmax1) / 2.0;
+                Standard_Real umin2, umax2, vmin2, vmax2;
+                BRepTools::UVBounds(face2Located, umin2, umax2, vmin2, vmax2);
+                Standard_Real ucenter2 = (umin2 + umax2) / 2.0;
+                Standard_Real vcenter2 = (vmin2 + vmax2) / 2.0;
+                GeomLProp_SLProps props1(surf1, ucenter1, vcenter1, 1, 1e-6);
+                GeomLProp_SLProps props2(surf2, ucenter2, vcenter2, 1, 1e-6);
+                if (!props1.IsNormalDefined() || !props2.IsNormalDefined()) {
+                    QMessageBox::warning(nullptr, "Align Faces", "Could not compute face normals.");
+                    return;
+                }
+                gp_Dir normal1 = props1.Normal();
+                gp_Dir normal2 = props2.Normal();
+                // Compute rotation to align normal2 to normal1
+                gp_Vec v1(normal1.X(), normal1.Y(), normal1.Z());
+                gp_Vec v2(normal2.X(), normal2.Y(), normal2.Z());
+                gp_Vec axis = v2.Crossed(v1);
+                Standard_Real angle = v2.Angle(v1);
+                gp_Trsf rotTrsf;
+                if (axis.Magnitude() > 1e-8 && angle > 1e-8) {
+                    gp_Ax1 rotationAxis(center2, gp_Dir(axis));
+                    rotTrsf.SetRotation(rotationAxis, angle);
+                } else {
+                    rotTrsf = gp_Trsf();
+                }
+                // Apply rotation to center2 to get new center
+                gp_Pnt center2Rot = center2;
+                center2Rot.Transform(rotTrsf);
+                // Compute translation to align centers
+                gp_Vec translation(center1, center2Rot);
+                gp_Trsf trsf;
+                trsf.SetRotation(rotTrsf.GetRotation());
+                trsf.SetTranslationPart(translation);
+                // Apply transformation to parent2
+                physicsAncestor->loc = trsf.Inverted() * physicsAncestor->loc.Transformation();
+                qtModel->dataChanged(qtModel->indexForNode(physicsAncestor), qtModel->indexForNode(physicsAncestor));
+                openGLViewer->markCacheDirty();
+                QMessageBox::information(nullptr, "Align Faces", "Aligned parent of second face to first face.");
+            });
+        }
         // Add to Custom Model Tree submenu (only for CAD tree)
         if (name == "CAD") {
             QMenu* addToCustomMenu = menu.addMenu("Add to Custom Model...");
@@ -1770,13 +2030,16 @@ void initTreeAndOpenGLWidget(std::shared_ptr<CadNode> &inputRoot,
                             qDebug() << "[AddToCustomModel] Custom tree or model not found!";
                             return;
                         }
-                        // Deep copy the selected node
+                        // Deep copy the selected node and its children
                         std::shared_ptr<CadNode> newNode = deepCopyNodeNonExcluded(node);
                         if (!newNode) {
                             qDebug() << "[AddToCustomModel] Deep copy failed!";
                             return;
                         }
                         newNode->name = segType.toStdString();
+                        // Make the new node a Physics node
+                        newNode->type = CadNodeType::Physics;
+                        newNode->data = std::make_shared<PhysicsNodeData>();
                         qDebug() << "[AddToCustomModel] Copying node with name:" << QString::fromStdString(node->name) << "as" << segType;
                         // --- Preserve global transform ---
                         // Get parent-getter for source and destination
@@ -1809,25 +2072,24 @@ void initTreeAndOpenGLWidget(std::shared_ptr<CadNode> &inputRoot,
                                 dstParentGlobal = dstParentGlobal * (*it)->loc;
                             }
                         }
-                        // Adjust the copied node so its global transform matches the original
-                        adjustSubtreeTransforms(
-                            node, newNode.get(), dstParentGlobal, srcGetParent
-                        );
-                        // Always add to the root of the selected custom model tree using the model's reset method
-                        int beforeCount = static_cast<int>(customRoot->children.size());
-                        qDebug() << "[AddToCustomModel] Children before insertion:" << beforeCount;
-                        customModel->resetModelAndAddNode(newNode);
+                        // Set the local transform of the new node so its global transform matches the original
+                        newNode->loc = dstParentGlobal.Inverted() * srcGlobal;
+                        // Now recursively fix children
+                        for (size_t i = 0; i < node->children.size(); ++i) {
+                            if (newNode->children.size() > i) {
+                                adjustSubtreeTransforms(node->children[i].get(), newNode->children[i].get(), srcGlobal, srcGetParent);
+                            }
+                        }
+                        // Add to the container's children (not the real root), with model reset for view update
+                        customModel->addNodeWithReset(newNode);
+                        openGLViewer->markCacheDirty();
                         int afterCount = static_cast<int>(customRoot->children.size());
-                        qDebug() << "[AddToCustomModel] Children after insertion:" << afterCount;
                         // Select and scroll to the new node at the top level
                         if (customTree) {
                             QModelIndex newIdx = customModel->index(afterCount - 1, 0, QModelIndex());
-                            qDebug() << "[AddToCustomModel] New node index:" << newIdx.row();
                             if (newIdx.isValid()) {
                                 customTree->setCurrentIndex(newIdx);
                                 customTree->scrollTo(newIdx);
-                            } else {
-                                qDebug() << "[AddToCustomModel] New index is not valid!";
                             }
                         }
                         // --- Debug: Print global transforms ---
@@ -1848,7 +2110,6 @@ void initTreeAndOpenGLWidget(std::shared_ptr<CadNode> &inputRoot,
                         TopLoc_Location dstGlobalDbg = getGlobalTransform(newNode.get(), dstGetParent);
                         qDebug() << "[DEBUG] Source global transform:" << makeTransformString(srcGlobalDbg);
                         qDebug() << "[DEBUG] Dest global transform:" << makeTransformString(dstGlobalDbg);
-                        // --- Debug: Print root node transforms ---
                         if (qtModel && customModel) {
                             const CadNode* srcRoot = qtModel->getRootNodePointer();
                             const CadNode* dstRoot = customModel->getRootNodePointer();
@@ -1859,10 +2120,25 @@ void initTreeAndOpenGLWidget(std::shared_ptr<CadNode> &inputRoot,
                 }
             }
         }
+        // Rail node: edit JSON properties
+        if (node->type == CadNodeType::Rail) {
+            QAction* editRailJsonAction = menu.addAction("Edit Rail Properties...");
+            QObject::connect(editRailJsonAction, &QAction::triggered, treeView, [=]() {
+                RailNodeData* railData = node->asRail();
+                if (!railData) return;
+                QString jsonStr = railData->jsonString;
+                RailJsonEditorDialog dlg(jsonStr, treeView);
+                if (dlg.exec() == QDialog::Accepted) {
+                    railData->jsonString = dlg.getJsonString();
+                    qtModel->dataChanged(idx, idx);
+                }
+            });
+        }
         if (!menu.isEmpty()) menu.exec(treeView->viewport()->mapToGlobal(pos));
     });
-    CadOpenGLWidget* openGLViewer = new CadOpenGLWidget;
-    openGLViewer->setRootTreeNode(inputRoot.get());
+    // If inputRoot is a container, set OpenGL root to its first child
+    CadNode* oglRoot = inputRoot->children.empty() ? nullptr : inputRoot->children[0].get();
+    openGLViewer->setRootTreeNode(oglRoot);
     treeTabWidget->addTab(treeView, QString::fromStdString(name) + " Tree");
     openGLTabWidget->addTab(openGLViewer, QString::fromStdString(name) + " Preview");
     connectTreeAndViewer(treeView, openGLViewer, qtModel);
@@ -1871,80 +2147,6 @@ void initTreeAndOpenGLWidget(std::shared_ptr<CadNode> &inputRoot,
     g_openGLViews.push_back(openGLViewer);
 }
 
-void saveRailObject(QModelIndexList selected,CustomModelTreeModel* treeModel,
-                    const Handle(TDocStd_Document)& doc) {
-    QString baseName = QFileDialog::getSaveFileName(nullptr, "Save Rail Base Name", "", "Rail Project (*.json)");
-    if (baseName.isEmpty()) return;
-    if (!baseName.endsWith(".json")) baseName += ".json";
-    if (selected.empty()) return;
-    QString binName = baseName;
-    binName.replace(".json", ".bin");
-    // Save custom model JSON (only the selected Rail node or root)
-    std::shared_ptr<CadNode> nodeToSave = nullptr;
-    CadNode* n = const_cast<CadNode*>(treeModel->getNode(selected.first()));
-    if (n && n->type == CadNodeType::Rail) nodeToSave = std::make_shared<CadNode>(*n);
-
-    if (!nodeToSave) return;
-    QJsonObject obj = nodeToSave->toJson();
-    QJsonDocument jsondoc(obj);
-    QFile file(baseName);
-    if (!file.open(QIODevice::WriteOnly)) {
-        QMessageBox::warning(nullptr, "Error", "Failed to open file for writing: " + baseName);
-        return;
-    }
-    file.write(jsondoc.toJson(QJsonDocument::Indented));
-    file.close();
-    // Save XCAF document
-    if (!saveXCAFToBinary(doc, binName)) {
-        QMessageBox::warning(nullptr, "Error", "Failed to save XCAF binary file: " + binName);
-        return;
-    }
-    QMessageBox::information(nullptr, "Success", "Rail and XCAF saved as:\n" + baseName + "\n" + binName);
-}
-
-void loadRailObject() {
-    QString baseName = QFileDialog::getOpenFileName(nullptr, "Load Rail Base Name", "", "Rail Project (*.json)");
-    if (baseName.isEmpty()) return;
-    if (!baseName.endsWith(".json")) baseName += ".json";
-    QString binName = baseName;
-    binName.replace(".json", ".bin");
-    // If .bin does not exist, try .bin.xbf
-    if (!QFile::exists(binName)) {
-        QString altBinName = binName + ".xbf";
-        if (QFile::exists(altBinName)) {
-            binName = altBinName;
-        }
-    }
-    // Load XCAF document
-    Handle(TDocStd_Document) loadedDoc;
-    Handle(XCAFApp_Application) appOCC = XCAFApp_Application::GetApplication();
-    appOCC->NewDocument("BinXCAF", loadedDoc);
-    Handle(TDocStd_Application) occApp = Handle(TDocStd_Application)::DownCast(loadedDoc->Application());
-    BinXCAFDrivers::DefineFormat(occApp);
-    PCDM_ReaderStatus status = occApp->Open(binName.toStdWString().c_str(), loadedDoc);
-    if (status != PCDM_RS_OK) {
-        QMessageBox::warning(nullptr, "Error", "Failed to load XCAF binary file: " + binName);
-        return;
-    }
-    // Load custom model JSON
-    QFile file(baseName);
-    if (!file.open(QIODevice::ReadOnly)) {
-        QMessageBox::warning(nullptr, "Error", "Failed to open file: " + baseName);
-        return;
-    }
-    QByteArray data = file.readAll();
-    file.close();
-    QJsonParseError err;
-    QJsonDocument doc = QJsonDocument::fromJson(data, &err);
-    if (doc.isNull() || !doc.isObject()) {
-        QMessageBox::warning(nullptr, "Error", "Invalid JSON file: " + baseName);
-        return;
-    }
-    auto loadedNode = CadNode::fromJson(doc.object());
-    // Relink: for each node with xcafLabelTag >= 0, find the corresponding XCAF label and update geometry if needed
-    relinkCadNodeXCAFGeometry(loadedNode, loadedDoc);
-    QMessageBox::information(nullptr, "Success", "Rail and XCAF loaded from:\n" + baseName + "\n" + binName);
-}
 
 int main(int argc, char *argv[])
 {
@@ -2022,25 +2224,18 @@ int main(int argc, char *argv[])
         }
         // --- Custom Model Tree ---
         if (!customModelRootContainer) customModelRootContainer = std::make_shared<CadNode>();
-        // The actual rail/root node
         if (!customModelRoot) customModelRoot = std::make_shared<CadNode>();
-        customModelRoot->name = "Custom Model Root";
+        customModelRoot->name = "Custom Rail";
         customModelRoot->visible = true;
         customModelRoot->type = CadNodeType::Rail;
         customModelRoot->data = std::make_shared<RailNodeData>();
         customModelRootContainer->children.clear();
         customModelRootContainer->children.push_back(customModelRoot);
     }
-    // Always use the common code for the custom model tree and 3D view
     CadTreeModel* cadTreeModel = nullptr;
-    // Pass cadTreeModel to initTreeAndOpenGLWidget for the CAD tree
     initTreeAndOpenGLWidget(cadRootShared, tabWidget, viewTabWidget, "CAD", doc, cadTreeModel);
-    // For other trees, pass nullptr
+    // For the custom model tree, use the container as the root for the tree view, but set the OpenGL widget's root to the real root (first child of the container)
     initTreeAndOpenGLWidget(customModelRootContainer, tabWidget, viewTabWidget, "Custom Model", doc, nullptr);
-
-    // Custom model part OpenGL widget
-    relinkCadNodeXCAFGeometry(customModelRoot, doc);
-
 
     CadOpenGLWidget* active3DView = nullptr;
     QTreeView* activeTreeView = nullptr;
@@ -2060,27 +2255,27 @@ int main(int argc, char *argv[])
     });
 
     // Connect selection mode buttons
-    QObject::connect(noSelectionBtn, &QPushButton::clicked, [=]() {
-        active3DView->setSelectionMode(SelectionMode::None);
+    QObject::connect(noSelectionBtn, &QPushButton::clicked, [&]() {
+        if (active3DView) active3DView->setSelectionMode(SelectionMode::None);
         noSelectionBtn->setStyleSheet("QPushButton { background-color: #4CAF50; color: white; font-weight: bold; }");
         faceSelectionBtn->setStyleSheet("QPushButton { background-color: #f0f0f0; color: black; }");
         edgeSelectionBtn->setStyleSheet("QPushButton { background-color: #f0f0f0; color: black; }");
     });
-    
-    QObject::connect(faceSelectionBtn, &QPushButton::clicked, [=]() {
-        active3DView->setSelectionMode(SelectionMode::Faces);
+
+    QObject::connect(faceSelectionBtn, &QPushButton::clicked, [&]() {
+        if (active3DView) active3DView->setSelectionMode(SelectionMode::Faces);
         noSelectionBtn->setStyleSheet("QPushButton { background-color: #f0f0f0; color: black; }");
         faceSelectionBtn->setStyleSheet("QPushButton { background-color: #4CAF50; color: white; font-weight: bold; }");
         edgeSelectionBtn->setStyleSheet("QPushButton { background-color: #f0f0f0; color: black; }");
     });
-    
-    QObject::connect(edgeSelectionBtn, &QPushButton::clicked, [=]() {
-        active3DView->setSelectionMode(SelectionMode::Edges);
+
+    QObject::connect(edgeSelectionBtn, &QPushButton::clicked, [&]() {
+        if (active3DView) active3DView->setSelectionMode(SelectionMode::Edges);
         noSelectionBtn->setStyleSheet("QPushButton { background-color: #f0f0f0; color: black; }");
         faceSelectionBtn->setStyleSheet("QPushButton { background-color: #f0f0f0; color: black; }");
         edgeSelectionBtn->setStyleSheet("QPushButton { background-color: #4CAF50; color: white; font-weight: bold; }");
     });
-    
+
 
     // --- Physics Preview Tree and OpenGL Widget ---
     auto physicsPreviewRoot = std::make_shared<CadNode>();
@@ -2096,14 +2291,14 @@ int main(int argc, char *argv[])
             if (active3DView) active3DView->reframeCamera();
         }
     });
-    
+
     // Add serialization buttons
     QPushButton* saveStepBtn = new QPushButton("Save STEP");
     QPushButton* saveBinaryBtn = new QPushButton("Save Binary");
-    
+
     buttonLayout->addWidget(saveStepBtn);
     buttonLayout->addWidget(saveBinaryBtn);
-    
+
     // Connect serialization buttons
     QObject::connect(saveStepBtn, &QPushButton::clicked, [=]() {
         QString baseName = QFileInfo(openFile).baseName();
@@ -2114,7 +2309,7 @@ int main(int argc, char *argv[])
             QMessageBox::warning(nullptr, "Error", "Failed to save XCAF data to STEP file");
         }
     });
-    
+
     QObject::connect(saveBinaryBtn, &QPushButton::clicked, [=]() {
         QString baseName = QFileInfo(openFile).baseName();
         QString outputPath = QDir::currentPath() + QDir::separator() + baseName + "_serialized.bin";
@@ -2124,30 +2319,30 @@ int main(int argc, char *argv[])
             QMessageBox::warning(nullptr, "Error", "Failed to save XCAF data to binary file");
         }
     });
-    
+
     // --- XCAF Label Tree View for second tab ---
     // Build comprehensive label tree showing all XCAF structure
     labelRoot = std::make_unique<XCAFLabelNode>(doc->Main());
     labelRoot->label = doc->Main();
-    
+
     qDebug() << "Building comprehensive XCAF tree...";
-    
+
     // Add all direct children of the main document
     for (TDF_ChildIterator it(doc->Main()); it.More(); it.Next()) {
         TDF_Label childLabel = it.Value();
         qDebug() << "Adding main document child with tag:" << childLabel.Tag();
         labelRoot->children.push_back(buildLabelTreeWithReferences(childLabel, shapeTool));
     }
-    
+
     // Also add all free shapes (important for STEP 214)
     TDF_LabelSequence freeShapes;
     shapeTool->GetFreeShapes(freeShapes);
     qDebug() << "Found" << freeShapes.Length() << "free shapes";
-    
+
     for (Standard_Integer i = 1; i <= freeShapes.Length(); ++i) {
         TDF_Label freeShapeLabel = freeShapes.Value(i);
         qDebug() << "Adding free shape with tag:" << freeShapeLabel.Tag();
-        
+
         // Check if this free shape is already in the tree
         bool alreadyAdded = false;
         for (const auto& existingChild : labelRoot->children) {
@@ -2156,47 +2351,22 @@ int main(int argc, char *argv[])
                 break;
             }
         }
-        
+
         if (!alreadyAdded) {
             labelRoot->children.push_back(buildLabelTreeWithReferences(freeShapeLabel, shapeTool));
         }
     }
-    
-    // Add a special node for all shapes in the document
-    auto allShapesNode = std::make_unique<XCAFLabelNode>(TDF_Label());
-    allShapesNode->label = TDF_Label(); // Empty label to indicate special node
-    
-    // Find all labels that have shapes
-    std::function<void(const TDF_Label&)> collectShapeLabels = [&](const TDF_Label& label) {
-        if (!label.IsNull()) {
-            TopoDS_Shape shape = shapeTool->GetShape(label);
-            if (!shape.IsNull()) {
-                auto shapeNode = std::make_unique<XCAFLabelNode>(label);
-                allShapesNode->children.push_back(std::move(shapeNode));
-            }
-            
-            // Recurse into children
-            for (TDF_ChildIterator it(label); it.More(); it.Next()) {
-                collectShapeLabels(it.Value());
-            }
-        }
-    };
-    
-    collectShapeLabels(doc->Main());
-    qDebug() << "Found" << allShapesNode->children.size() << "labels with shapes";
-    
-    if (!allShapesNode->children.empty()) {
-        labelRoot->children.push_back(std::move(allShapesNode));
-    }
-    
+
+    // --- Removed special node for all shapes ---
+
     qDebug() << "XCAF tree built with" << labelRoot->children.size() << "root children";
-    
+
     XCAFLabelTreeModel* labelModel = new XCAFLabelTreeModel(std::move(labelRoot));
-    
+
     // Pass tools to the model for enhanced information display
     labelModel->setShapeTool(shapeTool);
     labelModel->setColorTool(colorTool);
-    
+
     QTreeView* labelTreeView = new QTreeView;
     labelTreeView->setModel(labelModel);
     labelTreeView->setHeaderHidden(false);
@@ -2234,3 +2404,5 @@ int main(int argc, char *argv[])
 
     return app.exec();
 }
+
+

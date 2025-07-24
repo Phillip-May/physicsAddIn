@@ -19,6 +19,7 @@
 #include <TopoDS_Shape.hxx>
 #include <gp_Trsf.hxx>
 #include <array>
+#include <QDebug> // Added for qDebug
 
 // Define a simple RGBA color struct
 struct CADNodeColor {
@@ -80,27 +81,22 @@ enum class CadNodeType {
 struct CadNodeDataBase {
     virtual ~CadNodeDataBase() = default;
     virtual QJsonObject toJson() const { return QJsonObject(); }
-    static std::shared_ptr<CadNodeDataBase> fromJson(const QJsonObject& obj) {
-        return nullptr; // Default implementation
-    }
+    static std::shared_ptr<CadNodeDataBase> fromJson(const QJsonObject& obj) { return nullptr; }
+    // clone() removed
 };
 
 // 3. XCAF-specific data
 struct XCAFNodeData : public CadNodeDataBase {
     TopAbs_ShapeEnum type = TopAbs_SHAPE;
     TopoDS_Shape shape;
-    // XCAF relinking fields
-    int xcafLabelTag = -1; // -1 means not linked to XCAF
+    std::vector<int> labelPath; // Path from root to label
+    int shapeIndex = -1;        // Index of face/edge under the label
     TopoDS_Shape originalXCAFShape; // Not serialized, used for relinking
-    // Optionally: TopoDS_Face, TopoDS_Edge, etc.
-    // Add more XCAF-specific fields as needed
-
     // Utility functions
     bool hasFace() const { return type == TopAbs_FACE && !shape.IsNull(); }
     bool hasEdge() const { return type == TopAbs_EDGE && !shape.IsNull(); }
     TopoDS_Face getFace() const { return (type == TopAbs_FACE) ? TopoDS::Face(shape) : TopoDS_Face(); }
     TopoDS_Edge getEdge() const { return (type == TopAbs_EDGE) ? TopoDS::Edge(shape) : TopoDS_Edge(); }
-    // No toJson/fromJson for XCAFNodeData!
 };
 
 // 4. Custom node data (example)
@@ -287,6 +283,8 @@ struct CadNode {
     CadNodeType type = CadNodeType::Unknown; // Must be set explicitly
     std::shared_ptr<CadNodeDataBase> data; // Holds type-specific data
 
+    CadNode* parent = nullptr; // <-- Add this line for parent pointer
+
     // Helper to get XCAF data safely
     XCAFNodeData* asXCAF() {
         return type == CadNodeType::XCAF ? static_cast<XCAFNodeData*>(data.get()) : nullptr;
@@ -376,7 +374,13 @@ struct CadNode {
         else if (type == CadNodeType::Physics && data) dataObj = static_cast<PhysicsNodeData*>(data.get())->toJson();
         else if (type == CadNodeType::ConnectionPoint && data) dataObj = static_cast<ConnectionPointData*>(data.get())->toJson();
         else if (type == CadNodeType::XCAF && asXCAF()) {
-            dataObj["xcafLabelTag"] = asXCAF()->xcafLabelTag;
+            // Serialize labelPath and shapeIndex
+            const XCAFNodeData* xData = asXCAF();
+            QJsonArray labelPathArr;
+            for (int tag : xData->labelPath) labelPathArr.append(tag);
+            dataObj["labelPath"] = labelPathArr;
+            dataObj["shapeIndex"] = xData->shapeIndex;
+            dataObj["shapeType"] = static_cast<int>(xData->type);
         }
         obj["data"] = dataObj;
         // Children
@@ -409,9 +413,12 @@ struct CadNode {
         if (node->type == CadNodeType::Rail) node->data = RailNodeData::fromJson(dataObj);
         else if (node->type == CadNodeType::Physics) node->data = PhysicsNodeData::fromJson(dataObj);
         else if (node->type == CadNodeType::ConnectionPoint) node->data = ConnectionPointData::fromJson(dataObj);
-        else if (node->type == CadNodeType::XCAF && dataObj.contains("xcafLabelTag")) {
+        else if (node->type == CadNodeType::XCAF && dataObj.contains("labelPath")) {
             auto xData = std::make_shared<XCAFNodeData>();
-            xData->xcafLabelTag = dataObj["xcafLabelTag"].toInt();
+            QJsonArray labelPathArr = dataObj["labelPath"].toArray();
+            for (const auto& v : labelPathArr) xData->labelPath.push_back(v.toInt());
+            xData->shapeIndex = dataObj["shapeIndex"].toInt(-1);
+            xData->type = static_cast<TopAbs_ShapeEnum>(dataObj["shapeType"].toInt(static_cast<int>(TopAbs_SHAPE)));
             node->data = xData;
         }
         // Children
