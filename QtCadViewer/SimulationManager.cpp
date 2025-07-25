@@ -307,12 +307,92 @@ void PhysXEngine::stepSimulation(float deltaTime)
     }
 }
 
-SimulationManager::SimulationManager() :
-    materialManager(nullptr) {
+SimulationManager::SimulationManager(std::shared_ptr<CadNode> &m_CadNodeRootIn) :
+    materialManager(new MaterialManager(nullptr)) {
     // Initialize state
     m_currentState.time = 0.0f;
     m_currentState.isPaused = true;
     m_currentState.stepCount = 0;
+    m_CadNodeRoot = m_CadNodeRootIn;
+    m_physXEngine = std::make_unique<PhysXEngine>();
+}
+
+void SimulationManager::buildPhysXSceneFromNodes() {
+    qDebug() << "Build physics scene called";
+    m_nodeToActor.clear();
+    m_actorToNode.clear();
+    if (!m_physXEngine || !m_CadNodeRoot) return;
+
+    std::vector<CadNode*> physicsNodes;
+    collectPhysicsNodes(m_CadNodeRoot, physicsNodes);
+
+    qDebug() << "Starting simulation with n actors: " << physicsNodes.size();
+
+    for (CadNode* node : physicsNodes) {
+        // 1. Extract geometry (convex hulls)
+        PhysicsNodeData* physData = node->asPhysics();
+        if (!physData || physData->hulls.empty()) continue;
+
+        // For each hull, create a PhysX convex mesh and shape
+        std::vector<PxShape*> shapes;
+        for (const auto& hull : physData->hulls) {
+            // Prepare vertices
+            std::vector<PxVec3> pxVertices;
+            for (const auto& v : hull.vertices) {
+                pxVertices.emplace_back(v[0], v[1], v[2]);
+            }
+
+            // Create convex mesh descriptor
+            PxConvexMeshDesc convexDesc;
+            convexDesc.points.count = static_cast<uint32_t>(pxVertices.size());
+            convexDesc.points.stride = sizeof(PxVec3);
+            convexDesc.points.data = pxVertices.data();
+            convexDesc.flags = PxConvexFlag::eCOMPUTE_CONVEX;
+
+            // Cook the mesh
+            PxDefaultMemoryOutputStream buf;
+            if (!PxCookConvexMesh(m_physXEngine->m_globalCookingParams,convexDesc, buf)) {
+                qDebug() << "Failed to cook convex mesh for node" << QString::fromStdString(node->name);
+                continue;
+            }
+            PxDefaultMemoryInputData input(buf.getData(), buf.getSize());
+            PxConvexMesh* convexMesh = m_physXEngine->m_physics->createConvexMesh(input);
+
+            // Create shape
+            PxShape* shape = m_physXEngine->m_physics->createShape(
+                PxConvexMeshGeometry(convexMesh),
+                *m_physXEngine->m_material
+            );
+            // Set friction, restitution, etc.
+            shape->setMaterials(&m_physXEngine->m_material, 1);
+            shape->setContactOffset(0.02f); // Example value
+            shapes.push_back(shape);
+        }
+
+        // 2. Create rigid body
+        PxTransform pose; // You may want to extract the transform from node->loc
+        // Example: pose = ...;
+        PxRigidDynamic* actor = m_physXEngine->m_physics->createRigidDynamic(pose);
+
+        // Attach all shapes
+        for (PxShape* shape : shapes) {
+            actor->attachShape(*shape);
+            shape->release(); // actor now owns the shape
+        }
+
+        // 3. Set properties
+        actor->setMass(physData->mass);
+        // Set friction, restitution, etc. on shapes if needed
+
+        // 4. Add to scene
+        m_physXEngine->m_scene->addActor(*actor);
+
+        // 5. Store mappings
+        m_nodeToActor[node] = actor;
+        m_actorToNode[actor] = node;
+    }
+
+    qDebug() << "Started simulation with n actors: " << physicsNodes.size();
 }
 
 void SimulationManager::startSimulation() {
@@ -325,9 +405,13 @@ void SimulationManager::startSimulation() {
     m_paused = false;
     m_currentState.isPaused = false;
 
+
+    buildPhysXSceneFromNodes();
+
+
+
     // Start simulation thread
     m_simulationThread = std::thread(&SimulationManager::simulationLoop, this);
-
     std::cout << "Simulation started" << std::endl;
 }
 
@@ -395,6 +479,8 @@ void SimulationManager::addGuiElements(QMainWindow* mainWindow)
     // Create the menu
     QMenu* menu = new QMenu(toolButton);
     QAction* showMaterialManagerAction = menu->addAction("Show Material Manager");
+    QAction* startSimulationAction = menu->addAction("Start Simulation");
+    QAction* stopSimulationAction = menu->addAction("Stop Simulation");
     toolButton->setMenu(menu);
 
     toolbar->addWidget(toolButton);
@@ -403,6 +489,12 @@ void SimulationManager::addGuiElements(QMainWindow* mainWindow)
         if (materialManager) {
             materialManager->showMaterialManagerDialog(mainWindow);
         }
+    });
+    QObject::connect(startSimulationAction, &QAction::triggered, mainWindow, [this]() {
+        this->startSimulation();
+    });
+    QObject::connect(stopSimulationAction, &QAction::triggered, mainWindow, [this]() {
+        this->stopSimulation();
     });
 }
 
@@ -449,9 +541,6 @@ void SimulationManager::registerPhysicsNodeContextMenu(QTreeView* treeView)
 
 void SimulationManager::simulationLoop() {
     std::cout << "Simulation thread started" << std::endl;
-
-    // Initialize PhysX engine in this thread
-    m_physXEngine = std::make_unique<PhysXEngine>();
     if (!m_physXEngine->initializePhysX()) {
         std::cout << "Failed to initialize PhysX engine" << std::endl;
         return;
@@ -543,7 +632,7 @@ void SimulationManager::updateSimulation() {
     }
 
     // Perform PhysX simulation step
-    // m_physXEngine->stepSimulation(m_timeStep);
+     m_physXEngine->stepSimulationExtended(m_timeStep);
 
     // Update our state from PhysX
     {
@@ -552,7 +641,42 @@ void SimulationManager::updateSimulation() {
         m_currentState.stepCount++;
 
         // Update object positions/velocities from PhysX
-        // This is where you would sync your PhysicsObject data with PhysX actors
+        for (const auto& pair : m_actorToNode) {
+            PxRigidActor* actor = pair.first;
+            CadNode* node = pair.second;
+            if (!actor || !node) continue;
+
+            PxTransform pose = actor->getGlobalPose();
+            PxVec3 pos = pose.p;
+            PxQuat quat = pose.q;
+
+            // Convert PhysX pose to OpenCASCADE gp_Trsf
+            gp_Trsf trsf;
+            // Set rotation (quaternion to rotation matrix)
+            double qx = quat.x, qy = quat.y, qz = quat.z, qw = quat.w;
+            double xx = qx * qx, yy = qy * qy, zz = qz * qz;
+            double xy = qx * qy, xz = qx * qz, yz = qy * qz;
+            double wx = qw * qx, wy = qw * qy, wz = qw * qz;
+
+            double m[3][3];
+            m[0][0] = 1.0 - 2.0 * (yy + zz);
+            m[0][1] = 2.0 * (xy - wz);
+            m[0][2] = 2.0 * (xz + wy);
+            m[1][0] = 2.0 * (xy + wz);
+            m[1][1] = 1.0 - 2.0 * (xx + zz);
+            m[1][2] = 2.0 * (yz - wx);
+            m[2][0] = 2.0 * (xz - wy);
+            m[2][1] = 2.0 * (yz + wx);
+            m[2][2] = 1.0 - 2.0 * (xx + yy);
+
+            trsf.SetValues(
+                m[0][0], m[0][1], m[0][2], pos.x,
+                m[1][0], m[1][1], m[1][2], pos.y,
+                m[2][0], m[2][1], m[2][2], pos.z
+            );
+
+            node->loc = TopLoc_Location(trsf);
+        }
     }
 
     // Notify GUI of update
@@ -581,5 +705,16 @@ void SimulationManager::notifyGUIUpdate() {
         // Note: In a real Qt application, you might want to use QMetaObject::invokeMethod
         // to ensure the callback runs on the main thread
         m_updateCallback(stateCopy);
+    }
+}
+
+
+void SimulationManager::collectPhysicsNodes(const std::shared_ptr<CadNode>& root, std::vector<CadNode*>& outNodes) {
+    if (!root) return;
+    if (root->type == CadNodeType::Physics) {
+        outNodes.push_back(root.get());
+    }
+    for (const auto& child : root->children) {
+        collectPhysicsNodes(child, outNodes);
     }
 }

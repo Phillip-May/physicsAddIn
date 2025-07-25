@@ -677,14 +677,12 @@ bool loadFromStep(const QString& stepFile,
 std::vector<QTreeView*> g_treeViews;
 std::vector<CadOpenGLWidget*> g_openGLViews;
 
-SimulationManager simManager;
-
 void initTreeAndOpenGLWidget(std::shared_ptr<CadNode> &inputRoot,
                              QTabWidget* treeTabWidget,
                              QTabWidget* openGLTabWidget,
                              std::string name,
                              const Handle(TDocStd_Document)& doc,
-                             CadTreeModel* cadTreeModel = nullptr) {
+                             SimulationManager *simManager = nullptr) {
     inputRoot->name = "Tree Root " + name;
     inputRoot->type = CadNodeType::Custom;
     inputRoot->visible = true;
@@ -695,8 +693,10 @@ void initTreeAndOpenGLWidget(std::shared_ptr<CadNode> &inputRoot,
     treeView->setSelectionMode(QAbstractItemView::ExtendedSelection);
     // --- Context menu support for all custom model/physics trees ---
     treeView->setContextMenuPolicy(Qt::CustomContextMenu);
+    if (simManager) {
+        simManager->registerPhysicsNodeContextMenu(treeView);
+    }
     CadOpenGLWidget* openGLViewer = new CadOpenGLWidget;
-    simManager.registerPhysicsNodeContextMenu(treeView);
     QObject::connect(treeView, &QTreeView::customContextMenuRequested, treeView, [=](const QPoint& pos) {
         QModelIndex idx = treeView->indexAt(pos);
         if (!idx.isValid()) return;
@@ -1527,9 +1527,6 @@ int main(int argc, char *argv[])
     QMainWindow mainWindow;
     mainWindow.setWindowTitle("QtCadViewer - OCC C++");
 
-    // Add SimulationManager GUI elements
-    simManager.addGuiElements(&mainWindow);
-
     // Prompt for STEP or Rail Project file on startup
     QString openFile = QFileDialog::getOpenFileName(
         nullptr, "Open STEP or Rail Project File", "", "STEP or Rail Project (*.step *.stp *.json)");
@@ -1608,10 +1605,9 @@ int main(int argc, char *argv[])
         customModelRootContainer->children.clear();
         customModelRootContainer->children.push_back(customModelRoot);
     }
-    CadTreeModel* cadTreeModel = nullptr;
-    initTreeAndOpenGLWidget(cadRootShared, tabWidget, viewTabWidget, "CAD", doc, cadTreeModel);
+    initTreeAndOpenGLWidget(cadRootShared, tabWidget, viewTabWidget, "CAD", doc);
     // For the custom model tree, use the container as the root for the tree view, but set the OpenGL widget's root to the real root (first child of the container)
-    initTreeAndOpenGLWidget(customModelRootContainer, tabWidget, viewTabWidget, "Custom Model", doc, nullptr);
+    initTreeAndOpenGLWidget(customModelRootContainer, tabWidget, viewTabWidget, "Custom Model", doc);
 
     CadOpenGLWidget* active3DView = nullptr;
     QTreeView* activeTreeView = nullptr;
@@ -1655,7 +1651,10 @@ int main(int argc, char *argv[])
 
     // --- Physics Preview Tree and OpenGL Widget ---
     auto physicsPreviewRoot = std::make_shared<CadNode>();
-    initTreeAndOpenGLWidget(physicsPreviewRoot,tabWidget,viewTabWidget,"Physics", doc);
+    SimulationManager simManager(physicsPreviewRoot);
+    // Add SimulationManager GUI elements
+    simManager.addGuiElements(&mainWindow);
+    initTreeAndOpenGLWidget(physicsPreviewRoot,tabWidget,viewTabWidget,"Physics", doc,&simManager);
 
     // Add Reframe button
     QPushButton* reframeBtn = new QPushButton("Reframe");

@@ -390,9 +390,7 @@ void CadOpenGLWidget::traverseAndRender(const CadNode* node, CADNodeColor inheri
     }
     if (node->type == CadNodeType::Physics) {
         const PhysicsNodeData* physData = node->asPhysics();
-        qDebug() << "[Render] Rendering convex hulls for node:" << node->name.c_str();
         if (physData && physData->convexHullGenerated && !physData->hulls.empty()) {
-            qDebug() << "[Render] Rendering convex hulls for node valid:" << node->name.c_str();
             renderConvexHulls(physData);
         }
     }    

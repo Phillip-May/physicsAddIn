@@ -13,6 +13,7 @@
 #include <queue>
 
 class PhysXEngine {
+    friend class SimulationManager;
 public:
     PhysXEngine()
         : m_globalCookingParams(PxTolerancesScale())
@@ -63,8 +64,9 @@ private:
 
 class SimulationManager
 {
+    friend class PhysXEngine;
 public:
-    SimulationManager();
+    SimulationManager(std::shared_ptr<CadNode> &m_CadNodeRootIn);
     void addGuiElements(QMainWindow* mainWindow);
     void registerPhysicsNodeContextMenu(QTreeView* treeView);
 private:
@@ -148,10 +150,17 @@ private:
 
     // PhysX engine (will be created in simulation thread)
     std::unique_ptr<PhysXEngine> m_physXEngine;
+    //Underlying tree
+    std::shared_ptr<CadNode> m_CadNodeRoot;
+    // Mappings
+    std::unordered_map<CadNode*, physx::PxRigidDynamic*> m_nodeToActor;
+    std::unordered_map<physx::PxRigidDynamic*, CadNode*> m_actorToNode;
     // Timing
     std::chrono::steady_clock::time_point m_lastStepTime;
 private:
     MaterialManager *const materialManager;
+    static void collectPhysicsNodes(const std::shared_ptr<CadNode>& root, std::vector<CadNode*>& outNodes);
+    void buildPhysXSceneFromNodes();
 };
 
 #endif // SIMULATIONMANAGER_H 

@@ -26,6 +26,11 @@ LIBS += C:/Users/Admin/Documents/physicsAddIn/external/CoACD/buildMD/Release/coa
     C:/Users/Admin/Documents/physicsAddIn/external/CoACD/buildMD/_deps/openvdb-build/openvdb/openvdb/Release/libopenvdb.lib \
     C:/Users/Admin/Documents/physicsAddIn/external/CoACD/buildMD/_deps/spdlog-build/Release/spdlog.lib
 
+# PhysX Library Integration (copied from PluginPhysics.pro)
+INCLUDEPATH += C:/PhysX-107.0-physx-5.6.0/PhysX/include \
+               C:/PhysX-107.0-physx-5.6.0/PhysX/include/cooking \
+               C:/PhysX-107.0-physx-5.6.0/PhysX/source/foundation/include \
+               C:/PhysX-107.0-physx-5.6.0/PhysX/source/physx/include
 
 SOURCES += \
     HelperFunctions.cpp \
@@ -34,7 +39,8 @@ SOURCES += \
     CadOpenGLWidget.cpp \
     CadTreeModel.cpp \
     XCAFLabelTreeModel.cpp \
-    CustomModelTreeModel.cpp
+    CustomModelTreeModel.cpp \
+    SimulationManager.cpp
 
 HEADERS += \
     ../external/CoACD/public/coacd.h \
@@ -44,5 +50,34 @@ HEADERS += \
     HelperFunctions.h \
     RailJsonEditorDialog.h \
     XCAFLabelTreeModel.h \
-    CustomModelTreeModel.h
-FORMS += 
+    CustomModelTreeModel.h \
+    SimulationManager.h
+FORMS +=
+
+include(../Common/Common.pri)
+INCLUDEPATH += "../Common"
+
+
+CONFIG(release, debug|release) {
+DEFINES += PX_PHYSX_STATIC_LIB \
+           _NDEBUG # or NDEBUG for release builds
+LIBS += -LC:/PhysX-107.0-physx-5.6.0/physx/bin/win.x86_64.vc142.md/release/ -lPhysX_64 \
+                                           -lPhysXFoundation_64 \
+                                           -lPhysXCommon_64 \
+                                           -lPVDRuntime_64 \
+                                           -lPhysXExtensions_static_64 \
+                                           -lPhysXCooking_64
+LIBS += C:/PhysX-107.0-physx-5.6.0/physx/bin/win.x86_64.vc142.md/release/PhysXPvdSDK_static_64.lib
+LIBS += C:/PhysX-107.0-physx-5.6.0/physx/bin/win.x86_64.vc142.md/release/PhysXExtensions_static_64.lib
+} else {
+DEFINES += PX_PHYSX_STATIC_LIB \
+           _DEBUG # or NDEBUG for release builds
+LIBS += -LC:/PhysX-107.0-physx-5.6.0/physx/bin/win.x86_64.vc142.md/debug/ -lPhysX_64 \
+                                -lPhysXFoundation_64 \
+                                -lPhysXCommon_64 \
+                                -lPVDRuntime_64 \
+                                -lPhysXExtensions_static_64 \
+                                -lPhysXCooking_64
+LIBS += C:/PhysX-107.0-physx-5.6.0/physx/bin/win.x86_64.vc142.md/debug/PhysXPvdSDK_static_64.lib
+LIBS += C:/PhysX-107.0-physx-5.6.0/physx/bin/win.x86_64.vc142.md/debug/PhysXExtensions_static_64.lib
+}
