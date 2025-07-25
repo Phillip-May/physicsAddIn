@@ -5,7 +5,8 @@
 #include <memory>
 #include <map>
 #include "PxPhysicsAPI.h"
-#include "iitem.h"  // Include full Item definition
+
+#include "CadNode.h"
 
 using namespace physx;
 
@@ -62,6 +63,7 @@ public:
     virtual void cleanup() = 0;
     
     // Object management
+    /*
     virtual bool addObject(Item item) = 0;
     virtual bool removeObject(Item item) = 0;
     virtual bool isObjectInSimulation(Item item) const = 0;
@@ -91,6 +93,7 @@ public:
     // Pose synchronization
     virtual void updatePhysicsFromRoboDK(Item item) = 0;
     virtual void updateRoboDKFromPhysics(Item item) = 0;
+    */
     
     // Simulation step (called every frame)
     virtual void stepSimulation(float deltaTime) = 0;
@@ -100,7 +103,7 @@ public:
     virtual PxVec3 getGravity() const = 0;
     
     // Material management
-    virtual bool setObjectMaterial(Item item, float staticFriction, float dynamicFriction, float restitution) = 0;
+    virtual bool setObjectMaterial(CadNode* item, float staticFriction, float dynamicFriction, float restitution) = 0;
     
     // Default configuration methods for SceneConfigurationDialog
     virtual void setSolverIterations(int positionIterations, int velocityIterations) = 0;
@@ -137,10 +140,10 @@ public:
     virtual void validateObjects() = 0;
 
 signals:
-    void objectAdded(Item item);
-    void objectRemoved(Item item);
-    void robotAdded(Item robot);
-    void robotRemoved(Item robot);
+    void objectAdded(CadNode* item);
+    void objectRemoved(CadNode* item);
+    void robotAdded(CadNode* robot);
+    void robotRemoved(CadNode* robot);
 };
 
 #endif // IPHYSICSENGINE_H 

@@ -1,29 +1,24 @@
 #include "MaterialManager.h"
-#include "IPhysicsEngine.h"
 #include <QDebug>
 #include <QDir>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QFile>
+#include "MaterialEditorDialog.h"
+#include <QDialog>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QListWidget>
+#include <QPushButton>
+#include <QMessageBox>
 
 MaterialManager::MaterialManager(IPhysicsEngine* physicsEngine, QObject* parent)
     : QObject(parent)
     , m_physicsEngine(physicsEngine)
 {
     initializeDefaultMaterials();
-    
-    // Connect to physics engine signals
-    if (m_physicsEngine) {
-        connect(m_physicsEngine, &IPhysicsEngine::objectAdded, 
-                this, &MaterialManager::onObjectAdded);
-        connect(m_physicsEngine, &IPhysicsEngine::objectRemoved, 
-                this, &MaterialManager::onObjectRemoved);
-        connect(m_physicsEngine, &IPhysicsEngine::robotAdded, 
-                this, &MaterialManager::onObjectAdded);  // Treat robots as objects for material management
-        connect(m_physicsEngine, &IPhysicsEngine::robotRemoved, 
-                this, &MaterialManager::onObjectRemoved);  // Treat robots as objects for material management
-    }
 }
 
 MaterialManager::~MaterialManager()
@@ -111,7 +106,7 @@ bool MaterialManager::removeCustomMaterial(const QString& materialName)
     }
     
     // Remove from all objects using this material
-    QList<Item> objectsToUpdate;
+    QList<CadNode*> objectsToUpdate;
     for (auto it = m_objectMaterials.begin(); it != m_objectMaterials.end(); ++it) {
         if (it.value() == materialName) {
             objectsToUpdate.append(it.key());
@@ -119,7 +114,7 @@ bool MaterialManager::removeCustomMaterial(const QString& materialName)
     }
     
     // Reset objects to default material
-    for (Item item : objectsToUpdate) {
+    for (CadNode* item : objectsToUpdate) {
         m_objectMaterials.remove(item);
     }
     
@@ -158,7 +153,7 @@ bool MaterialManager::updateMaterial(const QString& materialName, const Material
     return true;
 }
 
-bool MaterialManager::setObjectMaterial(Item item, const QString& materialName)
+bool MaterialManager::setObjectMaterial(CadNode* item, const QString& materialName)
 {
     if (!m_materials.contains(materialName)) {
         qWarning() << "MaterialManager: Material not found:" << materialName;
@@ -175,17 +170,17 @@ bool MaterialManager::setObjectMaterial(Item item, const QString& materialName)
     return success;
 }
 
-QString MaterialManager::getObjectMaterial(Item item) const
+QString MaterialManager::getObjectMaterial(CadNode* item) const
 {
     return m_objectMaterials.value(item, "");
 }
 
-bool MaterialManager::hasObjectMaterial(Item item) const
+bool MaterialManager::hasObjectMaterial(CadNode* item) const
 {
     return m_objectMaterials.contains(item);
 }
 
-void MaterialManager::removeObjectMaterial(Item item)
+void MaterialManager::removeObjectMaterial(CadNode* item)
 {
     if (m_objectMaterials.contains(item)) {
         QString oldMaterial = m_objectMaterials[item];
@@ -194,7 +189,7 @@ void MaterialManager::removeObjectMaterial(Item item)
     }
 }
 
-bool MaterialManager::applyMaterialToObject(Item item, const QString& materialName)
+bool MaterialManager::applyMaterialToObject(CadNode* item, const QString& materialName)
 {
     if (!m_materials.contains(materialName)) {
         qWarning() << "MaterialManager: Material not found:" << materialName;
@@ -204,7 +199,7 @@ bool MaterialManager::applyMaterialToObject(Item item, const QString& materialNa
     return applyMaterialToObject(item, m_materials[materialName]);
 }
 
-bool MaterialManager::applyMaterialToObject(Item item, const MaterialProperties& material)
+bool MaterialManager::applyMaterialToObject(CadNode* item, const MaterialProperties& material)
 {
     if (!m_physicsEngine) {
         qWarning() << "MaterialManager: No physics engine available";
@@ -236,7 +231,7 @@ bool MaterialManager::isDefaultMaterial(const QString& materialName) const
     return m_defaultMaterialNames.contains(materialName);
 }
 
-void MaterialManager::onObjectAdded(Item item)
+void MaterialManager::onObjectAdded(CadNode* item)
 {
     // Check if object has a previously assigned material
     if (m_objectMaterials.contains(item)) {
@@ -253,7 +248,7 @@ void MaterialManager::onObjectAdded(Item item)
     }
 }
 
-void MaterialManager::onObjectRemoved(Item item)
+void MaterialManager::onObjectRemoved(CadNode* item)
 {
     // Remove object from material tracking
     m_objectMaterials.remove(item);
@@ -352,4 +347,129 @@ MaterialProperties MaterialManager::createSheetMetalMaterial()
 {
     return MaterialProperties("Sheet Metal", 0.15f, 0.12f, 0.05f, QColor(192, 192, 192), 
                             "Smooth metal surface with very low friction, default for kinematic actors like robots");
+} 
+
+void MaterialManager::showMaterialManagerDialog(QWidget* parent)
+{
+    // Create a simple dialog to show available materials and allow adding custom ones
+    QDialog dialog(parent);
+    dialog.setWindowTitle("Material Manager");
+    dialog.setFixedSize(500, 400);
+
+    QVBoxLayout* mainLayout = new QVBoxLayout(&dialog);
+
+    // Available materials list
+    QLabel* materialsLabel = new QLabel("Available Materials:");
+    mainLayout->addWidget(materialsLabel);
+
+    QListWidget* materialsList = new QListWidget();
+    QStringList materials = getAvailableMaterials();
+    for (const QString& materialName : materials) {
+        MaterialProperties material = getMaterial(materialName);
+        QString itemText = QString("%1 (Static: %2, Dynamic: %3, Restitution: %4)")
+                              .arg(materialName)
+                              .arg(material.staticFriction)
+                              .arg(material.dynamicFriction)
+                              .arg(material.restitution);
+        QListWidgetItem* item = new QListWidgetItem(itemText);
+        if (isDefaultMaterial(materialName)) {
+            item->setBackground(QColor(240, 240, 240)); // Light gray for default materials
+        }
+        materialsList->addItem(item);
+    }
+    mainLayout->addWidget(materialsList);
+
+    // Buttons
+    QHBoxLayout* buttonLayout = new QHBoxLayout();
+    QPushButton* addButton = new QPushButton("Add Custom Material");
+    QPushButton* editButton = new QPushButton("Edit Material");
+    QPushButton* removeButton = new QPushButton("Remove Material");
+    QPushButton* closeButton = new QPushButton("Close");
+    buttonLayout->addWidget(addButton);
+    buttonLayout->addWidget(editButton);
+    buttonLayout->addWidget(removeButton);
+    buttonLayout->addStretch();
+    buttonLayout->addWidget(closeButton);
+    mainLayout->addLayout(buttonLayout);
+
+    // Connect signals
+    QObject::connect(addButton, &QPushButton::clicked, &dialog, [&]() {
+        MaterialEditorDialog editor(&dialog);
+        if (editor.exec() == QDialog::Accepted) {
+            MaterialProperties newMaterial = editor.getMaterialProperties();
+            if (addCustomMaterial(newMaterial)) {
+                // Refresh the list
+                materialsList->clear();
+                QStringList updatedMaterials = getAvailableMaterials();
+                for (const QString& materialName : updatedMaterials) {
+                    MaterialProperties material = getMaterial(materialName);
+                    QString itemText = QString("%1 (Static: %2, Dynamic: %3, Restitution: %4)")
+                                          .arg(materialName)
+                                          .arg(material.staticFriction)
+                                          .arg(material.dynamicFriction)
+                                          .arg(material.restitution);
+                    QListWidgetItem* item = new QListWidgetItem(itemText);
+                    if (isDefaultMaterial(materialName)) {
+                        item->setBackground(QColor(240, 240, 240));
+                    }
+                    materialsList->addItem(item);
+                }
+            }
+        }
+    }, Qt::QueuedConnection);
+
+    QObject::connect(editButton, &QPushButton::clicked, &dialog, [&]() {
+        QListWidgetItem* currentItem = materialsList->currentItem();
+        if (!currentItem) {
+            QMessageBox::warning(&dialog, "No Selection", "Please select a material to edit.");
+            return;
+        }
+        QString materialName = currentItem->text().split(" ").first();
+        if (isDefaultMaterial(materialName)) {
+            QMessageBox::information(&dialog, "Default Material", 
+                                   "Default materials cannot be edited. Create a custom material instead.");
+            return;
+        }
+        MaterialProperties material = getMaterial(materialName);
+        MaterialEditorDialog editor(material, &dialog);
+        if (editor.exec() == QDialog::Accepted) {
+            MaterialProperties updatedMaterial = editor.getMaterialProperties();
+            if (updateMaterial(materialName, updatedMaterial)) {
+                // Update the list item
+                QString itemText = QString("%1 (Static: %2, Dynamic: %3, Restitution: %4)")
+                                      .arg(materialName)
+                                      .arg(updatedMaterial.staticFriction)
+                                      .arg(updatedMaterial.dynamicFriction)
+                                      .arg(updatedMaterial.restitution);
+                currentItem->setText(itemText);
+            }
+        }
+    }, Qt::QueuedConnection);
+
+    QObject::connect(removeButton, &QPushButton::clicked, &dialog, [&]() {
+        QListWidgetItem* currentItem = materialsList->currentItem();
+        if (!currentItem) {
+            QMessageBox::warning(&dialog, "No Selection", "Please select a material to remove.");
+            return;
+        }
+        QString materialName = currentItem->text().split(" ").first();
+        if (isDefaultMaterial(materialName)) {
+            QMessageBox::information(&dialog, "Default Material", 
+                                   "Default materials cannot be removed.");
+            return;
+        }
+        if (QMessageBox::question(&dialog, "Confirm Removal", 
+                                 QString("Are you sure you want to remove the material '%1'?").arg(materialName),
+                                 QMessageBox::Yes | QMessageBox::No) == QMessageBox::Yes) {
+            if (removeCustomMaterial(materialName)) {
+                materialsList->takeItem(materialsList->row(currentItem));
+            }
+        }
+    }, Qt::QueuedConnection);
+
+    QObject::connect(closeButton, &QPushButton::clicked, &dialog, [&dialog]() {
+        dialog.accept();
+    }, Qt::QueuedConnection);
+
+    dialog.exec();
 } 

@@ -9,18 +9,17 @@
 #include <QLabel>
 #include <QCheckBox>
 #include <QComboBox>
-#include "ObjectPropertiesManager.h"
+#include "CadNode.h"
+
+#include "MaterialManager.h"
 
 class ObjectPropertiesDialog : public QDialog
 {
     Q_OBJECT
 
 public:
-    explicit ObjectPropertiesDialog(Item item, ObjectPropertiesManager* manager, MaterialManager* materialManager = nullptr, QWidget* parent = nullptr);
+    explicit ObjectPropertiesDialog(CadNode* item, MaterialManager* materialManager = nullptr, QWidget* parent = nullptr);
     
-    ObjectPropertiesManager::ObjectProperties getObjectProperties() const;
-    void setObjectProperties(const ObjectPropertiesManager::ObjectProperties& properties);
-
 private slots:
     void onSaveClicked();
     void onCancelClicked();
@@ -33,8 +32,7 @@ private:
     void connectSignals();
     void updateUI();
     
-    Item m_item;
-    ObjectPropertiesManager* m_manager;
+    CadNode* m_item;
     MaterialManager* m_materialManager;
     
     // UI elements
@@ -48,7 +46,6 @@ private:
     QPushButton* m_saveButton;
     QPushButton* m_cancelButton;
     
-    ObjectPropertiesManager::ObjectProperties m_currentProperties;
 };
 
 #endif // OBJECTPROPERTIESDIALOG_H 

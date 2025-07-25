@@ -6,40 +6,15 @@
 #include <QDebug>
 #include <QGroupBox>
 
-ObjectPropertiesDialog::ObjectPropertiesDialog(Item item, ObjectPropertiesManager* manager, MaterialManager* materialManager, QWidget* parent)
+ObjectPropertiesDialog::ObjectPropertiesDialog(CadNode* item, MaterialManager* materialManager, QWidget* parent)
     : QDialog(parent)
     , m_item(item)
-    , m_manager(manager)
     , m_materialManager(materialManager)
 {
     setupUI();
     connectSignals();
-    
-    // Load current properties from manager
-    if (m_manager && m_manager->hasObjectProperties(item)) {
-        m_currentProperties.mass = m_manager->getObjectMass(item);
-        m_manager->getObjectFriction(item, m_currentProperties.staticFriction, m_currentProperties.dynamicFriction);
-        m_currentProperties.restitution = m_manager->getObjectRestitution(item);
-        m_currentProperties.centerOfMass = m_manager->getObjectCenterOfMass(item);
-        m_currentProperties.useCustomProperties = m_manager->getUseCustomProperties(item);
-        m_currentProperties.useCustomCenterOfMass = m_manager->getUseCustomCenterOfMass(item);
-        
-        // Get material from ObjectPropertiesManager first, then fallback to MaterialManager
-        m_currentProperties.materialName = m_manager->getObjectMaterial(item);
-        if (m_currentProperties.materialName.isEmpty() && m_materialManager) {
-            m_currentProperties.materialName = m_materialManager->getObjectMaterial(item);
-        }
-    } else {
-        m_currentProperties = m_manager ? m_manager->getDefaultProperties() : ObjectPropertiesManager::ObjectProperties();
-        
-        // If no properties exist, try to get material from MaterialManager
-        if (m_materialManager && m_currentProperties.materialName.isEmpty()) {
-            m_currentProperties.materialName = m_materialManager->getObjectMaterial(item);
-        }
-    }
-    
-    setObjectProperties(m_currentProperties);
-    setWindowTitle(QString("Object Properties - %1").arg(item->Name()));
+    updateUI();
+    setWindowTitle(QString("Object Properties - %1").arg(item->name.c_str()));
 }
 
 void ObjectPropertiesDialog::setupUI()
@@ -168,110 +143,76 @@ void ObjectPropertiesDialog::connectSignals()
             this, &ObjectPropertiesDialog::validateInputs);
 }
 
-ObjectPropertiesManager::ObjectProperties ObjectPropertiesDialog::getObjectProperties() const
-{
-    ObjectPropertiesManager::ObjectProperties props;
-    props.useCustomProperties = m_useCustomPropertiesCheck->isChecked();
-    props.useCustomCenterOfMass = m_useCustomCenterOfMassCheck->isChecked();
-    props.mass = m_massSpin->value();
-    
-    // Get friction and restitution from the selected material
-    QString materialName = m_materialCombo->currentText();
-    if (m_materialManager) {
-        MaterialProperties material = m_materialManager->getMaterial(materialName);
-        if (!material.name.isEmpty()) {
-            props.staticFriction = material.staticFriction;
-            props.dynamicFriction = material.dynamicFriction;
-            props.restitution = material.restitution;
-        } else {
-            // Use default values if material not found
-            props.staticFriction = 0.8f;
-            props.dynamicFriction = 0.6f;
-            props.restitution = 0.1f;
-        }
-    } else {
-        // Use default values if no material manager
-        props.staticFriction = 0.8f;
-        props.dynamicFriction = 0.6f;
-        props.restitution = 0.1f;
-    }
-    
-    props.centerOfMass = PxVec3(
-        m_centerOfMassXSpin->value(),
-        m_centerOfMassYSpin->value(),
-        m_centerOfMassZSpin->value()
-    );
-    props.materialName = materialName;
-    
-    return props;
-}
-
-void ObjectPropertiesDialog::setObjectProperties(const ObjectPropertiesManager::ObjectProperties& properties)
-{
-    m_currentProperties = properties;
-    updateUI();
-}
-
 void ObjectPropertiesDialog::updateUI()
 {
-    m_useCustomPropertiesCheck->setChecked(m_currentProperties.useCustomProperties);
-    m_useCustomCenterOfMassCheck->setChecked(m_currentProperties.useCustomCenterOfMass);
-    m_massSpin->setValue(m_currentProperties.mass);
-    m_centerOfMassXSpin->setValue(m_currentProperties.centerOfMass.x);
-    m_centerOfMassYSpin->setValue(m_currentProperties.centerOfMass.y);
-    m_centerOfMassZSpin->setValue(m_currentProperties.centerOfMass.z);
-    
+    // Only enable if this is a Physics node
+    bool isPhysics = m_item && m_item->type == CadNodeType::Physics && m_item->asPhysics();
+    PhysicsNodeData* phys = isPhysics ? m_item->asPhysics() : nullptr;
+    if (!isPhysics) {
+        m_useCustomPropertiesCheck->setEnabled(false);
+        m_useCustomCenterOfMassCheck->setEnabled(false);
+        m_massSpin->setEnabled(false);
+        m_centerOfMassXSpin->setEnabled(false);
+        m_centerOfMassYSpin->setEnabled(false);
+        m_centerOfMassZSpin->setEnabled(false);
+        m_materialCombo->setEnabled(false);
+        m_saveButton->setEnabled(false);
+        return;
+    }
+    m_useCustomPropertiesCheck->setEnabled(true);
+    m_useCustomCenterOfMassCheck->setEnabled(true);
+    m_saveButton->setEnabled(true);
+    // Set values from PhysicsNodeData
+    m_useCustomPropertiesCheck->setChecked(phys->useCustomProperties);
+    m_useCustomCenterOfMassCheck->setChecked(phys->useCustomCenterOfMass);
+    m_massSpin->setValue(phys->mass);
+    m_centerOfMassXSpin->setValue(phys->centerOfMass.X());
+    m_centerOfMassYSpin->setValue(phys->centerOfMass.Y());
+    m_centerOfMassZSpin->setValue(phys->centerOfMass.Z());
     // Set material combo
-    int materialIndex = m_materialCombo->findText(m_currentProperties.materialName);
+    int materialIndex = m_materialCombo->findText(QString::fromStdString(phys->materialName));
     if (materialIndex >= 0) {
         m_materialCombo->setCurrentIndex(materialIndex);
+    } else if (m_materialCombo->count() > 0) {
+        m_materialCombo->setCurrentIndex(0);
     }
-    
-
-    
     // Enable/disable controls based on checkboxes
-    onUseCustomPropertiesToggled(m_currentProperties.useCustomProperties);
-    onUseCustomCenterOfMassToggled(m_currentProperties.useCustomCenterOfMass);
+    onUseCustomPropertiesToggled(phys->useCustomProperties);
+    onUseCustomCenterOfMassToggled(phys->useCustomCenterOfMass);
 }
 
 void ObjectPropertiesDialog::onSaveClicked()
 {
+    // Only allow if Physics node
+    bool isPhysics = m_item && m_item->type == CadNodeType::Physics && m_item->asPhysics();
+    if (!isPhysics) { reject(); return; }
+    PhysicsNodeData* phys = m_item->asPhysics();
     // Validate inputs
     if (m_massSpin->value() < 0.001 || m_massSpin->value() > 10000.0) {
         QMessageBox::warning(this, "Invalid Input", "Mass must be between 0.001 and 10000.0 kg.");
         m_massSpin->setFocus();
         return;
     }
-    
-
-    
-    // Apply properties to manager if available
-    if (m_manager) {
-        ObjectPropertiesManager::ObjectProperties props = getObjectProperties();
-        
-        m_manager->setObjectMass(m_item, props.mass);
-        m_manager->setObjectFriction(m_item, props.staticFriction, props.dynamicFriction);
-        m_manager->setObjectRestitution(m_item, props.restitution);
-        m_manager->setObjectCenterOfMass(m_item, props.centerOfMass);
-        m_manager->setObjectMaterial(m_item, props.materialName);
-        m_manager->setUseCustomProperties(m_item, props.useCustomProperties);
-        m_manager->setUseCustomCenterOfMass(m_item, props.useCustomCenterOfMass);
-        
-        // Apply to physics if object is in simulation
-        m_manager->applyPropertiesToPhysics(m_item);
-        
-        qDebug() << "Saved object properties for" << m_item->Name();
-    }
-    
-    // Also save material to MaterialManager
-    if (m_materialManager) {
-        QString materialName = m_materialCombo->currentText();
-        if (!materialName.isEmpty()) {
+    // Save values to PhysicsNodeData
+    phys->useCustomProperties = m_useCustomPropertiesCheck->isChecked();
+    phys->useCustomCenterOfMass = m_useCustomCenterOfMassCheck->isChecked();
+    phys->mass = static_cast<float>(m_massSpin->value());
+    phys->centerOfMass = gp_Vec(m_centerOfMassXSpin->value(), m_centerOfMassYSpin->value(), m_centerOfMassZSpin->value());
+    // Save material
+    QString materialName = m_materialCombo->currentText();
+    if (!materialName.isEmpty()) {
+        phys->materialName = materialName.toStdString();
+        if (m_materialManager) {
             m_materialManager->setObjectMaterial(m_item, materialName);
-            qDebug() << "Saved material" << materialName << "for object" << m_item->Name();
         }
     }
-    
+    // Optionally, update friction/restitution from material if not using custom
+    if (!phys->useCustomProperties && m_materialManager) {
+        MaterialProperties mat = m_materialManager->getMaterial(QString::fromStdString(phys->materialName));
+        phys->staticFriction = mat.staticFriction;
+        phys->dynamicFriction = mat.dynamicFriction;
+        phys->restitution = mat.restitution;
+    }
     accept();
 }
 
@@ -315,3 +256,4 @@ void ObjectPropertiesDialog::validateInputs()
     
     m_saveButton->setEnabled(isValid);
 } 
+

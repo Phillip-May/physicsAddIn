@@ -20,6 +20,7 @@
 #include <gp_Trsf.hxx>
 #include <array>
 #include <QDebug> // Added for qDebug
+#include <gp_Vec.hxx>
 
 // Define a simple RGBA color struct
 struct CADNodeColor {
@@ -126,9 +127,19 @@ struct ConvexHullData {
 struct PhysicsNodeData : public CadNodeDataBase {
     bool convexHullGenerated = false;
     std::vector<ConvexHullData> hulls;
-    // Add more fields as needed (e.g., material, mass, etc.)
-    // Add this field for collision mesh visibility
     bool collisionMeshVisible = true;
+    bool isPhysicsActive = false;
+
+    // --- Updated for object properties ---
+    float mass = 100.0f;
+    float staticFriction = 0.8f;
+    float dynamicFriction = 0.6f;
+    float restitution = 0.1f;
+    gp_Vec centerOfMass = gp_Vec(0,0,0);
+    std::string materialName;
+    bool useCustomProperties = false;
+    bool useCustomCenterOfMass = false;
+    // -----------------------------------
 
     QJsonObject toJson() const override {
         QJsonObject obj;
@@ -159,6 +170,17 @@ struct PhysicsNodeData : public CadNodeDataBase {
             hullsArr.append(hullObj);
         }
         obj["hulls"] = hullsArr;
+        // --- Updated for object properties ---
+        obj["mass"] = mass;
+        obj["staticFriction"] = staticFriction;
+        obj["dynamicFriction"] = dynamicFriction;
+        obj["restitution"] = restitution;
+        QJsonArray comArr; comArr << centerOfMass.X() << centerOfMass.Y() << centerOfMass.Z();
+        obj["centerOfMass"] = comArr;
+        obj["materialName"] = QString::fromStdString(materialName);
+        obj["useCustomProperties"] = useCustomProperties;
+        obj["useCustomCenterOfMass"] = useCustomCenterOfMass;
+        // -----------------------------------
         return obj;
     }
     static std::shared_ptr<PhysicsNodeData> fromJson(const QJsonObject& obj) {
@@ -190,6 +212,17 @@ struct PhysicsNodeData : public CadNodeDataBase {
             }
             data->hulls.push_back(std::move(hull));
         }
+        // --- Updated for object properties ---
+        data->mass = static_cast<float>(obj["mass"].toDouble(100.0));
+        data->staticFriction = static_cast<float>(obj["staticFriction"].toDouble(0.8));
+        data->dynamicFriction = static_cast<float>(obj["dynamicFriction"].toDouble(0.6));
+        data->restitution = static_cast<float>(obj["restitution"].toDouble(0.1));
+        QJsonArray comArr = obj["centerOfMass"].toArray();
+        if (comArr.size() == 3) data->centerOfMass = gp_Vec(comArr[0].toDouble(), comArr[1].toDouble(), comArr[2].toDouble());
+        data->materialName = obj["materialName"].toString().toStdString();
+        data->useCustomProperties = obj["useCustomProperties"].toBool(false);
+        data->useCustomCenterOfMass = obj["useCustomCenterOfMass"].toBool(false);
+        // -----------------------------------
         return data;
     }
 };
@@ -332,7 +365,7 @@ struct CadNode {
     CadNodeType type = CadNodeType::Unknown; // Must be set explicitly
     std::shared_ptr<CadNodeDataBase> data; // Holds type-specific data
 
-    CadNode* parent = nullptr; // <-- Add this line for parent pointer
+    CadNode* parent = nullptr;
 
     // Helper to get XCAF data safely
     XCAFNodeData* asXCAF() {

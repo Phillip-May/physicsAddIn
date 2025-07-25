@@ -8,7 +8,6 @@
 #include <QColor>
 #include "IPhysicsEngine.h"
 #include "PxPhysicsAPI.h"
-#include "iitem.h"
 
 using namespace physx;
 
@@ -47,19 +46,22 @@ public:
     bool updateMaterial(const QString& materialName, const MaterialProperties& newProperties);
     
     // Object material assignment
-    bool setObjectMaterial(Item item, const QString& materialName);
-    QString getObjectMaterial(Item item) const;
-    bool hasObjectMaterial(Item item) const;
-    void removeObjectMaterial(Item item);
+    bool setObjectMaterial(CadNode* item, const QString& materialName);
+    QString getObjectMaterial(CadNode* item) const;
+    bool hasObjectMaterial(CadNode* item) const;
+    void removeObjectMaterial(CadNode* item);
     
     // Material application
-    bool applyMaterialToObject(Item item, const QString& materialName);
-    bool applyMaterialToObject(Item item, const MaterialProperties& material);
+    bool applyMaterialToObject(CadNode* item, const QString& materialName);
+    bool applyMaterialToObject(CadNode* item, const MaterialProperties& material);
     
     // Default materials
     void initializeDefaultMaterials();
     QStringList getDefaultMaterialNames() const;
     bool isDefaultMaterial(const QString& materialName) const;
+
+    // Material manager dialog
+    void showMaterialManagerDialog(QWidget* parent = nullptr);
     
     // Material presets
     static MaterialProperties createMetalMaterial();
@@ -77,18 +79,18 @@ signals:
     void materialAdded(const QString& materialName);
     void materialRemoved(const QString& materialName);
     void materialUpdated(const QString& materialName);
-    void objectMaterialChanged(Item item, const QString& materialName);
+    void objectMaterialChanged(CadNode* item, const QString& materialName);
 
 private slots:
-    void onObjectAdded(Item item);
-    void onObjectRemoved(Item item);
+    void onObjectAdded(CadNode* item);
+    void onObjectRemoved(CadNode* item);
 
 private:
     IPhysicsEngine* m_physicsEngine;
     
     // Material storage
     QMap<QString, MaterialProperties> m_materials;
-    QMap<Item, QString> m_objectMaterials;  // Object -> Material mapping
+    QMap<CadNode*, QString> m_objectMaterials;  // Object -> Material mapping
     
     // Default material names
     QStringList m_defaultMaterialNames;

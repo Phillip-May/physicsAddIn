@@ -100,7 +100,7 @@
 // qHash overload for TDF_Label to allow use in QSet/QHash
 #include <TDF_Label.hxx>
 
-
+#include "SimulationManager.h"
 
 // Place this above build_tree_xcaf
 struct FaceEdgeKeyHash {
@@ -677,6 +677,8 @@ bool loadFromStep(const QString& stepFile,
 std::vector<QTreeView*> g_treeViews;
 std::vector<CadOpenGLWidget*> g_openGLViews;
 
+SimulationManager simManager;
+
 void initTreeAndOpenGLWidget(std::shared_ptr<CadNode> &inputRoot,
                              QTabWidget* treeTabWidget,
                              QTabWidget* openGLTabWidget,
@@ -694,6 +696,7 @@ void initTreeAndOpenGLWidget(std::shared_ptr<CadNode> &inputRoot,
     // --- Context menu support for all custom model/physics trees ---
     treeView->setContextMenuPolicy(Qt::CustomContextMenu);
     CadOpenGLWidget* openGLViewer = new CadOpenGLWidget;
+    simManager.registerPhysicsNodeContextMenu(treeView);
     QObject::connect(treeView, &QTreeView::customContextMenuRequested, treeView, [=](const QPoint& pos) {
         QModelIndex idx = treeView->indexAt(pos);
         if (!idx.isValid()) return;
@@ -1523,6 +1526,9 @@ int main(int argc, char *argv[])
     QApplication app(argc, argv);
     QMainWindow mainWindow;
     mainWindow.setWindowTitle("QtCadViewer - OCC C++");
+
+    // Add SimulationManager GUI elements
+    simManager.addGuiElements(&mainWindow);
 
     // Prompt for STEP or Rail Project file on startup
     QString openFile = QFileDialog::getOpenFileName(
