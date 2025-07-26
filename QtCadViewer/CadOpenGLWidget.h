@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "CadNode.h"
+#include "SimulationManager.h"
 
 // Selection mode enum
 enum class SelectionMode {
@@ -83,9 +84,8 @@ struct CameraState {
 class CadOpenGLWidget : public QOpenGLWidget, protected QOpenGLFunctions {
     Q_OBJECT
 public:
-    explicit CadOpenGLWidget(QWidget *parent = nullptr);
+    explicit CadOpenGLWidget(CadNode* root, QWidget *parent = nullptr);
     ~CadOpenGLWidget();
-    void setRootTreeNode(CadNode* root);
     void setPivotSphere(const QVector3D& worldPos);
     void clearCache(); // Clear geometry cache to free memory
     int getCacheSize() const; // Get number of cached geometries
@@ -126,6 +126,7 @@ public slots:
     CadNode* getSelectedFrameNode() const { return selectedFrameNode_; }
     void setSelectedFrameNode(CadNode* node, const TopLoc_Location& accLoc) { selectedFrameNode_ = node; selectedFrameNodeAccumulatedLoc_ = accLoc; update(); }
     void setSelectedFrameNode(CadNode* node) { selectedFrameNode_ = node; selectedFrameNodeAccumulatedLoc_ = node ? node->loc : TopLoc_Location(); update(); }
+    void setSimulationManager(SimulationManager* simManager) { m_simulationManager = simManager; }
 protected:
     void initializeGL() override;
     void resizeGL(int w, int h) override;
@@ -142,7 +143,7 @@ private:
     static HighlightState getEdgeHighlightState(const CadNode* node, const TopLoc_Location& accumulatedLoc, const std::vector<SelectedInstance>& selectedEdgeInstances_, const SelectedInstance& hoveredEdgeInstance_);
     static void getHighlightColorAndLineWidth(HighlightState state, CADNodeColor baseColor, float& outR, float& outG, float& outB, float& outA, float& outLineWidth);
     void setupOpenGLState(); // Unified OpenGL state setup
-    CadNode* rootNode_ = nullptr;
+    CadNode* const rootNode_;
     CameraState camera_;
     std::vector<ColorBatch> m_colorBatches;
     std::vector<std::pair<QVector3D, QVector3D>> m_wireframeLines; // Tessellated wireframe lines
@@ -156,6 +157,7 @@ private:
     CadNode* selectedEdgeNode_ = nullptr;
     CadNode* selectedFrameNode_ = nullptr;
     TopLoc_Location selectedFrameNodeAccumulatedLoc_;
+    SimulationManager* m_simulationManager = nullptr;  // Reference to simulation manager for double-buffered node locations
     
     // Multi-selection support (instance-aware)
     std::vector<SelectedInstance> selectedFaceInstances_;
@@ -228,6 +230,8 @@ private:
     void drawBoundingBox(const QVector3D& min, const QVector3D& max, const QVector4D& color);
     void renderConvexHulls(const PhysicsNodeData* physData);
     void renderConnectionPoint(const CadNode* node, const CADNodeColor& color);
+    void renderGroundPlane(const MutexRootNodeData& mutexData);
+
 signals:
     void facePicked(CadNode* node, const TopLoc_Location& accLoc);
     void edgePicked(CadNode* node);

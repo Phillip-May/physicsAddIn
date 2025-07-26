@@ -21,6 +21,7 @@
 #include <array>
 #include <QDebug> // Added for qDebug
 #include <gp_Vec.hxx>
+#include <mutex>
 
 // Define a simple RGBA color struct
 struct CADNodeColor {
@@ -75,6 +76,7 @@ enum class CadNodeType {
     Physics, // New: Physics object node
     ConnectionPoint, // New: Connection point node
     Transform, // New: Transform node type
+    MutexRoot, // New: Mutex root node type
     // ... add more as needed
 };
 
@@ -270,6 +272,53 @@ struct TransformNodeData : public CadNodeDataBase {
     }
 };
 
+// 4e. Mutex root node data for thread-safe root nodes
+struct MutexRootNodeData : public CadNodeDataBase {
+    mutable std::mutex mutex;
+    
+    // Ground plane properties
+    bool groundPlaneVisible = true;
+    double groundPlaneY = -50.0;  // Y position of the ground plane
+    double groundPlaneSize = 50000.0;  // Size of the ground plane (half-width)
+    double groundPlaneThickness = 0.1;  // Thickness of the ground plane
+    CADNodeColor groundPlaneColor = CADNodeColor(0.7f, 0.7f, 0.7f, 0.8f);  // Light gray with transparency
+    
+    MutexRootNodeData() = default;
+    
+    QJsonObject toJson() const override {
+        QJsonObject obj;
+        obj["groundPlaneVisible"] = groundPlaneVisible;
+        obj["groundPlaneY"] = groundPlaneY;
+        obj["groundPlaneSize"] = groundPlaneSize;
+        obj["groundPlaneThickness"] = groundPlaneThickness;
+        QJsonArray colorArr;
+        colorArr.append(groundPlaneColor.r);
+        colorArr.append(groundPlaneColor.g);
+        colorArr.append(groundPlaneColor.b);
+        colorArr.append(groundPlaneColor.a);
+        obj["groundPlaneColor"] = colorArr;
+        return obj;
+    }
+    
+    static std::shared_ptr<MutexRootNodeData> fromJson(const QJsonObject& obj) {
+        auto data = std::make_shared<MutexRootNodeData>();
+        data->groundPlaneVisible = obj["groundPlaneVisible"].toBool(false);
+        data->groundPlaneY = obj["groundPlaneY"].toDouble(-50.0);
+        data->groundPlaneSize = obj["groundPlaneSize"].toDouble(10000.0);
+        data->groundPlaneThickness = obj["groundPlaneThickness"].toDouble(0.1);
+        QJsonArray colorArr = obj["groundPlaneColor"].toArray();
+        if (colorArr.size() == 4) {
+            data->groundPlaneColor = CADNodeColor(
+                colorArr[0].toDouble(0.7),
+                colorArr[1].toDouble(0.7),
+                colorArr[2].toDouble(0.7),
+                colorArr[3].toDouble(0.8)
+            );
+        }
+        return data;
+    }
+};
+
 // Connection point flags (bit flags)
 enum class ConnectionFlags : uint32_t {
     None = 0,
@@ -413,6 +462,14 @@ struct CadNode {
     }
     const ConnectionPointData* asConnectionPoint() const {
         return type == CadNodeType::ConnectionPoint ? static_cast<const ConnectionPointData*>(data.get()) : nullptr;
+    }
+
+    // Helper to get MutexRootNodeData safely
+    MutexRootNodeData* asMutexRoot() {
+        return type == CadNodeType::MutexRoot ? static_cast<MutexRootNodeData*>(data.get()) : nullptr;
+    }
+    const MutexRootNodeData* asMutexRoot() const {
+        return type == CadNodeType::MutexRoot ? static_cast<const MutexRootNodeData*>(data.get()) : nullptr;
     }
 
     // ... add more helpers for other node types as needed

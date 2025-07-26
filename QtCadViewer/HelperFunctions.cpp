@@ -19,6 +19,7 @@
 #include <BRepMesh_IncrementalMesh.hxx>
 #include <GProp_GProps.hxx>
 #include <BRepGProp.hxx>
+#include <unordered_map>
 
 
 // Enhanced tree building that follows reference chains for STEP 214 assemblies
@@ -616,9 +617,56 @@ void collectFaceNodesWithTransform(CadNode* node, const TopLoc_Location& parentL
     }
 }
 
+// Utility: Remove duplicate vertices and remap indices, skipping degenerate triangles
+// VertType: array<double, 3> or similar
+// TriType: array<int/uint32_t, 3> or similar
+template <typename VertType, typename TriType>
+void filterAndRemapVerticesAndIndices(
+    const std::vector<VertType>& inputVerts,
+    const std::vector<TriType>& inputTris,
+    std::vector<VertType>& uniqueVerts,
+    std::vector<std::array<uint32_t, 3>>& remappedTris,
+    double epsilon = 1e-4)
+{
+    uniqueVerts.clear();
+    remappedTris.clear();
+    std::vector<int> oldToNew(inputVerts.size(), -1);
+    for (size_t vi = 0; vi < inputVerts.size(); ++vi) {
+        const auto& p = inputVerts[vi];
+        int found = -1;
+        for (size_t uj = 0; uj < uniqueVerts.size(); ++uj) {
+            double dx = uniqueVerts[uj][0] - p[0], dy = uniqueVerts[uj][1] - p[1], dz = uniqueVerts[uj][2] - p[2];
+            if (dx*dx + dy*dy + dz*dz < epsilon*epsilon) { found = (int)uj; break; }
+        }
+        if (found == -1) {
+            oldToNew[vi] = (int)uniqueVerts.size();
+            uniqueVerts.push_back(p);
+        } else {
+            oldToNew[vi] = found;
+        }
+    }
+    for (const auto& tri : inputTris) {
+        int i0 = oldToNew[tri[0]];
+        int i1 = oldToNew[tri[1]];
+        int i2 = oldToNew[tri[2]];
+        if (i0 == i1 || i1 == i2 || i2 == i0) continue;
+        remappedTris.push_back({(uint32_t)i0, (uint32_t)i1, (uint32_t)i2});
+    }
+}
+
 // --- BEGIN MOVED FROM main.cpp ---
 
-void generateVHACDStub(const QString& nodeName, int resolution, int maxHulls, double minVolume, CadNode* node) {
+void generateVHACDStub(const QString& nodeName, const QJsonObject& params, CadNode* node) {
+    uint32_t maxConvexHulls = params.value("maxConvexHulls").toInt(8);
+    uint32_t resolution = params.value("resolution").toInt(200000);
+    double minimumVolumePercentErrorAllowed = params.value("minimumVolumePercentErrorAllowed").toDouble(1.0);
+    uint32_t maxRecursionDepth = params.value("maxRecursionDepth").toInt(10);
+    bool shrinkWrap = params.value("shrinkWrap").toBool(true);
+    int fillMode = params.value("fillMode").toInt(0);
+    uint32_t maxNumVerticesPerCH = params.value("maxNumVerticesPerCH").toInt(64);
+    bool asyncACD = params.value("asyncACD").toBool(true);
+    uint32_t minEdgeLength = params.value("minEdgeLength").toInt(2);
+    bool findBestPlane = params.value("findBestPlane").toBool(false);
     std::vector<FaceWithTransform> faces;
     qDebug() << "Node Name: " << node->name.c_str();
     collectFaceNodesWithTransform(node, TopLoc_Location(), faces);
@@ -702,13 +750,20 @@ void generateVHACDStub(const QString& nodeName, int resolution, int maxHulls, do
         qDebug() << "[VHACD] Found" << solids.size() << "unique solids. Total original solid volume:" << originalVolume;
     }
     qDebug() << "[VHACD] Approximated original mesh area (sum of face areas):" << originalVolume;
-    VHACD::IVHACD::Parameters params;
-    params.m_resolution = resolution;
-    params.m_maxConvexHulls = maxHulls;
-    params.m_minimumVolumePercentErrorAllowed = minVolume;
+    VHACD::IVHACD::Parameters vhacdParams;
+    vhacdParams.m_maxConvexHulls = maxConvexHulls;
+    vhacdParams.m_resolution = resolution;
+    vhacdParams.m_minimumVolumePercentErrorAllowed = minimumVolumePercentErrorAllowed;
+    vhacdParams.m_maxRecursionDepth = maxRecursionDepth;
+    vhacdParams.m_shrinkWrap = shrinkWrap;
+    vhacdParams.m_fillMode = static_cast<VHACD::FillMode>(fillMode);
+    vhacdParams.m_maxNumVerticesPerCH = maxNumVerticesPerCH;
+    vhacdParams.m_asyncACD = asyncACD;
+    vhacdParams.m_minEdgeLength = minEdgeLength;
+    vhacdParams.m_findBestPlane = findBestPlane;
     VHACD::IVHACD* interfaceVHACD = VHACD::CreateVHACD();
     bool ok = interfaceVHACD->Compute(&vertices[0].mX, (uint32_t)vertices.size(),
-                                      (uint32_t*)&triangles[0], (uint32_t)triangles.size(), params);
+                                      (uint32_t*)&triangles[0], (uint32_t)triangles.size(), vhacdParams);
     PhysicsNodeData* physData = node->asPhysics();
     physData->hulls.clear();
     physData->convexHullGenerated = ok;
@@ -716,16 +771,52 @@ void generateVHACDStub(const QString& nodeName, int resolution, int maxHulls, do
     double totalVolume = 0.0;
     if (ok) {
         hullCount = interfaceVHACD->GetNConvexHulls();
+        const double epsilon = 1e-4; // 0.1mm for duplicate detection
         for (uint32_t i = 0; i < hullCount; ++i) {
             VHACD::IVHACD::ConvexHull ch;
             interfaceVHACD->GetConvexHull(i, ch);
             ConvexHullData hullData;
+            // Prepare input verts and tris
+            std::vector<std::array<double, 3>> inputVerts;
+            std::vector<std::array<uint32_t, 3>> inputTris;
             for (const auto& v : ch.m_points) {
-                hullData.vertices.push_back({v.mX, v.mY, v.mZ});
+                inputVerts.push_back({static_cast<double>(v.mX), static_cast<double>(v.mY), static_cast<double>(v.mZ)});
             }
             for (const auto& tri : ch.m_triangles) {
-                hullData.indices.push_back({tri.mI0, tri.mI1, tri.mI2});
+                inputTris.push_back({tri.mI0, tri.mI1, tri.mI2});
             }
+            std::vector<std::array<double, 3>> uniqueVerts;
+            std::vector<std::array<uint32_t, 3>> remappedTris;
+            filterAndRemapVerticesAndIndices(inputVerts, inputTris, uniqueVerts, remappedTris, epsilon);
+            if (uniqueVerts.size() < 4 || remappedTris.empty()) {
+                qDebug() << "[VHACD] Skipping degenerate hull (" << uniqueVerts.size() << " unique verts, " << remappedTris.size() << " triangles)";
+                continue;
+            }
+            // Warn if hull is very small
+            double minX=1e30,maxX=-1e30,minY=1e30,maxY=-1e30,minZ=1e30,maxZ=-1e30;
+            for (const auto& p : uniqueVerts) {
+                minX = std::min(minX, p[0]); maxX = std::max(maxX, p[0]);
+                minY = std::min(minY, p[1]); maxY = std::max(maxY, p[1]);
+                minZ = std::min(minZ, p[2]); maxZ = std::max(maxZ, p[2]);
+            }
+            double extentX = maxX - minX;
+            double extentY = maxY - minY;
+            double extentZ = maxZ - minZ;
+            double diag = std::sqrt(extentX*extentX + extentY*extentY + extentZ*extentZ);
+            if (diag < 1e-2) {
+                qDebug() << "[VHACD] Skipping very small hull (diag=" << diag << ")";
+                continue;
+            }
+            int smallDims = 0;
+            if (extentX < 1e-3) smallDims++;
+            if (extentY < 1e-3) smallDims++;
+            if (extentZ < 1e-3) smallDims++;
+            if (smallDims >= 2) {
+                qDebug() << "[VHACD] Skipping nearly flat/coplanar/collinear hull (extents: " << extentX << extentY << extentZ << ")";
+                continue;
+            }
+            hullData.vertices = uniqueVerts;
+            hullData.indices = remappedTris;
             physData->hulls.push_back(std::move(hullData));
             totalVolume += ch.m_volume;
         }
@@ -847,29 +938,57 @@ void generateCoACDStub(const QString& nodeName, double concavity, double alpha, 
     double totalVolume = 0.0;
     if (ok) {
         hullCount = static_cast<int>(resultMeshes.size());
+        const double epsilon = 1e-4; // 0.1mm for duplicate detection
         for (size_t i = 0; i < resultMeshes.size(); ++i) {
             ConvexHullData hullData;
             const auto& resultMesh = resultMeshes[i];
-            for (const auto& vertex : resultMesh.vertices) {
-                hullData.vertices.push_back({
-                    static_cast<float>(vertex[0]),
-                    static_cast<float>(vertex[1]),
-                    static_cast<float>(vertex[2])
-                });
+            // Prepare input verts and tris
+            std::vector<std::array<double, 3>> inputVerts;
+            std::vector<std::array<uint32_t, 3>> inputTris;
+            for (const auto& v : resultMesh.vertices) {
+                inputVerts.push_back({static_cast<double>(v[0]), static_cast<double>(v[1]), static_cast<double>(v[2])});
             }
-            for (const auto& triangle : resultMesh.indices) {
-                hullData.indices.push_back({
-                    static_cast<uint32_t>(triangle[0]),
-                    static_cast<uint32_t>(triangle[1]),
-                    static_cast<uint32_t>(triangle[2])
-                });
+            for (const auto& tri : resultMesh.indices) {
+                inputTris.push_back({(uint32_t)tri[0], (uint32_t)tri[1], (uint32_t)tri[2]});
             }
+            std::vector<std::array<double, 3>> uniqueVerts;
+            std::vector<std::array<uint32_t, 3>> remappedTris;
+            filterAndRemapVerticesAndIndices(inputVerts, inputTris, uniqueVerts, remappedTris, epsilon);
+            if (uniqueVerts.size() < 4 || remappedTris.empty()) {
+                qDebug() << "[CoACD] Skipping degenerate hull (" << uniqueVerts.size() << " unique verts, " << remappedTris.size() << " triangles)";
+                continue;
+            }
+            // Warn if hull is very small
+            double minX=1e30,maxX=-1e30,minY=1e30,maxY=-1e30,minZ=1e30,maxZ=-1e30;
+            for (const auto& p : uniqueVerts) {
+                minX = std::min(minX, p[0]); maxX = std::max(maxX, p[0]);
+                minY = std::min(minY, p[1]); maxY = std::max(maxY, p[1]);
+                minZ = std::min(minZ, p[2]); maxZ = std::max(maxZ, p[2]);
+            }
+            double extentX = maxX - minX;
+            double extentY = maxY - minY;
+            double extentZ = maxZ - minZ;
+            double diag = std::sqrt(extentX*extentX + extentY*extentY + extentZ*extentZ);
+            int smallDims = 0;
+            if (diag < 1e-2) {
+                qDebug() << "[CoACD] Skipping very small hull (diag=" << diag << ")";
+                continue;
+            }
+            if (extentX < 1e-3) smallDims++;
+            if (extentY < 1e-3) smallDims++;
+            if (extentZ < 1e-3) smallDims++;
+            if (smallDims >= 2) {
+                qDebug() << "[CoACD] Skipping nearly flat/coplanar/collinear hull (extents: " << extentX << extentY << extentZ << ")";
+                continue;
+            }
+            hullData.vertices = uniqueVerts;
+            hullData.indices = remappedTris;
             physData->hulls.push_back(std::move(hullData));
             double hullVolume = 0.0;
-            for (const auto& triangle : resultMesh.indices) {
-                const auto& v1 = resultMesh.vertices[triangle[0]];
-                const auto& v2 = resultMesh.vertices[triangle[1]];
-                const auto& v3 = resultMesh.vertices[triangle[2]];
+            for (const auto& triangle : remappedTris) {
+                const auto& v1 = uniqueVerts[triangle[0]];
+                const auto& v2 = uniqueVerts[triangle[1]];
+                const auto& v3 = uniqueVerts[triangle[2]];
                 hullVolume += ((v1[0] * v2[1] * v3[2]) + (v1[1] * v2[2] * v3[0]) + (v1[2] * v2[0] * v3[1]) -
                               (v3[0] * v2[1] * v1[2]) - (v3[1] * v2[2] * v1[0]) - (v3[2] * v2[0] * v1[1])) / 6.0;
             }
@@ -979,7 +1098,6 @@ void expandRailInPhysicsPreview(CadNode* railNode, std::shared_ptr<CadNode> phys
     // Add the expanded rail as a new child (do not clear existing children)
     physicsPreviewRoot->children.push_back(railCopy);
     if (oglWidget) {
-        oglWidget->setRootTreeNode(physicsPreviewRoot->children.back().get());
         oglWidget->markCacheDirty();
     }
 }

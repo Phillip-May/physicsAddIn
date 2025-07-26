@@ -31,9 +31,11 @@ void RailJsonEditorDialog::buildFormFromJson(const QJsonObject& obj) {
         const QString& key = it.key();
         const QJsonValue& value = it.value();
         if (value.isDouble()) {
-            QSpinBox* spin = new QSpinBox();
-            spin->setRange(-1000000, 1000000);
-            spin->setValue(static_cast<int>(value.toDouble()));
+            QDoubleSpinBox* spin = new QDoubleSpinBox();
+            spin->setDecimals(6);
+            spin->setRange(-1000000.0, 1000000.0);
+            spin->setSingleStep(0.01);
+            spin->setValue(value.toDouble());
             m_formLayout->addRow(new QLabel(key), spin);
             m_fieldWidgets[key] = spin;
         } else if (value.isString()) {
@@ -77,8 +79,10 @@ QJsonObject RailJsonEditorDialog::collectJsonFromForm() const {
     for (auto it = m_fieldWidgets.begin(); it != m_fieldWidgets.end(); ++it) {
         const QString& key = it.key();
         QWidget* w = it.value();
-        if (auto spin = qobject_cast<QSpinBox*>(w)) {
+        if (auto spin = qobject_cast<QDoubleSpinBox*>(w)) {
             obj[key] = spin->value();
+        } else if (auto spinInt = qobject_cast<QSpinBox*>(w)) {
+            obj[key] = spinInt->value();
         } else if (auto edit = qobject_cast<QLineEdit*>(w)) {
             obj[key] = edit->text();
         }

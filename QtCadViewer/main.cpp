@@ -29,10 +29,15 @@
 #include <Geom_Plane.hxx>
 #include <BRepTools.hxx>
 #include <gp_Quaternion.hxx>
+#include <gp_Trsf.hxx>
+#include <gp_Pnt.hxx>
+#include <gp_Dir.hxx>
+#include <gp_Vec.hxx>
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonDocument>
+#include <QGroupBox>
 #include <GeomLProp_SLProps.hxx>
 
 #include "CadNode.h"
@@ -49,6 +54,9 @@
 #include <QInputDialog>
 #include <QLineEdit>
 #include <QTextEdit>
+#include <QGroupBox>
+#include <QLabel>
+#include <QGridLayout>
 #include <unordered_map>
 #include <TDF_Tool.hxx>
 #include <vector>
@@ -578,7 +586,13 @@ bool loadFromJsonAndBin(const QString& railJsonFile,
     customModelRoot = CadNode::fromJson(jsonDoc.object());
     customModelRootContainer = std::make_shared<CadNode>();
     customModelRootContainer->name = "Custom Model Root Container";
+    customModelRootContainer->type = CadNodeType::MutexRoot;
+    customModelRootContainer->data = std::make_shared<MutexRootNodeData>();
     customModelRootContainer->visible = true;
+    
+    // Set ground plane properties for Custom model preview
+    MutexRootNodeData* mutexData = customModelRootContainer->asMutexRoot();
+    
     customModelRootContainer->children.clear();
     customModelRootContainer->children.push_back(customModelRoot);
     loadedFromJsonBin = true;
@@ -684,8 +698,6 @@ void initTreeAndOpenGLWidget(std::shared_ptr<CadNode> &inputRoot,
                              const Handle(TDocStd_Document)& doc,
                              SimulationManager *simManager = nullptr) {
     inputRoot->name = "Tree Root " + name;
-    inputRoot->type = CadNodeType::Custom;
-    inputRoot->visible = true;
     CustomModelTreeModel* qtModel = new CustomModelTreeModel(inputRoot);
     QTreeView* treeView = new QTreeView;
     treeView->setModel(qtModel);
@@ -693,10 +705,10 @@ void initTreeAndOpenGLWidget(std::shared_ptr<CadNode> &inputRoot,
     treeView->setSelectionMode(QAbstractItemView::ExtendedSelection);
     // --- Context menu support for all custom model/physics trees ---
     treeView->setContextMenuPolicy(Qt::CustomContextMenu);
+    CadOpenGLWidget* openGLViewer = new CadOpenGLWidget(inputRoot.get());
     if (simManager) {
-        simManager->registerPhysicsNodeContextMenu(treeView);
+        openGLViewer->setSimulationManager(simManager);
     }
-    CadOpenGLWidget* openGLViewer = new CadOpenGLWidget;
     QObject::connect(treeView, &QTreeView::customContextMenuRequested, treeView, [=](const QPoint& pos) {
         QModelIndex idx = treeView->indexAt(pos);
         if (!idx.isValid()) return;
@@ -791,113 +803,288 @@ void initTreeAndOpenGLWidget(std::shared_ptr<CadNode> &inputRoot,
                         }
                     }
                 }
-                for (auto& child : n->children) relinkXCAF(child.get());
+                for (auto& child : n->children) {
+                    relinkXCAF(child.get());
+                }
             };
             relinkXCAF(node);
-            // Always update parent pointers and global transforms after loading from JSON
-            setParentPointersRecursive(node);
-            setGlobalLocRecursive(node, node->parent ? node->parent->globalLoc : TopLoc_Location());
-            openGLViewer->clearSelection();
             openGLViewer->markCacheDirty();
-            QMessageBox::information(nullptr, "Success", "Node loaded and replaced from:\n" + fileName);
+            openGLViewer->update();
         });
-        // Physics node: collision mesh toggle
-        if (node->type == CadNodeType::Physics) {
-            QAction* toggleCollisionMeshAction = nullptr;
-            if (node->asPhysics()->collisionMeshVisible) {
-                toggleCollisionMeshAction = menu.addAction("Hide Collision Mesh");
-            } else {
-                toggleCollisionMeshAction = menu.addAction("Show Collision Mesh");
-            }
-            QObject::connect(toggleCollisionMeshAction, &QAction::triggered, treeView, [=]() {
-                node->asPhysics()->collisionMeshVisible = !node->asPhysics()->collisionMeshVisible;
+        
+        // --- Edit Node Location/Transform ---
+        QAction* editLocationAction = menu.addAction("Edit Location...");
+        QObject::connect(editLocationAction, &QAction::triggered, treeView, [=]() {
+            // Create a simple dialog for editing the transform
+            QDialog dialog(treeView);
+            dialog.setWindowTitle("Edit Node Location - " + QString::fromStdString(node->name));
+            dialog.setModal(true);
+            dialog.resize(400, 300);
+            
+            QVBoxLayout* mainLayout = new QVBoxLayout(&dialog);
+            
+            // Get current transform values
+            const gp_Trsf& trsf = node->loc.Transformation();
+            const gp_Mat& mat = trsf.VectorialPart();
+            const gp_XYZ& trans = trsf.TranslationPart();
+            
+            // Translation group
+            QGroupBox* transGroup = new QGroupBox("Translation");
+            QGridLayout* transLayout = new QGridLayout(transGroup);
+            
+            QDoubleSpinBox* xTrans = new QDoubleSpinBox;
+            QDoubleSpinBox* yTrans = new QDoubleSpinBox;
+            QDoubleSpinBox* zTrans = new QDoubleSpinBox;
+            
+            xTrans->setRange(-10000, 10000);
+            yTrans->setRange(-10000, 10000);
+            zTrans->setRange(-10000, 10000);
+            xTrans->setDecimals(3);
+            yTrans->setDecimals(3);
+            zTrans->setDecimals(3);
+            xTrans->setValue(trans.X());
+            yTrans->setValue(trans.Y());
+            zTrans->setValue(trans.Z());
+            
+            transLayout->addWidget(new QLabel("X:"), 0, 0);
+            transLayout->addWidget(xTrans, 0, 1);
+            transLayout->addWidget(new QLabel("Y:"), 1, 0);
+            transLayout->addWidget(yTrans, 1, 1);
+            transLayout->addWidget(new QLabel("Z:"), 2, 0);
+            transLayout->addWidget(zTrans, 2, 1);
+            
+            // Rotation group (Euler angles)
+            QGroupBox* rotGroup = new QGroupBox("Rotation (Euler angles in degrees)");
+            QGridLayout* rotLayout = new QGridLayout(rotGroup);
+            
+            QDoubleSpinBox* xRot = new QDoubleSpinBox;
+            QDoubleSpinBox* yRot = new QDoubleSpinBox;
+            QDoubleSpinBox* zRot = new QDoubleSpinBox;
+            
+            xRot->setRange(-360, 360);
+            yRot->setRange(-360, 360);
+            zRot->setRange(-360, 360);
+            xRot->setDecimals(1);
+            yRot->setDecimals(1);
+            zRot->setDecimals(1);
+            
+            // Convert rotation matrix to Euler angles (simplified)
+            // This is a basic conversion - for more complex cases you might want a quaternion editor
+            double rx = atan2(mat.Value(3,2), mat.Value(3,3)) * 180.0 / M_PI;
+            double ry = atan2(-mat.Value(3,1), sqrt(mat.Value(3,2)*mat.Value(3,2) + mat.Value(3,3)*mat.Value(3,3))) * 180.0 / M_PI;
+            double rz = atan2(mat.Value(2,1), mat.Value(1,1)) * 180.0 / M_PI;
+            
+            xRot->setValue(rx);
+            yRot->setValue(ry);
+            zRot->setValue(rz);
+            
+            rotLayout->addWidget(new QLabel("X (Pitch):"), 0, 0);
+            rotLayout->addWidget(xRot, 0, 1);
+            rotLayout->addWidget(new QLabel("Y (Yaw):"), 1, 0);
+            rotLayout->addWidget(yRot, 1, 1);
+            rotLayout->addWidget(new QLabel("Z (Roll):"), 2, 0);
+            rotLayout->addWidget(zRot, 2, 1);
+            
+            // Scale group
+            QGroupBox* scaleGroup = new QGroupBox("Scale");
+            QGridLayout* scaleLayout = new QGridLayout(scaleGroup);
+            
+            QDoubleSpinBox* xScale = new QDoubleSpinBox;
+            QDoubleSpinBox* yScale = new QDoubleSpinBox;
+            QDoubleSpinBox* zScale = new QDoubleSpinBox;
+            
+            xScale->setRange(0.001, 1000);
+            yScale->setRange(0.001, 1000);
+            zScale->setRange(0.001, 1000);
+            xScale->setDecimals(3);
+            yScale->setDecimals(3);
+            zScale->setDecimals(3);
+            
+            // Extract scale from matrix (simplified)
+            double sx = sqrt(mat.Value(1,1)*mat.Value(1,1) + mat.Value(2,1)*mat.Value(2,1) + mat.Value(3,1)*mat.Value(3,1));
+            double sy = sqrt(mat.Value(1,2)*mat.Value(1,2) + mat.Value(2,2)*mat.Value(2,2) + mat.Value(3,2)*mat.Value(3,2));
+            double sz = sqrt(mat.Value(1,3)*mat.Value(1,3) + mat.Value(2,3)*mat.Value(2,3) + mat.Value(3,3)*mat.Value(3,3));
+            
+            xScale->setValue(sx);
+            yScale->setValue(sy);
+            zScale->setValue(sz);
+            
+            scaleLayout->addWidget(new QLabel("X:"), 0, 0);
+            scaleLayout->addWidget(xScale, 0, 1);
+            scaleLayout->addWidget(new QLabel("Y:"), 1, 0);
+            scaleLayout->addWidget(yScale, 1, 1);
+            scaleLayout->addWidget(new QLabel("Z:"), 2, 0);
+            scaleLayout->addWidget(zScale, 2, 1);
+            
+            // Buttons
+            QHBoxLayout* buttonLayout = new QHBoxLayout;
+            QPushButton* okButton = new QPushButton("OK");
+            QPushButton* cancelButton = new QPushButton("Cancel");
+            QPushButton* resetButton = new QPushButton("Reset to Identity");
+            
+            buttonLayout->addWidget(resetButton);
+            buttonLayout->addStretch();
+            buttonLayout->addWidget(cancelButton);
+            buttonLayout->addWidget(okButton);
+            
+            // Add all widgets to main layout
+            mainLayout->addWidget(transGroup);
+            mainLayout->addWidget(rotGroup);
+            mainLayout->addWidget(scaleGroup);
+            mainLayout->addLayout(buttonLayout);
+            
+            // Connect reset button
+            QObject::connect(resetButton, &QPushButton::clicked, [&]() {
+                xTrans->setValue(0.0);
+                yTrans->setValue(0.0);
+                zTrans->setValue(0.0);
+                xRot->setValue(0.0);
+                yRot->setValue(0.0);
+                zRot->setValue(0.0);
+                xScale->setValue(1.0);
+                yScale->setValue(1.0);
+                zScale->setValue(1.0);
+            });
+            
+            // Connect OK/Cancel buttons
+            QObject::connect(okButton, &QPushButton::clicked, &dialog, &QDialog::accept);
+            QObject::connect(cancelButton, &QPushButton::clicked, &dialog, &QDialog::reject);
+            
+            if (dialog.exec() == QDialog::Accepted) {
+                // Create new transform from the edited values
+                gp_Trsf newTrsf;
+                
+                // Set translation
+                newTrsf.SetTranslationPart(gp_XYZ(xTrans->value(), yTrans->value(), zTrans->value()));
+                
+                // Set rotation (convert Euler angles to rotation matrix)
+                double rxRad = xRot->value() * M_PI / 180.0;
+                double ryRad = yRot->value() * M_PI / 180.0;
+                double rzRad = zRot->value() * M_PI / 180.0;
+                
+                // Create rotation transformations for each axis
+                gp_Trsf rotX, rotY, rotZ;
+                rotX.SetRotation(gp_Ax1(gp_Pnt(0,0,0), gp_Dir(1,0,0)), rxRad);
+                rotY.SetRotation(gp_Ax1(gp_Pnt(0,0,0), gp_Dir(0,1,0)), ryRad);
+                rotZ.SetRotation(gp_Ax1(gp_Pnt(0,0,0), gp_Dir(0,0,1)), rzRad);
+                
+                // Combined rotation
+                gp_Trsf combinedRot = rotZ * rotY * rotX;
+                
+                // Create translation transformation
+                gp_Trsf transTrsf;
+                transTrsf.SetTranslation(gp_Vec(xTrans->value(), yTrans->value(), zTrans->value()));
+                
+                // For now, use uniform scaling to avoid complexity
+                // Combine transformations: translation * rotation
+                newTrsf = transTrsf * combinedRot;
+                
+                // Apply the new transform
+                node->loc = TopLoc_Location(newTrsf);
+                node->needsGlobalLocUpdate = true;
+                
+                // Update the model and viewer
                 qtModel->dataChanged(idx, idx);
-                // Optionally update viewer if needed
-            });
-            // --- Add VHACD and CoACD generation actions ---
-            QAction* vhacdAction = menu.addAction("Generate Collision Mesh (VHACD)");
-            QObject::connect(vhacdAction, &QAction::triggered, treeView, [=]() {
-                // Default parameters as JSON
-                QJsonObject defaultParams{
-                    {"resolution", 100000},
-                    {"maxHulls", 16},
-                    {"minVolume", 0.01}
-                };
-                QJsonDocument doc(defaultParams);
-                RailJsonEditorDialog dlg(QString::fromUtf8(doc.toJson(QJsonDocument::Indented)), treeView);
-                if (dlg.exec() == QDialog::Accepted) {
-                    QJsonDocument userDoc = QJsonDocument::fromJson(dlg.getJsonString().toUtf8());
-                    if (!userDoc.isObject()) {
-                        QMessageBox::warning(nullptr, "VHACD", "Invalid JSON for VHACD parameters.");
-                        return;
-                    }
-                    QJsonObject obj = userDoc.object();
-                    int resolution = obj.value("resolution").toInt(100000);
-                    int maxHulls = obj.value("maxHulls").toInt(16);
-                    double minVolume = obj.value("minVolume").toDouble(0.01);
-                    generateVHACDStub(QString::fromStdString(node->name), resolution, maxHulls, minVolume, node);
-                    openGLViewer->markCacheDirty();
-                    QMessageBox::information(nullptr, "VHACD", "VHACD collision mesh generation complete.");
-                }
-            });
-            QAction* coacdAction = menu.addAction("Generate Collision Mesh (CoACD)");
-            QObject::connect(coacdAction, &QAction::triggered, treeView, [=]() {
-                // Default parameters as JSON
-                QJsonObject defaultParams{
-                    {"concavity", 0.0025},
-                    {"alpha", 0.05},
-                    {"beta", 0.05},
-                    {"maxConvexHull", 16},
-                    {"preprocess", "voxel"},
-                    {"prepRes", 64},
-                    {"sampleRes", 10000},
-                    {"mctsNodes", 100},
-                    {"mctsIter", 100},
-                    {"mctsDepth", 10},
-                    {"pca", true},
-                    {"merge", true},
-                    {"decimate", true},
-                    {"maxChVertex", 64},
-                    {"extrude", false},
-                    {"extrudeMargin", 0.0},
-                    {"apxMode", "fast"},
-                    {"seed", 42}
-                };
-                QJsonDocument doc(defaultParams);
-                RailJsonEditorDialog dlg(QString::fromUtf8(doc.toJson(QJsonDocument::Indented)), treeView);
-                if (dlg.exec() == QDialog::Accepted) {
-                    QJsonDocument userDoc = QJsonDocument::fromJson(dlg.getJsonString().toUtf8());
-                    if (!userDoc.isObject()) {
-                        QMessageBox::warning(nullptr, "CoACD", "Invalid JSON for CoACD parameters.");
-                        return;
-                    }
-                    QJsonObject obj = userDoc.object();
-                    double concavity = obj.value("concavity").toDouble(0.0025);
-                    double alpha = obj.value("alpha").toDouble(0.05);
-                    double beta = obj.value("beta").toDouble(0.05);
-                    int maxConvexHull = obj.value("maxConvexHull").toInt(16);
-                    std::string preprocess = obj.value("preprocess").toString("voxel").toStdString();
-                    int prepRes = obj.value("prepRes").toInt(64);
-                    int sampleRes = obj.value("sampleRes").toInt(10000);
-                    int mctsNodes = obj.value("mctsNodes").toInt(100);
-                    int mctsIter = obj.value("mctsIter").toInt(100);
-                    int mctsDepth = obj.value("mctsDepth").toInt(10);
-                    bool pca = obj.value("pca").toBool(true);
-                    bool merge = obj.value("merge").toBool(true);
-                    bool decimate = obj.value("decimate").toBool(true);
-                    int maxChVertex = obj.value("maxChVertex").toInt(64);
-                    bool extrude = obj.value("extrude").toBool(false);
-                    double extrudeMargin = obj.value("extrudeMargin").toDouble(0.0);
-                    std::string apxMode = obj.value("apxMode").toString("fast").toStdString();
-                    int seed = obj.value("seed").toInt(42);
-                    generateCoACDStub(QString::fromStdString(node->name), concavity, alpha, beta, node,
-                        maxConvexHull, preprocess, prepRes, sampleRes, mctsNodes, mctsIter, mctsDepth,
-                        pca, merge, decimate, maxChVertex, extrude, extrudeMargin, apxMode, seed);
-                    openGLViewer->markCacheDirty();
-                    QMessageBox::information(nullptr, "CoACD", "CoACD collision mesh generation complete.");
-                }
+                openGLViewer->markCacheDirty();
+                openGLViewer->update();
+            }
+        });
+        
+        // --- Physics-specific actions ---
+        if (node->type == CadNodeType::Physics) {
+            menu.addSeparator();
+            QAction* generateVHACDAction = menu.addAction("Generate VHACD Convex Hulls...");
+            QObject::connect(generateVHACDAction, &QAction::triggered, treeView, [=]() {
+                // Implement VHACD generation logic
             });
         }
+        // --- Add VHACD and CoACD generation actions ---
+        QAction* vhacdAction = menu.addAction("Generate Collision Mesh (VHACD)");
+        QObject::connect(vhacdAction, &QAction::triggered, treeView, [=]() {
+            // Default parameters as JSON (official VHACD API only)
+            QJsonObject defaultParams{
+                {"maxConvexHulls", 256},
+                {"resolution", 500000},
+                {"minimumVolumePercentErrorAllowed", 0.000001},
+                {"maxRecursionDepth", 15},
+                {"shrinkWrap", true},
+                {"fillMode", 0}, // 0 = FLOOD_FILL
+                {"maxNumVerticesPerCH", 256},
+                {"asyncACD", true},
+                {"minEdgeLength", 0.0005},
+                {"findBestPlane", false}
+            };
+            QJsonDocument doc(defaultParams);
+            RailJsonEditorDialog dlg(QString::fromUtf8(doc.toJson(QJsonDocument::Indented)), treeView);
+            if (dlg.exec() == QDialog::Accepted) {
+                QJsonDocument userDoc = QJsonDocument::fromJson(dlg.getJsonString().toUtf8());
+                if (!userDoc.isObject()) {
+                    QMessageBox::warning(nullptr, "VHACD", "Invalid JSON for VHACD parameters.");
+                    return;
+                }
+                QJsonObject obj = userDoc.object();
+                generateVHACDStub(QString::fromStdString(node->name), obj, node);
+                openGLViewer->markCacheDirty();
+                QMessageBox::information(nullptr, "VHACD", "VHACD collision mesh generation complete.");
+            }
+        });
+        QAction* coacdAction = menu.addAction("Generate Collision Mesh (CoACD)");
+        QObject::connect(coacdAction, &QAction::triggered, treeView, [=]() {
+            // Default parameters as JSON
+            QJsonObject defaultParams{
+                {"concavity", 0.0025},
+                {"alpha", 0.05},
+                {"beta", 0.05},
+                {"maxConvexHull", 16},
+                {"preprocess", "voxel"},
+                {"prepRes", 64},
+                {"sampleRes", 10000},
+                {"mctsNodes", 100},
+                {"mctsIter", 100},
+                {"mctsDepth", 10},
+                {"pca", true},
+                {"merge", true},
+                {"decimate", true},
+                {"maxChVertex", 64},
+                {"extrude", false},
+                {"extrudeMargin", 0.0},
+                {"apxMode", "fast"},
+                {"seed", 42}
+            };
+            QJsonDocument doc(defaultParams);
+            RailJsonEditorDialog dlg(QString::fromUtf8(doc.toJson(QJsonDocument::Indented)), treeView);
+            if (dlg.exec() == QDialog::Accepted) {
+                QJsonDocument userDoc = QJsonDocument::fromJson(dlg.getJsonString().toUtf8());
+                if (!userDoc.isObject()) {
+                    QMessageBox::warning(nullptr, "CoACD", "Invalid JSON for CoACD parameters.");
+                    return;
+                }
+                QJsonObject obj = userDoc.object();
+                double concavity = obj.value("concavity").toDouble(0.0025);
+                double alpha = obj.value("alpha").toDouble(0.05);
+                double beta = obj.value("beta").toDouble(0.05);
+                int maxConvexHull = obj.value("maxConvexHull").toInt(16);
+                std::string preprocess = obj.value("preprocess").toString("voxel").toStdString();
+                int prepRes = obj.value("prepRes").toInt(64);
+                int sampleRes = obj.value("sampleRes").toInt(10000);
+                int mctsNodes = obj.value("mctsNodes").toInt(100);
+                int mctsIter = obj.value("mctsIter").toInt(100);
+                int mctsDepth = obj.value("mctsDepth").toInt(10);
+                bool pca = obj.value("pca").toBool(true);
+                bool merge = obj.value("merge").toBool(true);
+                bool decimate = obj.value("decimate").toBool(true);
+                int maxChVertex = obj.value("maxChVertex").toInt(64);
+                bool extrude = obj.value("extrude").toBool(false);
+                double extrudeMargin = obj.value("extrudeMargin").toDouble(0.0);
+                std::string apxMode = obj.value("apxMode").toString("fast").toStdString();
+                int seed = obj.value("seed").toInt(42);
+                generateCoACDStub(QString::fromStdString(node->name), concavity, alpha, beta, node,
+                    maxConvexHull, preprocess, prepRes, sampleRes, mctsNodes, mctsIter, mctsDepth,
+                    pca, merge, decimate, maxChVertex, extrude, extrudeMargin, apxMode, seed);
+                openGLViewer->markCacheDirty();
+                QMessageBox::information(nullptr, "CoACD", "CoACD collision mesh generation complete.");
+            }
+        });
         // Exclude by color submenu (unified for all CadNode-based trees)
         QMenu* excludeByColorMenu = menu.addMenu("Exclude By Color");
         // Collect all unique colors in the subtree (including this node)
@@ -984,15 +1171,15 @@ void initTreeAndOpenGLWidget(std::shared_ptr<CadNode> &inputRoot,
                 qDebug() << "[Debug]     collisionMeshVisible:" << physData->collisionMeshVisible;
                 qDebug() << "[Debug]     hulls.size():" << physData->hulls.size();
                 qDebug() << "[Debug]     node name:" << QString::fromStdString(node->name);
-                if (!physData->hulls.empty()) {
-                    const auto& hull = physData->hulls[0];
-                    qDebug() << "[Debug]     First hull vertex count:" << hull.vertices.size();
-                    qDebug() << "[Debug]     First hull triangle count:" << hull.indices.size();
-                    for (int i = 0; i < std::min<int>(3, hull.vertices.size()); ++i) {
-                        const auto& v = hull.vertices[i];
-                        qDebug() << "[Debug]       Vertex" << i << ":" << v[0] << v[1] << v[2];
-                    }
-                }
+                qDebug() << "[Debug]     isPhysicsActive:" << physData->isPhysicsActive;
+                qDebug() << "[Debug]     mass:" << physData->mass;
+                qDebug() << "[Debug]     staticFriction:" << physData->staticFriction;
+                qDebug() << "[Debug]     dynamicFriction:" << physData->dynamicFriction;
+                qDebug() << "[Debug]     restitution:" << physData->restitution;
+                qDebug() << "[Debug]     centerOfMass:" << physData->centerOfMass.X() << physData->centerOfMass.Y() << physData->centerOfMass.Z();
+                qDebug() << "[Debug]     materialName:" << QString::fromStdString(physData->materialName);
+                qDebug() << "[Debug]     useCustomProperties:" << physData->useCustomProperties;
+                qDebug() << "[Debug]     useCustomCenterOfMass:" << physData->useCustomCenterOfMass;
             }
         });
         // Add relink to XCAF node action (always for XCAF nodes)
@@ -1510,8 +1697,6 @@ void initTreeAndOpenGLWidget(std::shared_ptr<CadNode> &inputRoot,
         if (!menu.isEmpty()) menu.exec(treeView->viewport()->mapToGlobal(pos));
     });
     // If inputRoot is a container, set OpenGL root to its first child
-    CadNode* oglRoot = inputRoot->children.empty() ? nullptr : inputRoot->children[0].get();
-    openGLViewer->setRootTreeNode(oglRoot);
     treeTabWidget->addTab(treeView, QString::fromStdString(name) + " Tree");
     openGLTabWidget->addTab(openGLViewer, QString::fromStdString(name) + " Preview");
     connectTreeAndViewer(treeView, openGLViewer, qtModel);
@@ -1598,6 +1783,23 @@ int main(int argc, char *argv[])
         // --- Custom Model Tree ---
         if (!customModelRootContainer) customModelRootContainer = std::make_shared<CadNode>();
         if (!customModelRoot) customModelRoot = std::make_shared<CadNode>();
+        
+        // Set up Custom model root container as MutexRoot with ground plane
+        customModelRootContainer->name = "Custom Model Root Container";
+        customModelRootContainer->type = CadNodeType::MutexRoot;
+        customModelRootContainer->data = std::make_shared<MutexRootNodeData>();
+        customModelRootContainer->visible = true;
+        
+        // Set ground plane properties for Custom model preview
+        MutexRootNodeData* mutexData = customModelRootContainer->asMutexRoot();
+        if (mutexData) {
+            mutexData->groundPlaneVisible = true;
+            mutexData->groundPlaneY = -50.0;
+            mutexData->groundPlaneSize = 10000.0;
+            mutexData->groundPlaneThickness = 0.1;
+            mutexData->groundPlaneColor = CADNodeColor(0.7f, 0.7f, 0.7f, 0.8f);
+        }
+        
         customModelRoot->name = "Custom Rail";
         customModelRoot->visible = true;
         customModelRoot->type = CadNodeType::Rail;
@@ -1651,7 +1853,20 @@ int main(int argc, char *argv[])
 
     // --- Physics Preview Tree and OpenGL Widget ---
     auto physicsPreviewRoot = std::make_shared<CadNode>();
+    physicsPreviewRoot->type = CadNodeType::MutexRoot;
+    physicsPreviewRoot->data = std::make_shared<MutexRootNodeData>();
+    // Optionally set a name for debug
+    physicsPreviewRoot->name = "Physics MutexRoot";
+    std::cout << "[main] physicsPreviewRoot type: " << static_cast<int>(physicsPreviewRoot->type)
+              << ", name: " << physicsPreviewRoot->name << std::endl;
+    // Print children info for further debugging
+    if (!physicsPreviewRoot->children.empty()) {
+        std::cout << "[main] physicsPreviewRoot first child type: " << static_cast<int>(physicsPreviewRoot->children[0]->type)
+                  << ", name: " << physicsPreviewRoot->children[0]->name << std::endl;
+    }
     SimulationManager simManager(physicsPreviewRoot);
+    std::cout << "[main] SimulationManager constructed with root node type: " << static_cast<int>(physicsPreviewRoot->type)
+              << ", name: " << physicsPreviewRoot->name << std::endl;
     // Add SimulationManager GUI elements
     simManager.addGuiElements(&mainWindow);
     initTreeAndOpenGLWidget(physicsPreviewRoot,tabWidget,viewTabWidget,"Physics", doc,&simManager);

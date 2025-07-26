@@ -35,11 +35,14 @@
 #include <QVector4D>
 #include <QElapsedTimer>
 #include <QDebug>
+#include <sstream>
 
 #include "CadNode.h"
+#include "SimulationManager.h"
 #include <QWidget>
 #include <QObject>
 #include <functional> // For std::hash
+#include <mutex>
 
 namespace {
 
@@ -94,8 +97,8 @@ void CadOpenGLWidget::clearGeometryCache() {
     m_cacheDirty = true;
 }
 
-CadOpenGLWidget::CadOpenGLWidget(QWidget *parent)
-    : QOpenGLWidget(parent), m_rotating(false), m_firstRotateMove(false) {
+CadOpenGLWidget::CadOpenGLWidget(CadNode* root, QWidget *parent)
+    : QOpenGLWidget(parent), rootNode_(root), m_rotating(false), m_firstRotateMove(false) {
     
     // Set up continuous rendering timer for 60fps
     m_renderTimer.setInterval(16); // ~60fps (1000ms / 60fps ≈ 16.67ms)
@@ -331,10 +334,30 @@ static inline bool isTransformLikeNode(const CadNode* node) {
 }
 
 // Shared transform accumulation function
-static TopLoc_Location accumulateNodeTransform(const CadNode* node, const TopLoc_Location& parentAccum) {
-    if (!node || node->loc.IsIdentity()) return parentAccum;
+static TopLoc_Location getNodeLocation(const CadNode* node, const SimulationManager* simManager) {
+    if (!node) return TopLoc_Location();
+    
+    // If we have a simulation manager, check for updated locations
+    if (simManager && simManager->hasNodeUpdates()) {
+        const auto& nodeLocations = simManager->getLatestNodeLocations();
+        auto it = nodeLocations.find(const_cast<CadNode*>(node));
+        if (it != nodeLocations.end()) {
+            return it->second;
+        }
+    }
+    
+    // Fall back to the node's original location
+    return node->loc;
+}
+
+static TopLoc_Location accumulateNodeTransform(const CadNode* node, const TopLoc_Location& parentAccum, const SimulationManager* simManager = nullptr) {
+    if (!node) return parentAccum;
+    
+    TopLoc_Location nodeLoc = getNodeLocation(node, simManager);
+    if (nodeLoc.IsIdentity()) return parentAccum;
+    
     if (isTransformLikeNode(node)) {
-        return parentAccum * node->loc;
+        return parentAccum * nodeLoc;
     }
     return parentAccum;
 }
@@ -342,13 +365,17 @@ static TopLoc_Location accumulateNodeTransform(const CadNode* node, const TopLoc
 // Update traverseAndRender to use extremely optimized rendering
 void CadOpenGLWidget::traverseAndRender(const CadNode* node, CADNodeColor inheritedColor, const TopLoc_Location& accumulatedLoc, bool /*ancestorsVisible*/, const CadNode* parentReferenceNode) {
     if (!node) return;
+    
+    // Get the node location (potentially from simulation manager)
+    TopLoc_Location nodeLoc = getNodeLocation(node, m_simulationManager);
+    
     // Always accumulate the transform for this node
-    TopLoc_Location newAccumulatedLoc = accumulatedLoc * node->loc;
-    bool needsTransform = !node->loc.IsIdentity();
+    TopLoc_Location newAccumulatedLoc = accumulatedLoc * nodeLoc;
+    bool needsTransform = !nodeLoc.IsIdentity();
     if (needsTransform) {
         glPushMatrix();
         // Apply this node's transform
-        const gp_Trsf& trsf = node->loc.Transformation();
+        const gp_Trsf& trsf = nodeLoc.Transformation();
         double mat[16] = {
             trsf.Value(1,1), trsf.Value(2,1), trsf.Value(3,1), 0.0,
             trsf.Value(1,2), trsf.Value(2,2), trsf.Value(3,2), 0.0,
@@ -568,9 +595,20 @@ void CadOpenGLWidget::renderEdgeOptimized(const CadNode* node, const TopLoc_Loca
 }
 
 void CadOpenGLWidget::paintGL() {
+    // Print start of paintGL
+    std::ostringstream startOss;
+    startOss << std::this_thread::get_id();
+    qDebug() << "[CadOpenGLWidget] paintGL START, thread:" << QString::fromStdString(startOss.str());
+    
+    // Check if scene building is in progress - if so, skip rendering to prevent race conditions
+    if (m_simulationManager && m_simulationManager->isSceneBuilding()) {
+        qDebug() << "[CadOpenGLWidget] Skipping paintGL - scene building in progress";
+        return;
+    }
+    
+    // No mutex locking needed with double buffering - we read from the read buffer atomically
     QElapsedTimer paintTimer;
     paintTimer.start();
-
 
     // Frame skipping for very slow rendering
     m_frameCount++;
@@ -578,11 +616,11 @@ void CadOpenGLWidget::paintGL() {
         m_skipFrames--;
         //return; // Skip this frame entirely
     }
-        
+
     // Check if we need to skip frames due to slow performance
     static QElapsedTimer lastFrameTimer;
     static int consecutiveSlowFrames = 0;
-    
+
     if (lastFrameTimer.isValid()) {
         qint64 frameTime = lastFrameTimer.nsecsElapsed();
         if (frameTime > 100000000) { // If frame took more than 100ms (10 FPS)
@@ -596,7 +634,7 @@ void CadOpenGLWidget::paintGL() {
         }
     }
     lastFrameTimer.start();
-    
+
     //Used for selection, should probably be moved to some kind of scene
     //Related tracking for things moving eventually
 
@@ -605,7 +643,7 @@ void CadOpenGLWidget::paintGL() {
     glEnable(GL_DEPTH_TEST);
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
-    
+
     // New camera transform: apply zoom, then rotation, then translation
     QMatrix4x4 view;
     view.translate(0, 0, -camera_.zoom);
@@ -613,42 +651,55 @@ void CadOpenGLWidget::paintGL() {
     view.translate(-camera_.pos);
     glMultMatrixf(view.constData());
 
+    // Render ground plane if available (now in world space after camera transform)
+    if (rootNode_ && rootNode_->type == CadNodeType::MutexRoot) {
+        const MutexRootNodeData* mutexData = rootNode_->asMutexRoot();
+        if (mutexData && mutexData->groundPlaneVisible) {
+            renderGroundPlane(*mutexData);
+        }
+    }
+
     // Skip frustum updates for maximum performance
     static bool frustumInitialized = false;
     if (!frustumInitialized) {
         updateFrustumPlanes();
         frustumInitialized = true;
     }
-    
+
     // Use optimized batch rendering
     QElapsedTimer renderTimer;
     renderTimer.start();
-    
+
     // Only rebuild cache if dirty
     if (m_cacheDirty) {
         buildColorBatches();
         m_cacheDirty = false;
     }
-    
+
     // Render the main CAD geometry
     renderBatchedGeometry();
-        
+
     // Render highlighted edges only (performance optimized)
     if (m_selectionMode == SelectionMode::Edges && (hoveredEdgeInstance_.node != nullptr || !selectedEdgeInstances_.empty())) {
         renderHighlightedEdges();
     }
     
+    // Mark that we've processed any simulation updates
+    if (m_simulationManager && m_simulationManager->hasNodeUpdates()) {
+        m_simulationManager->markUpdatesProcessed();
+    }
+
     qint64 renderTime = renderTimer.nsecsElapsed();
-    
+
     // Print render time every frame for real-time monitoring
     //qDebug() << "[Profile] Optimized geometry rendering took:" << renderTime / 1000000.0 << "ms";
-    
+
     // Log cache statistics (very infrequently to minimize overhead)
     if (m_frameCount % 1200 == 0) { // Log every 20 seconds
         qDebug() << "[Cache] Geometry cache size:" << m_geometryCache.size() << "entries";
         qDebug() << "[Camera] Pos:" << camera_.pos << "Zoom:" << camera_.zoom << "Rot:" << camera_.rot;
     }
-        
+
     // Keep camera controls working by not disabling pivot sphere
     // Draw pivot sphere if enabled
     if (camera_.showPivotSphere) {
@@ -665,7 +716,7 @@ void CadOpenGLWidget::paintGL() {
         gluDeleteQuadric(quad);
         glPopMatrix();
     }
-    
+
     qint64 totalPaintTime = paintTimer.nsecsElapsed();
     //qDebug() << "[Profile] Total optimized paintGL time:" << totalPaintTime / 1000000.0 << "ms";
 
@@ -705,6 +756,11 @@ void CadOpenGLWidget::paintGL() {
     if (selectedFrameNode_) {
         drawReferenceFrame(selectedFrameNodeAccumulatedLoc_, 5000.0f);
     }
+    
+    // Print end of paintGL
+    std::ostringstream endOss;
+    endOss << std::this_thread::get_id();
+    qDebug() << "[CadOpenGLWidget] paintGL END, thread:" << QString::fromStdString(endOss.str());
 }
 
 void CadOpenGLWidget::mousePressEvent(QMouseEvent* event) {
@@ -1064,13 +1120,6 @@ void CadOpenGLWidget::wheelEvent(QWheelEvent* event) {
     }
 }
 
-
-void CadOpenGLWidget::setRootTreeNode(CadNode* root) {
-    rootNode_ = root;
-    buildFaceCache(); // Rebuild face cache when scene changes
-    markCacheDirty();
-    update();
-}
 
 void CadOpenGLWidget::clearCache() {
     clearGeometryCache();
@@ -2121,6 +2170,53 @@ void CadOpenGLWidget::setSelectedFaceNode(CadNode* node, const TopLoc_Location& 
         selectedFace_ = TopoDS::Face(pickedData->getFace().Located(accLoc));
     }
     update();
+}
+
+// Render ground plane
+void CadOpenGLWidget::renderGroundPlane(const MutexRootNodeData& mutexData) {
+    if (!mutexData.groundPlaneVisible) return;
+    // Enable blending for transparency
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    
+    // Set the ground plane color
+    glColor4f(mutexData.groundPlaneColor.r, 
+              mutexData.groundPlaneColor.g, 
+              mutexData.groundPlaneColor.b, 
+              mutexData.groundPlaneColor.a);
+    
+    // Draw the ground plane as a large quad
+    double size = mutexData.groundPlaneSize;
+    double y = mutexData.groundPlaneY;
+    double thickness = mutexData.groundPlaneThickness;
+    
+    // Draw the top face of the ground plane
+    glBegin(GL_QUADS);
+    glVertex3d(-size, y + thickness/2, -size);
+    glVertex3d( size, y + thickness/2, -size);
+    glVertex3d( size, y + thickness/2,  size);
+    glVertex3d(-size, y + thickness/2,  size);
+    glEnd();
+    
+    // Draw a grid pattern on the ground plane
+    glColor4f(0.5f, 0.5f, 0.5f, 0.3f); // Darker grid lines
+    glLineWidth(1.0f);
+    glBegin(GL_LINES);
+    
+    // Draw grid lines every 100 units
+    double gridSpacing = 100.0;
+    for (double x = -size; x <= size; x += gridSpacing) {
+        glVertex3d(x, y + thickness/2 + 0.01, -size); // Slightly above surface to avoid z-fighting
+        glVertex3d(x, y + thickness/2 + 0.01,  size);
+    }
+    for (double z = -size; z <= size; z += gridSpacing) {
+        glVertex3d(-size, y + thickness/2 + 0.01, z);
+        glVertex3d( size, y + thickness/2 + 0.01, z);
+    }
+    glEnd();
+    
+    // Disable blending
+    glDisable(GL_BLEND);
 }
 
 

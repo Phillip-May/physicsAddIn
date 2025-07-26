@@ -91,7 +91,9 @@ struct FaceWithTransform {
     TopLoc_Location accumulatedLoc;
 };
 void collectFaceNodesWithTransform(CadNode* node, const TopLoc_Location& parentLoc, std::vector<FaceWithTransform>& out);
-void generateVHACDStub(const QString& nodeName, int resolution, int maxHulls, double minVolume, CadNode* node);
+// Advanced VHACD settings exposed for user control
+// Refactored: Pass all VHACD parameters as a QJsonObject
+void generateVHACDStub(const QString& nodeName, const QJsonObject& params, CadNode* node);
 void generateCoACDStub(const QString& nodeName, double concavity, double alpha, double beta, CadNode* node, int maxConvexHull, std::string preprocess, int prepRes, int sampleRes, int mctsNodes, int mctsIter, int mctsDepth, bool pca, bool merge, bool decimate, int maxChVertex, bool extrude, double extrudeMargin, std::string apxMode, int seed);
 std::shared_ptr<CadNode> deepCopyNodeNonExcluded(const CadNode* src);
 void insertCustomModelNodeAtCadTreePosition(CadNode* customModelRoot, std::shared_ptr<CadNode> newNode, const std::vector<CadNode*>& selectedCadNodes, CadTreeModel* cadModel);

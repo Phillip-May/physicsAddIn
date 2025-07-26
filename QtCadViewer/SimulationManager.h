@@ -19,7 +19,8 @@ public:
         : m_globalCookingParams(PxTolerancesScale())
     {
     }
-    bool initializePhysX();
+    ~PhysXEngine();
+    bool initializePhysX(const std::shared_ptr<CadNode>& rootNode);
 private:
     // PhysX components (moved from global variables)
     PxDefaultAllocator m_allocator;
@@ -31,6 +32,7 @@ private:
     PxMaterial* m_material;
     PxMaterial* m_kinematicMaterial;  // Low-friction material for kinematic actors (robots)
     PxPvd* m_pvd;
+    PxPvdTransport* m_pvdTransport;  // Keep transport alive for PhysX 5.x
     PxRigidStatic* m_groundPlane;
     PxCudaContextManager* m_cudaContextManager;  // CUDA context for deformable volumes
     // Global cooking parameters for all mesh creation
@@ -52,6 +54,9 @@ private:
     float m_stabilizationThreshold;
     bool m_ccdEnabled;
     float m_wakeDistance;
+    
+    // Reference to root CadNode for ground plane configuration
+    std::shared_ptr<CadNode> m_rootNode;
 private:
     static PxFilterFlags simulationFilterShader(PxFilterObjectAttributes attributes0, PxFilterData filterData0, PxFilterObjectAttributes attributes1, PxFilterData filterData1, PxPairFlags &pairFlags, const void *constantBlock, PxU32 constantBlockSize);
 
@@ -60,15 +65,32 @@ private:
     void configureDynamicActor(PxRigidDynamic *actor);
     void stepSimulationExtended(float deltaTime);
     void stepSimulation(float deltaTime);
+    void buildSceneFromNodes(const std::vector<CadNode*>& physicsNodes, 
+                           std::unordered_map<CadNode*, PxRigidDynamic*>& nodeToActor,
+                           std::unordered_map<PxRigidDynamic*, CadNode*>& actorToNode);
 };
 
 class SimulationManager
 {
     friend class PhysXEngine;
 public:
-    SimulationManager(std::shared_ptr<CadNode> &m_CadNodeRootIn);
+    SimulationManager(const std::shared_ptr<CadNode>& m_CadNodeRootIn);
     void addGuiElements(QMainWindow* mainWindow);
-    void registerPhysicsNodeContextMenu(QTreeView* treeView);
+    void registerPhysicsNodeContextMenu(QMenu* menu, CadNode* node);
+    bool isSceneBuilding() const { return m_sceneBuilding; }
+    bool hasNodeUpdates() const { return m_buffersSwapped; }
+    
+    // Get the latest node locations (thread-safe for GUI thread)
+    const std::unordered_map<CadNode*, TopLoc_Location>& getLatestNodeLocations() const;
+    
+    // Mark that GUI has processed the latest updates
+    void markUpdatesProcessed();
+    
+    // Check PVD connection status
+    bool isPvdConnected() const;
+    
+    // Manually trigger PVD connection
+    void connectPvd();
 private:
     enum class SimulationCommand {
         START,
@@ -94,6 +116,13 @@ private:
         float time;
         bool isPaused;
         int stepCount;
+    };
+
+    // Double-buffered node location data
+    struct NodeLocationData {
+        std::unordered_map<CadNode*, TopLoc_Location> nodeLocations;
+        std::atomic<bool> isDirty{false};
+        std::atomic<int> version{0};
     };
 
     //Gui/main thread side code
@@ -139,6 +168,14 @@ private:
     std::atomic<bool> m_paused{false};
     std::atomic<bool> m_stepRequested{false};
     std::atomic<bool> m_stepComplete{false};
+    std::atomic<bool> m_sceneBuilding{false};  // Flag to indicate scene building is in progress
+
+    // Double-buffered node locations
+    NodeLocationData m_nodeBufferA;
+    NodeLocationData m_nodeBufferB;
+    std::atomic<NodeLocationData*> m_readBuffer{&m_nodeBufferA};
+    std::atomic<NodeLocationData*> m_writeBuffer{&m_nodeBufferB};
+    std::atomic<bool> m_buffersSwapped{false};
 
     // Data structures
     SimulationState m_currentState;
@@ -146,12 +183,12 @@ private:
     SimulationUpdateCallback m_updateCallback;
 
     //Target timestep
-    float m_timeStep = 16; //Milliseconds
+    float m_timeStepMS = 16; //Milliseconds
 
     // PhysX engine (will be created in simulation thread)
     std::unique_ptr<PhysXEngine> m_physXEngine;
     //Underlying tree
-    std::shared_ptr<CadNode> m_CadNodeRoot;
+    const std::shared_ptr<CadNode> m_CadNodeRoot;
     // Mappings
     std::unordered_map<CadNode*, physx::PxRigidDynamic*> m_nodeToActor;
     std::unordered_map<physx::PxRigidDynamic*, CadNode*> m_actorToNode;
