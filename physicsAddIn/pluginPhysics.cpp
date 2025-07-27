@@ -33,10 +33,9 @@
 #include <vector>
 
 #include "pluginPhysics.h"
-#include "PhysXEngine.h"  // For LoadBinarySTL, CreateConvexMesh, convertSTLToPhysX
 #include "MaterialEditorDialog.h"
 #include "ObjectPropertiesDialog.h"
-#include "SoftBodyConfigDialog.h"
+#include "CadViewerDialog.h"
 
 // VHACD Library - header only (implementation in PhysXEngine.cpp)
 #include "VHACD.h"
@@ -57,25 +56,15 @@ static QElapsedTimer *elapsedTimer;
 bool isRenderDone = true;
 
 QString PluginPhysics::PluginLoad(QMainWindow *mw, QMenuBar *menubar, QStatusBar *statusbar, RoboDK *rdk, const QString &settings){
-    PhysXEngine::setRoboDK(rdk);
-    PhysXEngine::setLoadingDone(false);
     RDK = rdk;
     MainWindow = mw;
     StatusBar = statusbar;
     
     // Initialize physics engine
-    m_physicsEngine = new PhysXEngine(rdk, this);
-    if (!m_physicsEngine->initialize()) {
-        qDebug() << "Failed to initialize physics engine";
-    }
     
     // Initialize managers
-    m_materialManager = new MaterialManager(m_physicsEngine, this);
-    m_objectPropertiesManager = new ObjectPropertiesManager(m_physicsEngine, m_materialManager, this);
     
     // Set the object properties manager in the physics engine
-    m_physicsEngine->setObjectPropertiesManager(m_objectPropertiesManager);
-    m_sceneConfigDialog = new SceneConfigurationDialog(m_physicsEngine, m_materialManager, mw);
     
     qDebug() << "Loading plugin " << PluginName();
     qDebug() << "Using settings: " << settings; // reserved for future compatibility
@@ -87,10 +76,6 @@ QString PluginPhysics::PluginLoad(QMainWindow *mw, QMenuBar *menubar, QStatusBar
     // Add scene configuration action
     actionSceneConfig = new QAction(tr("Scene Defaults"), this);
     connect(actionSceneConfig, &QAction::triggered, this, [this] {
-
-        if (m_sceneConfigDialog) {
-            m_sceneConfigDialog->show();
-        }
 
     }, Qt::QueuedConnection);
 
@@ -110,6 +95,14 @@ QString PluginPhysics::PluginLoad(QMainWindow *mw, QMenuBar *menubar, QStatusBar
 
     }, Qt::QueuedConnection);
 
+    // Add CAD viewer action
+    actionCadViewer = new QAction(tr("CAD Viewer"), this);
+    connect(actionCadViewer, &QAction::triggered, this, [this] {
+
+        showCadViewer();
+
+    }, Qt::QueuedConnection);
+
     // Here you can add one or more actions in the menu
     qDebug() << "Setting up the menu bar";
 
@@ -121,6 +114,7 @@ QString PluginPhysics::PluginLoad(QMainWindow *mw, QMenuBar *menubar, QStatusBar
     menu1->addAction(actionSceneConfig);
     menu1->addAction(actionMaterialManager);
     menu1->addAction(actionCreateSoftBody);
+    menu1->addAction(actionCadViewer);
 
     // For triggering render updates because RoboDK won't do that otherwise
     QTimer* frameTimer = new QTimer(this);
@@ -139,10 +133,6 @@ QString PluginPhysics::PluginLoad(QMainWindow *mw, QMenuBar *menubar, QStatusBar
         }
     }, Qt::QueuedConnection);
 
-    PhysXEngine::setLoadingDone(true);
-
-    // Test VHACD integration
-    testVHACDIntegration();
 
     // return string is reserverd for future compatibility
     return "";
@@ -159,26 +149,7 @@ void PluginPhysics::PluginUnload(){
         m_materialManager = nullptr;
     }
     
-    if (m_objectPropertiesManager) {
-        delete m_objectPropertiesManager;
-        m_objectPropertiesManager = nullptr;
-    }
-    
-    // Clean up scene configuration dialog
-    if (m_sceneConfigDialog) {
-        delete m_sceneConfigDialog;
-        m_sceneConfigDialog = nullptr;
-    }
-    
-    // Clean up physics engine
-    if (m_physicsEngine) {
-        m_physicsEngine->cleanup();
-        delete m_physicsEngine;
-        m_physicsEngine = nullptr;
-    }
-    
     // Physics cleanup is now handled by PhysXEngine
-
     if (actionSceneConfig != nullptr){
         actionSceneConfig->deleteLater();
         actionSceneConfig = nullptr;
@@ -190,6 +161,10 @@ void PluginPhysics::PluginUnload(){
     if (actionCreateSoftBody != nullptr){
         actionCreateSoftBody->deleteLater();
         actionCreateSoftBody = nullptr;
+    }
+    if (actionCadViewer != nullptr){
+        actionCadViewer->deleteLater();
+        actionCadViewer = nullptr;
     }
 }
 
@@ -203,88 +178,49 @@ bool PluginPhysics::PluginItemClick(Item item, QMenu *menu, TypeClick click_type
     }
 
     if (item->Type() == IItem::ITEM_TYPE_OBJECT) {
-        // Check if this object is already in the PhysX simulation
-        bool isInPhysX = m_physicsEngine ? m_physicsEngine->isObjectInSimulation(item) : false;
-
         // Create a checkbox action for objects
         QAction* physXAction = menu->addAction("PhysX Simulation");
         physXAction->setCheckable(true);
-        physXAction->setChecked(isInPhysX);
 
         connect(physXAction, &QAction::toggled, this, [this, item](bool checked) {
 
             if (checked) {
                 // Add object to PhysX simulation
                 qDebug() << "Adding object to PhysX simulation";
-
-                // Use the physics engine
-                if (m_physicsEngine && m_physicsEngine->addObject(item)) {
-                    qDebug() << "Successfully added object using PhysXEngine";
-                    
-                    // Automatically assign Wood material to new objects
-                    if (m_materialManager) {
-                        m_materialManager->setObjectMaterial(item, "Wood");
-                        qDebug() << "Automatically assigned Wood material to new object";
-                    }
-                } else {
-                    qDebug() << "Failed to add object using PhysXEngine";
-                }
             } else {
                 // Remove object from PhysX simulation
                 qDebug() << "Removing object from PhysX simulation";
-
-                // Use the physics engine
-                if (m_physicsEngine && m_physicsEngine->removeObject(item)) {
-                    qDebug() << "Successfully removed object using PhysXEngine";
-                } else {
-                    qDebug() << "Failed to remove object using PhysXEngine";
-                }
             }
 
         }, Qt::QueuedConnection);
         
         // Add material selection submenu for objects in simulation
-        if (isInPhysX && m_materialManager) {
-            menu->addSeparator();
-            
-            QMenu* materialMenu = menu->addMenu("Material");
-            
-            // Get current material
-            QString currentMaterial = m_materialManager->getObjectMaterial(item);
-            
-            // Add available materials
-            QStringList materials = m_materialManager->getAvailableMaterials();
-            for (const QString& materialName : materials) {
-                QAction* materialAction = materialMenu->addAction(materialName);
-                materialAction->setCheckable(true);
-                materialAction->setChecked(currentMaterial == materialName);
-                
-                connect(materialAction, &QAction::triggered, this, [this, item, materialName]() {
+        menu->addSeparator();
 
-                    m_materialManager->setObjectMaterial(item, materialName);
+        QMenu* materialMenu = menu->addMenu("Material");
 
-                }, Qt::QueuedConnection);
-            }
+        // Add available materials
+        QStringList materials = m_materialManager->getAvailableMaterials();
+        for (const QString& materialName : materials) {
+            QAction* materialAction = materialMenu->addAction(materialName);
+            materialAction->setCheckable(true);
+
+            connect(materialAction, &QAction::triggered, this, [this, item, materialName]() {
+            }, Qt::QueuedConnection);
         }
         
         // Add object properties option for objects in simulation
-        if (isInPhysX) {
-            menu->addSeparator();
-            QAction* propertiesAction = menu->addAction("Object Properties");
-            connect(propertiesAction, &QAction::triggered, this, [this, item]() {
-                showObjectProperties(item);
-            }, Qt::QueuedConnection);
-        }
+        menu->addSeparator();
+        QAction* propertiesAction = menu->addAction("Object Properties");
+        connect(propertiesAction, &QAction::triggered, this, [this, item]() {
+            showObjectProperties(item);
+        }, Qt::QueuedConnection);
     }
     
     if (item->Type() == IItem::ITEM_TYPE_ROBOT) {
-        // Check if this robot is already in the PhysX simulation
-        bool isInPhysX = m_physicsEngine ? m_physicsEngine->isRobotInSimulation(item) : false;
-
         // Create a checkbox action for robots
         QAction* physXAction = menu->addAction("PhysX Robot Simulation");
         physXAction->setCheckable(true);
-        physXAction->setChecked(isInPhysX);
 
         connect(physXAction, &QAction::toggled, this, [this, item](bool checked) {
 
@@ -292,22 +228,9 @@ bool PluginPhysics::PluginItemClick(Item item, QMenu *menu, TypeClick click_type
                 // Add robot to PhysX simulation
                 qDebug() << "Adding robot to PhysX simulation";
 
-                // Use the physics engine
-                if (m_physicsEngine && m_physicsEngine->addRobot(item)) {
-                    qDebug() << "Successfully added robot using PhysXEngine";
-                } else {
-                    qDebug() << "Failed to add robot using PhysXEngine";
-                }
             } else {
                 // Remove robot from PhysX simulation
                 qDebug() << "Removing robot from PhysX simulation";
-
-                // Use the physics engine
-                if (m_physicsEngine && m_physicsEngine->removeRobot(item)) {
-                    qDebug() << "Successfully removed robot using PhysXEngine";
-                } else {
-                    qDebug() << "Failed to remove robot using PhysXEngine";
-                }
             }
 
         }, Qt::QueuedConnection);
@@ -329,34 +252,8 @@ void PluginPhysics::PluginEvent(TypeEvent event_type){
     switch (event_type) {
     case EventRender:
         // Render debug visualization
-        if (m_physicsEngine) {
-            m_physicsEngine->renderDebugGeometry();
-        }
         break;
     case EventMoved:
-    {
-        if (elapsedTimer == nullptr) {
-            elapsedTimer = new QElapsedTimer();
-            elapsedTimer->start();
-        }
-        if (!PhysXEngine::isLoadingDone()) {
-            return;
-        }
-
-        qint64 elapsed = elapsedTimer->nsecsElapsed();
-        float deltaTime = elapsed / 1000000000.0f;
-        elapsedTimer->restart();
-
-        if (deltaTime == 0) {
-            return;
-        }
-
-        // Use the physics engine for extended simulation step
-        if (m_physicsEngine) {
-            m_physicsEngine->stepSimulationExtended(deltaTime);
-        }
-        isRenderDone = true;
-    }
         break;
     case EventChanged:
         break;
@@ -522,11 +419,6 @@ void PluginPhysics::showMaterialManager()
 
 void PluginPhysics::showObjectProperties(Item item)
 {
-    if (!m_objectPropertiesManager) {
-        qWarning() << "Object properties manager not initialized";
-        return;
-    }
-    
     if (!item) {
         // This version is called from the menu action without a specific item
         // We could show a dialog to select an object, or just show a message
@@ -534,48 +426,17 @@ void PluginPhysics::showObjectProperties(Item item)
                                "Please right-click on an object in the scene to edit its properties.");
         return;
     }
-    
-    // Create and show the object properties dialog
-    ObjectPropertiesDialog dialog(item, m_objectPropertiesManager, m_materialManager, MainWindow);
-    if (dialog.exec() == QDialog::Accepted) {
-        qDebug() << "Object properties updated for" << item->Name();
-    }
+
 }
 
 void PluginPhysics::showSoftBodyDialog()
+{       
+
+}
+
+void PluginPhysics::showCadViewer()
 {
-    if (!m_physicsEngine) {
-        qWarning() << "Physics engine not initialized";
-        return;
-    }
-    
-    // Create and show the soft body configuration dialog
-    SoftBodyConfigDialog dialog(MainWindow);
-    
-    // Connect the dialog's signal to handle configuration acceptance
-    connect(&dialog, &SoftBodyConfigDialog::configAccepted, this, [this](const SoftBodyConfig& config) {
-        // Always ask user to select an existing object to use as the soft body
-        Item softBodyItem = RDK->ItemUserPick("Select an object to convert to a soft body", IItem::ITEM_TYPE_OBJECT);
-        if (!softBodyItem) {
-            qWarning() << "No object selected for soft body creation";
-            StatusBar->showMessage(tr("No object selected"), 3000);
-            return;
-        }
-        
-        // Add the soft body to the physics simulation
-        if (m_physicsEngine->addSoftBody(softBodyItem, config)) {
-            qDebug() << "Successfully created soft body:" << softBodyItem->Name();
-            StatusBar->showMessage(tr("Soft body created successfully"), 3000);
-        } else {
-            qWarning() << "Failed to create soft body";
-            StatusBar->showMessage(tr("Failed to create soft body"), 3000);
-        }
-    });
-    
-    // Show the dialog
-    if (dialog.exec() == QDialog::Accepted) {
-        qDebug() << "Soft body configuration dialog accepted";
-    } else {
-        qDebug() << "Soft body configuration dialog cancelled";
-    }
+    CadViewerDialog* dialog = new CadViewerDialog(MainWindow);
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    dialog->show();
 }

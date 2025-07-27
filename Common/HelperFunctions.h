@@ -17,6 +17,8 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QFile>
+#include <QJsonParseError>
 #include <TopoDS_Shape.hxx>
 #include <TopoDS_Face.hxx>
 #include <TopoDS_Edge.hxx>
@@ -26,7 +28,13 @@
 #include <TDF_LabelSequence.hxx>
 #include <XCAFDoc_ShapeTool.hxx>
 #include <XCAFDoc_ColorTool.hxx>
+#include <XCAFDoc_DocumentTool.hxx>
+#include <XCAFApp_Application.hxx>
 #include <TDocStd_Document.hxx>
+#include <TDocStd_Application.hxx>
+#include <BinDrivers.hxx>
+#include <XmlDrivers.hxx>
+#include <TCollection_ExtendedString.hxx>
 #include <vector>
 #include <set>
 #include <unordered_map>
@@ -45,12 +53,19 @@
 #include <QDialog>
 #include <QPoint>
 #include <QDebug>
+#include <QGroupBox>
+#include <QGridLayout>
+#include "SimulationManager.h"
 
 // Forward declarations
 class CadOpenGLWidget;
 class CadTreeModel;
 class CustomModelTreeModel;
 class RailJsonEditorDialog;
+
+// Global vectors for tracking tree views and OpenGL widgets
+extern std::vector<QTreeView*> g_treeViews;
+extern std::vector<CadOpenGLWidget*> g_openGLViews;
 
 // All helper function declarations from main.cpp go here
 void setParentPointersRecursive(CadNode* node, CadNode* parent = nullptr);
@@ -101,6 +116,32 @@ void adjustSubtreeTransforms(const CadNode* src, CadNode* copy, const TopLoc_Loc
 double computeBoundingBoxLength(const CadNode* node, const QVector3D& axis);
 void addRailToPhysicsPreview(CadNode* railNode, std::shared_ptr<CadNode> physicsPreviewRoot);
 void expandRailInPhysicsPreview(CadNode* railNode, std::shared_ptr<CadNode> physicsPreviewRoot, CadOpenGLWidget* oglWidget);
+
+// Shared CAD viewer functions
+bool loadStepFile(const QString& stepFile,
+                  Handle(TDocStd_Document)& doc,
+                  std::shared_ptr<CadNode>& cadRoot,
+                  std::unique_ptr<XCAFLabelNode>& labelRoot,
+                  Handle(XCAFDoc_ShapeTool)& shapeTool,
+                  Handle(XCAFDoc_ColorTool)& colorTool);
+
+template <typename ModelType>
+void connectTreeAndViewer(QTreeView* tree, CadOpenGLWidget* viewer, ModelType* model);
+
+void setupContextMenu(QTreeView* treeView, CustomModelTreeModel* model, const Handle(TDocStd_Document)& doc);
+
+// New comprehensive context menu setup function that can handle different node types
+void setupComprehensiveContextMenu(QTreeView* treeView, 
+                                   QAbstractItemModel* model, 
+                                   const Handle(TDocStd_Document)& doc,
+                                   CadOpenGLWidget* openGLViewer = nullptr);
+
+void initTreeAndOpenGLWidget(std::shared_ptr<CadNode>& inputRoot,
+                             QTabWidget* treeTabWidget,
+                             QTabWidget* openGLTabWidget,
+                             const QString& name,
+                             const Handle(TDocStd_Document)& doc,
+                             SimulationManager* simManager = nullptr);
 TDF_Label findLabelForShape(const Handle(XCAFDoc_ShapeTool)& shapeTool, const TDF_Label& label, const TopoDS_Shape& targetShape);
 TDF_Label findLabelForFaceOrEdge(const Handle(XCAFDoc_ShapeTool)& shapeTool, const TDF_Label& label, const TopoDS_Shape& targetShape);
 bool loadFromJsonAndBin(const QString& railJsonFile, Handle(TDocStd_Document)& doc, std::shared_ptr<CadNode>& cadRoot, std::unique_ptr<XCAFLabelNode>& labelRoot, Handle(XCAFDoc_ShapeTool)& shapeTool, Handle(XCAFDoc_ColorTool)& colorTool, std::shared_ptr<CadNode>& customModelRootContainer, std::shared_ptr<CadNode>& customModelRoot, bool& loadedFromJsonBin);

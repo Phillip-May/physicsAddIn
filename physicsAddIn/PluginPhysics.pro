@@ -29,6 +29,8 @@ CONFIG += c++17
 #QT += core gui
 QT += widgets
 QT += network   # Allows using QTcpSocket
+QT += opengl
+LIBS += -lopengl32 -lglu32
 
 # Define your plugin name (name of the DLL file generated)
 TARGET          = PluginPhysics
@@ -84,10 +86,12 @@ CONFIG(release, debug|release) {
 # This can be modified manually or automatically by Qt Creator
 HEADERS += \
     IPhysicsEngine.h \
-    pluginPhysics.h
+    pluginPhysics.h \
+    CadViewerDialog.h
 
 SOURCES += \
-    pluginPhysics.cpp
+    pluginPhysics.cpp \
+    CadViewerDialog.cpp
 
 include(../Common/Common.pri)
 
@@ -116,6 +120,13 @@ INCLUDEPATH += ../robodk_interface
 # Add VHACD include path
 INCLUDEPATH += $$PWD/v-hacd-4.1.0/include
 
+#--------------------------
+# OpenCascade 7.6.0 Library Integration
+INCLUDEPATH += C:/OpenCASCADE-7.6.0-vc14-64/opencascade-7.6.0/inc
+
+#--------------------------
+# CoACD Library Integration
+INCLUDEPATH += ../external/CoACD/public
 
 #--------------------------
 # Include paths (adjust to your PhysX SDK install location)
@@ -135,8 +146,19 @@ DEFINES += PX_PHYSX_STATIC_LIB \
                                            -lPhysXCooking_64
 
            LIBS += C:/PhysX-107.0-physx-5.6.0/physx/bin/win.x86_64.vc142.md/release/PhysXPvdSDK_static_64.lib
-           LIBS += C:/PhysX-107.0-physx-5.6.0/physx/bin/win.x86_64.vc142.md/release/PhysXExtensions_static_64.lib
-           LIBS += -L$$PWD/v-hacd-4.1.0/build/ -lVHACD
+           LIBS += C:/PhysX-107.0-physx-5.6.0/physx/bin/win.x86_64.vc142.md/release/PhysXExtensions_static_64.lib           
+           # OpenCascade Libraries
+           LIBS += -LC:/OpenCASCADE-7.6.0-vc14-64/opencascade-7.6.0/win64/vc14/lib \
+               -lTKernel -lTKMath -lTKBRep -lTKSTEP -lTKSTEP209 -lTKSTEPAttr -lTKSTEPBase -lTKIGES -lTKXSBase -lTKShHealing -lTKTopAlgo -lTKGeomBase -lTKGeomAlgo -lTKG2d -lTKG3d -lTKMesh -lTKXCAF -lTKXDESTEP -lTKXDEIGES -lTKCAF -lTKLCAF -lTKCDF -lTKV3d -lTKOpenGl -lTKService -lTKStd -lTKStdL -lTKXml -lTKXmlL -lTKXmlTObj -lTKXmlXCAF -lTKBin -lTKBinL -lTKBinTObj -lTKBinXCAF -lTKTObj -lTKTObjDRAW -lTKDCAF -lTKDFBrowser -lTKDraw -lTKFeat -lTKFillet -lTKHLR -lTKIVtk -lTKIVtkDraw -lTKMessageModel -lTKMessageView -lTKOffset -lTKOpenGles -lTKOpenGlesTest -lTKOpenGlTest -lTKPrim -lTKQADraw -lTKRWMesh -lTKShapeView -lTKTopTest -lTKTreeModel -lTKView -lTKViewerTest -lTKVInspector -lTKVRML -lTKXMesh -lTKXSBase -lTKXSDRAW
+           
+           # CoACD Libraries
+           LIBS += C:/Users/Admin/Documents/physicsAddIn/external/CoACD/buildMD/Release/coacd.lib \
+               C:/Users/Admin/Documents/physicsAddIn/external/CoACD/buildMD/_deps/boost-build/libs/random/Release/libboost_random-vc142-mt-x64-1_81.lib \
+               C:/Users/Admin/Documents/physicsAddIn/external/CoACD/buildMD/_deps/zlib-build/Release/zlibstatic.lib \
+               C:/Users/Admin/Documents/physicsAddIn/external/CoACD/buildMD/_deps/boost-build/libs/iostreams/Release/libboost_iostreams-vc142-mt-x64-1_81.lib \
+               C:/Users/Admin/Documents/physicsAddIn/external/CoACD/buildMD/msvc_19.29_cxx20_64_md_release/tbb12.lib \
+               C:/Users/Admin/Documents/physicsAddIn/external/CoACD/buildMD/_deps/openvdb-build/openvdb/openvdb/Release/libopenvdb.lib \
+               C:/Users/Admin/Documents/physicsAddIn/external/CoACD/buildMD/_deps/spdlog-build/Release/spdlog.lib
 } else {
 DEFINES += PX_PHYSX_STATIC_LIB \
            _DEBUG # or NDEBUG for release builds
@@ -151,4 +173,17 @@ LIBS += -LC:/PhysX-107.0-physx-5.6.0/physx/bin/win.x86_64.vc142.md/debug/ -lPhys
 LIBS += C:/PhysX-107.0-physx-5.6.0/physx/bin/win.x86_64.vc142.md/debug/PhysXPvdSDK_static_64.lib
 LIBS += C:/PhysX-107.0-physx-5.6.0/physx/bin/win.x86_64.vc142.md/debug/PhysXExtensions_static_64.lib
 LIBS += -L$$PWD/v-hacd-4.1.0/build/ -lVHACD
+
+# OpenCascade Libraries (same for debug)
+LIBS += -LC:/OpenCASCADE-7.6.0-vc14-64/opencascade-7.6.0/win64/vc14/lib \
+    -lTKernel -lTKMath -lTKBRep -lTKSTEP -lTKSTEP209 -lTKSTEPAttr -lTKSTEPBase -lTKIGES -lTKXSBase -lTKShHealing -lTKTopAlgo -lTKGeomBase -lTKGeomAlgo -lTKG2d -lTKG3d -lTKMesh -lTKXCAF -lTKXDESTEP -lTKXDEIGES -lTKCAF -lTKLCAF -lTKCDF -lTKV3d -lTKOpenGl -lTKService -lTKStd -lTKStdL -lTKXml -lTKXmlL -lTKXmlTObj -lTKXmlXCAF -lTKBin -lTKBinL -lTKBinTObj -lTKBinXCAF -lTKTObj -lTKTObjDRAW -lTKDCAF -lTKDFBrowser -lTKDraw -lTKFeat -lTKFillet -lTKHLR -lTKIVtk -lTKIVtkDraw -lTKMessageModel -lTKMessageView -lTKOffset -lTKOpenGles -lTKOpenGlesTest -lTKOpenGlTest -lTKPrim -lTKQADraw -lTKRWMesh -lTKShapeView -lTKTopTest -lTKTreeModel -lTKView -lTKViewerTest -lTKVInspector -lTKVRML -lTKXMesh -lTKXSBase -lTKXSDRAW
+
+# CoACD Libraries (same for debug)
+LIBS += C:/Users/Admin/Documents/physicsAddIn/external/CoACD/buildMD/Release/coacd.lib \
+    C:/Users/Admin/Documents/physicsAddIn/external/CoACD/buildMD/_deps/boost-build/libs/random/Release/libboost_random-vc142-mt-x64-1_81.lib \
+    C:/Users/Admin/Documents/physicsAddIn/external/CoACD/buildMD/_deps/zlib-build/Release/zlibstatic.lib \
+    C:/Users/Admin/Documents/physicsAddIn/external/CoACD/buildMD/_deps/boost-build/libs/iostreams/Release/libboost_iostreams-vc142-mt-x64-1_81.lib \
+    C:/Users/Admin/Documents/physicsAddIn/external/CoACD/buildMD/msvc_19.29_cxx20_64_md_release/tbb12.lib \
+    C:/Users/Admin/Documents/physicsAddIn/external/CoACD/buildMD/_deps/openvdb-build/openvdb/openvdb/Release/libopenvdb.lib \
+    C:/Users/Admin/Documents/physicsAddIn/external/CoACD/buildMD/_deps/spdlog-build/Release/spdlog.lib
 } 

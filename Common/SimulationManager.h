@@ -91,6 +91,11 @@ public:
     
     // Manually trigger PVD connection
     void connectPvd();
+
+    void startSimulation();
+    void pauseSimulation();
+    void resumeSimulation();
+    void stopSimulation();
 private:
     enum class SimulationCommand {
         START,
@@ -127,10 +132,6 @@ private:
 
     //Gui/main thread side code
     using SimulationUpdateCallback = std::function<void(const SimulationState&)>;
-    void startSimulation();
-    void pauseSimulation();
-    void resumeSimulation();
-    void stopSimulation();
 
     /*
     void addObject(const PhysicsObject& object);

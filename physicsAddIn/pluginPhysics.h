@@ -7,10 +7,7 @@
 #include <QDockWidget>
 #include "iapprobodk.h"
 #include "robodktypes.h"
-#include "PhysXEngine.h"
 #include "MaterialManager.h"
-#include "ObjectPropertiesManager.h"
-#include "SceneConfigurationDialog.h"
 
 class QToolBar;
 class QMenu;
@@ -55,6 +52,7 @@ public:
     QAction *actionSceneConfig;
     QAction *actionMaterialManager;
     QAction *actionCreateSoftBody;
+    QAction *actionCadViewer;
 
 public slots:
 
@@ -62,13 +60,11 @@ private:
     void showMaterialManager();
     void showObjectProperties(Item item = nullptr);
     void showSoftBodyDialog();
+    void showCadViewer();
     void testVHACDIntegration();
     
     // Physics engine and managers
-    PhysXEngine* m_physicsEngine;
     MaterialManager* m_materialManager;
-    ObjectPropertiesManager* m_objectPropertiesManager;
-    SceneConfigurationDialog* m_sceneConfigDialog;
 
 };
 //! [0]

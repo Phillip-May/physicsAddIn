@@ -904,11 +904,11 @@ void CadOpenGLWidget::mouseMoveEvent(QMouseEvent* event) {
         QVector3D camSpace = view.map(camera_.pivotWorldPos);
         float pivotDepth = -camSpace.z();
         // 3. Apply incremental rotation to camera position and orientation (orbit around pivot)
+        float angleY = dx * 0.5f;
         float angleX = dy * 0.5f;
-        float angleZ = dx * 0.5f;
+        QQuaternion rotY = QQuaternion::fromAxisAndAngle(0, 1, 0, angleY);
         QQuaternion rotX = QQuaternion::fromAxisAndAngle(1, 0, 0, angleX);
-        QQuaternion rotZ = QQuaternion::fromAxisAndAngle(0, 0, 1, angleZ);
-        QQuaternion incrementalRot = rotZ * rotX;
+        QQuaternion incrementalRot = rotX * rotY;
         QVector3D camToPivot = cameraPosForOld - camera_.pivotWorldPos;
         QVector3D newCamToPivot = incrementalRot.rotatedVector(camToPivot);
         newCameraPos = camera_.pivotWorldPos + newCamToPivot;

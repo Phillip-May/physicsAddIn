@@ -674,6 +674,8 @@ SimulationManager::SimulationManager(const std::shared_ptr<CadNode>& m_CadNodeRo
     m_CadNodeRoot(m_CadNodeRootIn) {
     std::cout << "[SimulationManager::ctor] Received root node type: " << static_cast<int>(m_CadNodeRootIn->type)
               << ", name: " << m_CadNodeRootIn->name << std::endl;
+    qDebug() << "[SimulationManager::ctor] Received root node type:" << static_cast<int>(m_CadNodeRootIn->type)
+             << ", name:" << QString::fromStdString(m_CadNodeRootIn->name);
     // Initialize state
     m_currentState.time = 0.0f;
     m_currentState.isPaused = true;
@@ -709,7 +711,10 @@ void SimulationManager::buildPhysXSceneFromNodes() {
     std::vector<CadNode*> physicsNodes;
     collectPhysicsNodes(m_CadNodeRoot, physicsNodes);
 
-    qDebug() << "Starting simulation with n actors: " << physicsNodes.size();
+    qDebug() << "[buildPhysXSceneFromNodes] Found" << physicsNodes.size() << "physics nodes for simulation";
+    for (const auto& node : physicsNodes) {
+        qDebug() << "[buildPhysXSceneFromNodes] Physics node:" << QString::fromStdString(node->name);
+    }
 
     // Delegate scene building to PhysXEngine
     m_physXEngine->buildSceneFromNodes(physicsNodes, m_nodeToActor, m_actorToNode);
@@ -725,6 +730,10 @@ void SimulationManager::startSimulation() {
         std::cout << "Simulation is already running" << std::endl;
         return;
     }
+
+    // Debug output to verify which root node is being used
+    qDebug() << "[startSimulation] Using root node type:" << static_cast<int>(m_CadNodeRoot->type)
+             << ", name:" << QString::fromStdString(m_CadNodeRoot->name);
 
     // Print the main thread id
     std::cout << "Main thread id (startSimulation): " << std::this_thread::get_id() << std::endl;
@@ -1095,9 +1104,16 @@ void SimulationManager::connectPvd() {
 
 void SimulationManager::collectPhysicsNodes(const std::shared_ptr<CadNode>& root, std::vector<CadNode*>& outNodes) {
     if (!root) return;
+    
+    // Debug output to track node collection
+    qDebug() << "[collectPhysicsNodes] Checking node:" << QString::fromStdString(root->name) 
+             << ", type:" << static_cast<int>(root->type);
+    
     if (root->type == CadNodeType::Physics) {
+        qDebug() << "[collectPhysicsNodes] Adding Physics node:" << QString::fromStdString(root->name);
         outNodes.push_back(root.get());
     }
+    
     for (const auto& child : root->children) {
         collectPhysicsNodes(child, outNodes);
     }

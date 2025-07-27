@@ -33,25 +33,11 @@ INCLUDEPATH += C:/PhysX-107.0-physx-5.6.0/PhysX/include \
                C:/PhysX-107.0-physx-5.6.0/PhysX/source/physx/include
 
 SOURCES += \
-    HelperFunctions.cpp \
-    RailJsonEditorDialog.cpp \
-    main.cpp \
-    CadOpenGLWidget.cpp \
-    CadTreeModel.cpp \
-    XCAFLabelTreeModel.cpp \
-    CustomModelTreeModel.cpp \
-    SimulationManager.cpp
+    main.cpp
 
 HEADERS += \
-    ../external/CoACD/public/coacd.h \
-    CadNode.h \
-    CadOpenGLWidget.h \
-    CadTreeModel.h \
-    HelperFunctions.h \
-    RailJsonEditorDialog.h \
-    XCAFLabelTreeModel.h \
-    CustomModelTreeModel.h \
-    SimulationManager.h
+    ../external/CoACD/public/coacd.h
+
 FORMS +=
 
 include(../Common/Common.pri)
