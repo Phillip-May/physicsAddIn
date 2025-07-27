@@ -70,74 +70,6 @@ PhysXEngine::~PhysXEngine() {
     }
 }
 
-// Coordinate system conversion functions
-// PhysX uses Y-up, CAD viewer likely uses Z-up
-PxVec3 convertCADToPhysX(const PxVec3& cadVertex)
-{
-    // Convert CAD coordinate system to PhysX coordinate system
-    // CAD: (X,Y,Z) -> PhysX: (X,Z,Y)
-    PxVec3 physx = PxVec3(cadVertex.x, cadVertex.z, cadVertex.y);
-    return physx;
-}
-
-PxVec3 convertPhysXToCAD(const PxVec3& physxVertex)
-{
-    // Convert PhysX coordinate system to CAD coordinate system
-    // PhysX: (X,Z,Y) -> CAD: (X,Y,Z)
-    PxVec3 cad = PxVec3(physxVertex.x, physxVertex.z, physxVertex.y);
-    return cad;
-}
-
-PxTransform convertCADPoseToPhysX(const PxTransform& cadPose)
-{
-    PxTransform physxPose;
-    // Position: CAD (X,Y,Z) -> PhysX (X,Z,Y)
-    physxPose.p = convertCADToPhysX(cadPose.p);
-
-    // Convert rotation (quaternion to rotation matrix, apply coordinate transformation)
-    PxMat33 cadRotMat(cadPose.q);
-    
-    // Create coordinate system transformation matrix: CAD (X,Y,Z) -> PhysX (X,Z,Y)
-    PxMat33 coordTransform(
-        PxVec3(1, 0, 0),  // X axis stays the same
-        PxVec3(0, 0, 1),  // Y axis becomes Z axis
-        PxVec3(0, 1, 0)   // Z axis becomes Y axis
-    );
-
-    // Apply transformation: physxRot = coordTransform * cadRot * coordTransform^T
-    PxMat33 physxRotMat = coordTransform * cadRotMat * coordTransform.getTranspose();
-
-    // Convert back to quaternion
-    physxPose.q = PxQuat(physxRotMat);
-
-    return physxPose;
-}
-
-PxTransform convertPhysXPoseToCAD(const PxTransform& physxPose)
-{
-    PxTransform cadPose;
-    // Position: PhysX (X,Z,Y) -> CAD (X,Y,Z)
-    cadPose.p = convertPhysXToCAD(physxPose.p);
-
-    // Convert rotation (quaternion to rotation matrix, apply inverse coordinate transformation)
-    PxMat33 physxRotMat(physxPose.q);
-    
-    // Create inverse coordinate system transformation matrix: PhysX (X,Z,Y) -> CAD (X,Y,Z)
-    PxMat33 coordTransformInv(
-        PxVec3(1, 0, 0),  // X axis stays the same
-        PxVec3(0, 0, 1),  // Y axis becomes Z axis
-        PxVec3(0, 1, 0)   // Z axis becomes Y axis
-    );
-
-    // Apply inverse transformation: cadRot = coordTransformInv * physxRot * coordTransformInv^T
-    PxMat33 cadRotMat = coordTransformInv * physxRotMat * coordTransformInv.getTranspose();
-
-    // Convert back to quaternion
-    cadPose.q = PxQuat(cadRotMat);
-
-    return cadPose;
-}
-
 PxFilterFlags PhysXEngine::simulationFilterShader (
     PxFilterObjectAttributes attributes0, PxFilterData filterData0,
     PxFilterObjectAttributes attributes1, PxFilterData filterData1,
@@ -241,10 +173,9 @@ bool PhysXEngine::initializePhysX(const std::shared_ptr<CadNode>& rootNode)
     
     qDebug() << "PhysX physics created successfully with PVD support";
 
-    // Initialize gravity for PhysX (Y-up coordinate system) - using value from PhysXEngineOld.cpp
-    // Gravity points down in Y direction in PhysX
-    // This corresponds to gravity pointing down in Z direction in CAD coordinates
-    m_gravity = PxVec3(0.0f, -9806.65f, 0.0f);  // Use mm/s² units like in PhysXEngineOld.cpp
+    // Initialize gravity for PhysX (Z-up coordinate system) - using value from PhysXEngineOld.cpp
+    // Gravity points down in Z direction in PhysX (same as CAD coordinates)
+    m_gravity = PxVec3(0.0f, 0.0f, -9806.65f);  // Use mm/s² units like in PhysXEngineOld.cpp
     
     // Initialize other PhysX parameters - using values from PhysXEngineOld.cpp for better stability
     m_solverPositionIterations = 32;  // Increased from 4 to 32 for better contact resolution
@@ -378,13 +309,12 @@ bool PhysXEngine::createGroundPlane()
                  << "Size:" << groundPlaneSize << "Thickness:" << groundPlaneThickness;
     }
     
-    // Create ground plane in CAD coordinates (Z-up) and convert to PhysX coordinates
-    // Ground plane Y coordinate in CAD system corresponds to Z coordinate
-    PxVec3 cadGroundPos(0, 0, groundPlaneY);  // CAD coordinates: (X, Y, Z)
-    PxVec3 physxGroundPos = convertCADToPhysX(cadGroundPos);  // Convert to PhysX coordinates: (X, Z, Y)
+    // Create ground plane in PhysX coordinates (Z-up, same as CAD)
+    // Ground plane Z coordinate in PhysX system
+    PxVec3 groundPos(0, 0, groundPlaneY);  // PhysX coordinates: (X, Y, Z)
     
-    m_groundPlane = m_physics->createRigidStatic(PxTransform(physxGroundPos));
-    PxShape* groundShape = m_physics->createShape(PxBoxGeometry(groundPlaneSize, groundPlaneThickness, groundPlaneSize), *m_material);
+    m_groundPlane = m_physics->createRigidStatic(PxTransform(groundPos));
+    PxShape* groundShape = m_physics->createShape(PxBoxGeometry(groundPlaneSize, groundPlaneSize, groundPlaneThickness), *m_material);
 
     // Use enhanced contact offset values from PhysXEngineOld.cpp for better collision detection
     float enhancedContactOffset = m_contactOffset * 2.0f;  // 5.0f * 2.0f = 10.0f
@@ -397,8 +327,7 @@ bool PhysXEngine::createGroundPlane()
     m_scene->addActor(*m_groundPlane);
     groundShape->release();
 
-    qDebug() << "Created ground plane at CAD pos:" << cadGroundPos.x << cadGroundPos.y << cadGroundPos.z
-             << "PhysX pos:" << physxGroundPos.x << physxGroundPos.y << physxGroundPos.z
+    qDebug() << "Created ground plane at pos:" << groundPos.x << groundPos.y << groundPos.z
              << "Size:" << groundPlaneSize << "Thickness:" << groundPlaneThickness;
     qDebug() << "Ground plane contact offset:" << enhancedContactOffset << "rest offset:" << enhancedRestOffset;
     qDebug() << "Ground plane material - static friction:" << m_material->getStaticFriction() 
@@ -565,11 +494,10 @@ void PhysXEngine::buildSceneFromNodes(const std::vector<CadNode*>& physicsNodes,
                 qDebug() << "[PhysX] Skipping hull" << hullIdx << "due to very small volume:" << hullVolume;
                 continue;
             }
-            // Prepare vertices - convert from CAD to PhysX coordinates
+            // Prepare vertices - PhysX and CAD use the same coordinate system
             std::vector<PxVec3> pxVertices(hull.vertices.size());
             for (size_t i = 0; i < hull.vertices.size(); ++i) {
-                PxVec3 cadVertex((float)hull.vertices[i][0], (float)hull.vertices[i][1], (float)hull.vertices[i][2]);
-                pxVertices[i] = convertCADToPhysX(cadVertex);
+                pxVertices[i] = PxVec3((float)hull.vertices[i][0], (float)hull.vertices[i][1], (float)hull.vertices[i][2]);
             }
             // Create convex mesh descriptor
             PxConvexMeshDesc convexDesc;
@@ -606,10 +534,10 @@ void PhysXEngine::buildSceneFromNodes(const std::vector<CadNode*>& physicsNodes,
             shapes.push_back(shape);
         }
 
-        // 2. Create rigid body with proper coordinate conversion
+        // 2. Create rigid body with proper transform
         PxTransform pose;
         
-        // Extract transform from node->loc and convert from CAD to PhysX coordinates
+        // Extract transform from node->loc - PhysX and CAD use the same coordinate system
         if (node->loc.IsIdentity()) {
             pose = PxTransform(PxVec3(0,0,0), PxQuat(0,0,0,1));
         } else {
@@ -618,34 +546,23 @@ void PhysXEngine::buildSceneFromNodes(const std::vector<CadNode*>& physicsNodes,
             
             // Extract position
             gp_Pnt origin = trsf.TranslationPart();
-            PxVec3 cadPos((float)origin.X(), (float)origin.Y(), (float)origin.Z());
-            PxVec3 physxPos = convertCADToPhysX(cadPos);
+            PxVec3 pos((float)origin.X(), (float)origin.Y(), (float)origin.Z());
             
             // Extract rotation matrix
             gp_Mat rotMat = trsf.VectorialPart();
-            PxMat33 cadRotMat(
+            PxMat33 rotMat33(
                 PxVec3((float)rotMat.Value(1,1), (float)rotMat.Value(1,2), (float)rotMat.Value(1,3)),
                 PxVec3((float)rotMat.Value(2,1), (float)rotMat.Value(2,2), (float)rotMat.Value(2,3)),
                 PxVec3((float)rotMat.Value(3,1), (float)rotMat.Value(3,2), (float)rotMat.Value(3,3))
             );
             
-            // Create coordinate system transformation matrix: CAD (X,Y,Z) -> PhysX (X,Z,Y)
-            PxMat33 coordTransform(
-                PxVec3(1, 0, 0),  // X axis stays the same
-                PxVec3(0, 0, 1),  // Y axis becomes Z axis
-                PxVec3(0, 1, 0)   // Z axis becomes Y axis
-            );
-            
-            // Apply transformation: physxRot = coordTransform * cadRot * coordTransform^T
-            PxMat33 physxRotMat = coordTransform * cadRotMat * coordTransform.getTranspose();
-            
-            pose = PxTransform(physxPos, PxQuat(physxRotMat));
+            pose = PxTransform(pos, PxQuat(rotMat33));
         }
         
         PxRigidDynamic* actor = m_physics->createRigidDynamic(pose);
         
         qDebug() << "[PhysX] Created actor for node" << node->name.c_str() 
-                 << "at PhysX pos:" << pose.p.x << pose.p.y << pose.p.z;
+                 << "at pos:" << pose.p.x << pose.p.y << pose.p.z;
 
         // Attach all shapes
         for (PxShape* shape : shapes) {
@@ -967,10 +884,9 @@ void SimulationManager::updateSimulation() {
 
             PxTransform physxPose = actor->getGlobalPose();
             
-            // Convert PhysX pose back to CAD coordinates
-            PxTransform cadPose = convertPhysXPoseToCAD(physxPose);
-            PxVec3 pos = cadPose.p;
-            PxQuat quat = cadPose.q;
+            // Get PhysX pose (same coordinate system as CAD)
+            PxVec3 pos = physxPose.p;
+            PxQuat quat = physxPose.q;
 
             // Convert CAD pose to OpenCASCADE gp_Trsf
             gp_Trsf trsf;
@@ -1005,8 +921,7 @@ void SimulationManager::updateSimulation() {
             if (m_currentState.stepCount < 10) {
                 qDebug() << "[PhysX] Updated node" << node->name.c_str() 
                          << "step:" << m_currentState.stepCount
-                         << "PhysX pos:" << physxPose.p.x << physxPose.p.y << physxPose.p.z
-                         << "CAD pos:" << pos.x << pos.y << pos.z;
+                         << "pos:" << pos.x << pos.y << pos.z;
             }
         }
     }

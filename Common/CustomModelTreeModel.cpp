@@ -14,6 +14,33 @@ const CustomModelTreeModel::NodeType* CustomModelTreeModel::getNode(const QModel
 QModelIndex CustomModelTreeModel::index(int row, int column, const QModelIndex& parent) const {
     const NodeType* parentNode = getNode(parent);
     if (!parentNode) return QModelIndex();
+    
+    // Handle root node case - if parent is invalid, we're at the root level
+    if (!parent.isValid()) {
+        if (row == 0 && column == 0) {
+            return createIndex(0, 0, root_.get());
+        }
+        return QModelIndex();
+    }
+    
+    // If the parent is the root node, show its actual children (not itself)
+    if (parentNode == root_.get()) {
+        int validChildIndex = 0;
+        for (size_t i = 0; i < root_->children.size(); ++i) {
+            auto& childPtr = root_->children[i];
+            if (!childPtr) continue;
+            // Prevent circular reference - don't show root as its own child
+            if (childPtr.get() == root_.get()) continue;
+            
+            if (validChildIndex == row) {
+                return createIndex(row, column, childPtr.get());
+            }
+            validChildIndex++;
+        }
+        return QModelIndex();
+    }
+    
+    // Handle regular child nodes
     if (row < 0 || row >= static_cast<int>(parentNode->children.size())) return QModelIndex();
     auto& childPtr = parentNode->children[row];
     if (!childPtr) return QModelIndex();
@@ -23,9 +50,19 @@ QModelIndex CustomModelTreeModel::index(int row, int column, const QModelIndex& 
 QModelIndex CustomModelTreeModel::parent(const QModelIndex& child) const {
     if (!child.isValid()) return QModelIndex();
     const NodeType* childNode = getNode(child);
-    if (!childNode || childNode == root_.get()) return QModelIndex();
+    if (!childNode) return QModelIndex();
+    
+    // If the child is the root node, return invalid index (root has no parent)
+    if (childNode == root_.get()) return QModelIndex();
+    
     const NodeType* parentNode = getParentNode(childNode);
     if (!parentNode) return QModelIndex();
+    
+    // If the parent is the root node, return the root index
+    if (parentNode == root_.get()) {
+        return createIndex(0, 0, const_cast<NodeType*>(root_.get()));
+    }
+    
     // Find the parent's parent and the row of this parent among its children
     const NodeType* grandParent = getParentNode(parentNode);
     if (!grandParent) return QModelIndex();
@@ -40,6 +77,23 @@ QModelIndex CustomModelTreeModel::parent(const QModelIndex& child) const {
 int CustomModelTreeModel::rowCount(const QModelIndex& parent) const {
     const NodeType* parentNode = getNode(parent);
     if (!parentNode) return 0;
+    
+    // If parent is invalid, we're at the root level - return 1 to show the root node
+    if (!parent.isValid()) {
+        return 1;
+    }
+    
+    // If the parent is the root node, return the number of its actual children (excluding self)
+    if (parentNode == root_.get()) {
+        int count = 0;
+        for (const auto& child : root_->children) {
+            if (child.get() != root_.get()) {
+                count++;
+            }
+        }
+        return count;
+    }
+    
     return static_cast<int>(parentNode->children.size());
 }
 
@@ -77,6 +131,9 @@ const CustomModelTreeModel::NodeType* CustomModelTreeModel::getParentNode(const 
     // Recursively search for the parent
     std::function<const NodeType*(const NodeType*)> findParent = [&](const NodeType* current) -> const NodeType* {
         for (const auto& child : current->children) {
+            // Skip if this is the root and we're looking at the root node
+            if (current == root_.get() && child.get() == root_.get()) continue;
+            
             if (child.get() == node) return current;
             if (child) {
                 const NodeType* res = findParent(child.get());
@@ -89,7 +146,13 @@ const CustomModelTreeModel::NodeType* CustomModelTreeModel::getParentNode(const 
 }
 
 QModelIndex CustomModelTreeModel::indexForNode(const NodeType* node, int column) const {
-    if (!node || node == root_.get()) return QModelIndex();
+    if (!node) return QModelIndex();
+    
+    // If target is the root node, return the root index
+    if (node == root_.get()) {
+        return createIndex(0, column, const_cast<NodeType*>(root_.get()));
+    }
+    
     const NodeType* parent = getParentNode(node);
     if (!parent) return QModelIndex();
     for (size_t i = 0; i < parent->children.size(); ++i) {
