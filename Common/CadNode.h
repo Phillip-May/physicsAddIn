@@ -75,6 +75,7 @@ enum class CadNodeType {
     Turnable,
     Physics, // New: Physics object node
     ConnectionPoint, // New: Connection point node
+    Connection, // New: Connection node (cables, drag chains, etc.)
     Transform, // New: Transform node type
     MutexRoot, // New: Mutex root node type
     // ... add more as needed
@@ -400,6 +401,126 @@ struct ConnectionPointData : public CadNodeDataBase {
     }
 };
 
+// Connection node data for cables, drag chains, etc.
+struct ConnectionNodeData : public CadNodeDataBase {
+    enum class ConnectionType {
+        DragChain,  // Primary connection type for now
+        Cable,
+        Conveyor,
+        Hose,
+        Wire
+    };
+    
+    // Attachment plane and direction for drag chains
+    struct AttachmentConfig {
+        QVector3D planeNormal = QVector3D(0, 0, 1); // Normal vector of the attachment plane
+        QVector3D direction = QVector3D(1, 0, 0);    // Direction vector for the chain
+        bool isLocked = false;                        // Whether this attachment is locked
+        
+        QJsonObject toJson() const {
+            QJsonObject obj;
+            obj["planeNormalX"] = planeNormal.x();
+            obj["planeNormalY"] = planeNormal.y();
+            obj["planeNormalZ"] = planeNormal.z();
+            obj["directionX"] = direction.x();
+            obj["directionY"] = direction.y();
+            obj["directionZ"] = direction.z();
+            obj["isLocked"] = isLocked;
+            return obj;
+        }
+        
+        static AttachmentConfig fromJson(const QJsonObject& obj) {
+            AttachmentConfig config;
+            config.planeNormal = QVector3D(
+                obj["planeNormalX"].toDouble(),
+                obj["planeNormalY"].toDouble(),
+                obj["planeNormalZ"].toDouble()
+            );
+            config.direction = QVector3D(
+                obj["directionX"].toDouble(),
+                obj["directionY"].toDouble(),
+                obj["directionZ"].toDouble()
+            );
+            config.isLocked = obj["isLocked"].toBool();
+            return config;
+        }
+    };
+    
+    ConnectionType connectionType = ConnectionType::Cable;
+    double length = 0.0; // Calculated length between connection points
+    bool isFlexible = true; // Whether the connection can bend/flex
+    double maxBendRadius = 0.0; // Minimum bend radius for flexible connections
+    double extraLength = 0.0; // Extra length for slack and manual adjustments (mm)
+    double pitchLength = 300.0; // Length of each drag chain segment (mm)
+    int segmentCount = 3; // Total number of segments for the drag chain
+    
+    // Attachment configurations for drag chains
+    AttachmentConfig startAttachment;
+    AttachmentConfig endAttachment;
+    
+    // Calculate the total length including bend radius and extra length
+    double getTotalLength() const {
+        return length + extraLength;
+    }
+    
+    // Calculate the effective length for drag chains
+    double getEffectiveLength() const {
+        double baseLength = length;
+        
+        // Add bend radius contribution for drag chains
+        if (isFlexible && maxBendRadius > 0.0) {
+            // Add extra length for bends in drag chain path
+            baseLength += maxBendRadius * 0.2;
+        }
+        
+        // Add extra length for slack and manual adjustments
+        baseLength += extraLength;
+        
+        return baseLength;
+    }
+    
+    QJsonObject toJson() const override {
+        QJsonObject obj;
+        obj["connectionType"] = static_cast<int>(connectionType);
+        obj["length"] = length;
+        obj["isFlexible"] = isFlexible;
+        obj["maxBendRadius"] = maxBendRadius;
+        obj["extraLength"] = extraLength;
+        obj["pitchLength"] = pitchLength;
+        obj["segmentCount"] = segmentCount;
+        obj["startAttachment"] = startAttachment.toJson();
+        obj["endAttachment"] = endAttachment.toJson();
+        return obj;
+    }
+    
+    static std::shared_ptr<ConnectionNodeData> fromJson(const QJsonObject& obj) {
+        auto data = std::make_shared<ConnectionNodeData>();
+        data->connectionType = static_cast<ConnectionType>(obj["connectionType"].toInt());
+        data->length = obj["length"].toDouble();
+        data->isFlexible = obj["isFlexible"].toBool();
+        data->maxBendRadius = obj["maxBendRadius"].toDouble();
+        data->extraLength = obj["extraLength"].toDouble();
+        
+        // Load new fields if they exist
+        if (obj.contains("pitchLength")) {
+            data->pitchLength = obj["pitchLength"].toDouble();
+        }
+        if (obj.contains("segmentCount")) {
+            data->segmentCount = obj["segmentCount"].toInt();
+        }
+        
+        // Load attachment configurations if they exist
+        if (obj.contains("startAttachment")) {
+            data->startAttachment = AttachmentConfig::fromJson(obj["startAttachment"].toObject());
+        }
+        if (obj.contains("endAttachment")) {
+            data->endAttachment = AttachmentConfig::fromJson(obj["endAttachment"].toObject());
+        }
+        
+        return data;
+    }
+};
+
 // 5. The generic CadNode struct
 struct CadNode {
     std::string name;
@@ -464,6 +585,14 @@ struct CadNode {
         return type == CadNodeType::ConnectionPoint ? static_cast<const ConnectionPointData*>(data.get()) : nullptr;
     }
 
+    // Helper to get Connection data safely
+    ConnectionNodeData* asConnection() {
+        return type == CadNodeType::Connection ? static_cast<ConnectionNodeData*>(data.get()) : nullptr;
+    }
+    const ConnectionNodeData* asConnection() const {
+        return type == CadNodeType::Connection ? static_cast<const ConnectionNodeData*>(data.get()) : nullptr;
+    }
+
     // Helper to get MutexRootNodeData safely
     MutexRootNodeData* asMutexRoot() {
         return type == CadNodeType::MutexRoot ? static_cast<MutexRootNodeData*>(data.get()) : nullptr;
@@ -512,6 +641,7 @@ struct CadNode {
         if (type == CadNodeType::Rail && data) dataObj = static_cast<RailNodeData*>(data.get())->toJson();
         else if (type == CadNodeType::Physics && data) dataObj = static_cast<PhysicsNodeData*>(data.get())->toJson();
         else if (type == CadNodeType::ConnectionPoint && data) dataObj = static_cast<ConnectionPointData*>(data.get())->toJson();
+        else if (type == CadNodeType::Connection && data) dataObj = static_cast<ConnectionNodeData*>(data.get())->toJson();
         else if (type == CadNodeType::XCAF && asXCAF()) {
             // Serialize labelPath and shapeIndex
             const XCAFNodeData* xData = asXCAF();
@@ -552,6 +682,7 @@ struct CadNode {
         if (node->type == CadNodeType::Rail) node->data = RailNodeData::fromJson(dataObj);
         else if (node->type == CadNodeType::Physics) node->data = PhysicsNodeData::fromJson(dataObj);
         else if (node->type == CadNodeType::ConnectionPoint) node->data = ConnectionPointData::fromJson(dataObj);
+        else if (node->type == CadNodeType::Connection) node->data = ConnectionNodeData::fromJson(dataObj);
         else if (node->type == CadNodeType::XCAF && dataObj.contains("labelPath")) {
             auto xData = std::make_shared<XCAFNodeData>();
             QJsonArray labelPathArr = dataObj["labelPath"].toArray();

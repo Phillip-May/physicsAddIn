@@ -36,6 +36,7 @@
 #include <QElapsedTimer>
 #include <QDebug>
 #include <sstream>
+#include <cmath>
 
 #include "CadNode.h"
 #include "SimulationManager.h"
@@ -686,6 +687,10 @@ void CadOpenGLWidget::paintGL() {
     
     // Mark that we've processed any simulation updates
     if (m_simulationManager && m_simulationManager->hasNodeUpdates()) {
+        // Rebuild face and edge caches when simulation updates occur
+        // This ensures picking works correctly with physics updates
+        buildFaceCache();
+        buildEdgeCache();
         m_simulationManager->markUpdatesProcessed();
     }
 
@@ -756,6 +761,14 @@ void CadOpenGLWidget::paintGL() {
     if (selectedFrameNode_) {
         drawReferenceFrame(selectedFrameNodeAccumulatedLoc_, 5000.0f);
     }
+    
+    // Render custom drawing callbacks
+    for (const auto& callback : m_customDrawCallbacks) {
+        callback();
+    }
+    
+    // Render connection path segments
+    renderConnectionPathSegments();
     
     // Print end of paintGL
     std::ostringstream endOss;
@@ -1488,9 +1501,9 @@ bool CadOpenGLWidget::pickEdgeAt(const QPoint& pos, QVector3D* outIntersection) 
             gp_Pnt curvePoint;
             try {
                 curve->D0(t, curvePoint);
-                // Apply the node's transformation to the curve point
-                if (!node->loc.IsIdentity()) {
-                    curvePoint.Transform(node->loc.Transformation());
+                // Apply the accumulated transformation to the curve point
+                if (!inst.accumulatedLoc.IsIdentity()) {
+                    curvePoint.Transform(inst.accumulatedLoc.Transformation());
                 }
                 double dist = ray.Distance(curvePoint);
                 if (dist < minDist && dist < 10.0) { // Within 10 units of ray
@@ -1758,7 +1771,9 @@ void CadOpenGLWidget::buildFaceCache() {
     std::function<void(const CadNode*, TopLoc_Location)> collect;
     collect = [&](const CadNode* node, TopLoc_Location accumulatedLoc) {
         if (!node) return;
-        TopLoc_Location newAccumulatedLoc = accumulatedLoc * node->loc;
+        // Use getNodeLocation to get the current location (including physics updates)
+        TopLoc_Location nodeLoc = getNodeLocation(node, m_simulationManager);
+        TopLoc_Location newAccumulatedLoc = accumulatedLoc * nodeLoc;
         const XCAFNodeData* xData = node->asXCAF();
         if (xData && xData->type == TopAbs_FACE && xData->hasFace()) {
             faceNodes.emplace_back(node, newAccumulatedLoc);
@@ -1783,14 +1798,19 @@ void CadOpenGLWidget::buildEdgeCache() {
     edgeCache_.clear();
     if (!rootNode_) return;
     
-    // Optimize edge cache building by pre-allocating and using more efficient traversal
-    std::function<void(CadNode*)> traverse;
-    traverse = [&](CadNode* node) {
-        if (!node || !node->visible) return;
-        XCAFNodeData* xData = node->asXCAF();
-        if (xData->type == TopAbs_EDGE && xData->hasEdge()) {
-            edgeCache_.push_back(EdgeInstance{node});
-        } else if (xData->type == TopAbs_SOLID || xData->type == TopAbs_SHELL || xData->type == TopAbs_COMPOUND) {
+    // Build edge cache with proper accumulated locations
+    std::vector<std::pair<const CadNode*, TopLoc_Location>> edgeNodes;
+    std::function<void(const CadNode*, TopLoc_Location)> collect;
+    collect = [&](const CadNode* node, TopLoc_Location accumulatedLoc) {
+        if (!node) return;
+        // Use getNodeLocation to get the current location (including physics updates)
+        TopLoc_Location nodeLoc = getNodeLocation(node, m_simulationManager);
+        TopLoc_Location newAccumulatedLoc = accumulatedLoc * nodeLoc;
+        
+        const XCAFNodeData* xData = node->asXCAF();
+        if (xData && xData->type == TopAbs_EDGE && xData->hasEdge()) {
+            edgeNodes.emplace_back(node, newAccumulatedLoc);
+        } else if (xData && (xData->type == TopAbs_SOLID || xData->type == TopAbs_SHELL || xData->type == TopAbs_COMPOUND)) {
             // Only add parent nodes for picking if they have significant geometry
             TopoDS_Shape shape = xData->shape;
             if (!shape.IsNull()) {
@@ -1801,15 +1821,17 @@ void CadOpenGLWidget::buildEdgeCache() {
                     if (edgeCount > 10) break; // Limit edge counting for performance
                 }
                 if (edgeCount > 0) {
-                    edgeCache_.push_back(EdgeInstance{node});
+                    edgeNodes.emplace_back(node, newAccumulatedLoc);
                 }
             }
         }
-        for (auto& child : node->children) {
-            traverse(child.get());
+        for (const auto& child : node->children) {
+            collect(child.get(), newAccumulatedLoc);
         }
     };
-    for (auto& child : rootNode_->children) traverse(child.get());
+    // Traverse from the root node itself, not just its children
+    collect(rootNode_, TopLoc_Location());
+    for (const auto& pair : edgeNodes) edgeCache_.push_back(EdgeInstance{const_cast<CadNode*>(pair.first), pair.second});
     
     qint64 cacheTime = cacheTimer.nsecsElapsed();
     if (m_frameCount % 60 == 0) {
@@ -2217,6 +2239,104 @@ void CadOpenGLWidget::renderGroundPlane(const MutexRootNodeData& mutexData) {
     
     // Disable blending
     glDisable(GL_BLEND);
+}
+
+// Custom drawing callback system implementation
+void CadOpenGLWidget::addCustomDrawCallback(const std::function<void()>& callback) {
+    m_customDrawCallbacks.push_back(callback);
+    update();
+}
+
+
+
+void CadOpenGLWidget::clearCustomDrawCallbacks() {
+    m_customDrawCallbacks.clear();
+    update();
+}
+
+void CadOpenGLWidget::setConnectionPathSegments(const std::vector<ConnectionPathSegment>& segments) {
+    qDebug() << "[OpenGL] setConnectionPathSegments called with" << segments.size() << "segments";
+    qDebug() << "[OpenGL] Before assignment, m_connectionPathSegments.size() =" << m_connectionPathSegments.size();
+    m_connectionPathSegments = segments;
+    qDebug() << "[OpenGL] After assignment, m_connectionPathSegments.size() =" << m_connectionPathSegments.size();
+    update();
+}
+
+void CadOpenGLWidget::clearConnectionPathSegments() {
+    qDebug() << "[OpenGL] clearConnectionPathSegments called, clearing" << m_connectionPathSegments.size() << "segments";
+    m_connectionPathSegments.clear();
+    update();
+}
+
+void CadOpenGLWidget::renderConnectionPathSegments() {
+    qDebug() << "[OpenGL] renderConnectionPathSegments called with" << m_connectionPathSegments.size() << "segments";
+    if (m_connectionPathSegments.empty()) {
+        qDebug() << "[OpenGL] No segments to render";
+        return;
+    }
+    
+    qDebug() << "[OpenGL] Starting to render segments...";
+    qDebug() << "[OpenGL] Camera pos:" << camera_.pos << "zoom:" << camera_.zoom;
+    
+    // Save current OpenGL state
+    glPushAttrib(GL_ALL_ATTRIB_BITS);
+    
+    // Enable line smoothing for better visual quality
+    glEnable(GL_LINE_SMOOTH);
+    glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
+    
+    // Enable blending for transparency
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    
+    // Disable depth writing for overlay lines
+    glDepthMask(GL_FALSE);
+    
+    // Disable lighting for consistent colors
+    glDisable(GL_LIGHTING);
+    
+    for (size_t i = 0; i < m_connectionPathSegments.size(); ++i) {
+        const auto& segment = m_connectionPathSegments[i];
+        qDebug() << "[OpenGL] Rendering segment" << i << "from" << segment.start << "to" << segment.end 
+                 << "color:" << segment.color << "width:" << segment.width;
+        
+        // Check for NaN or infinite values
+        if (std::isnan(segment.start.x()) || std::isnan(segment.start.y()) || std::isnan(segment.start.z()) ||
+            std::isnan(segment.end.x()) || std::isnan(segment.end.y()) || std::isnan(segment.end.z()) ||
+            std::isinf(segment.start.x()) || std::isinf(segment.start.y()) || std::isinf(segment.start.z()) ||
+            std::isinf(segment.end.x()) || std::isinf(segment.end.y()) || std::isinf(segment.end.z())) {
+            qDebug() << "[OpenGL] WARNING: Segment" << i << "has invalid coordinates, skipping";
+            continue;
+        }
+        
+        // Set line color and width
+        glColor4f(segment.color.x(), segment.color.y(), segment.color.z(), segment.color.w());
+        glLineWidth(segment.width);
+        
+        // Draw the line segment
+        glBegin(GL_LINES);
+        glVertex3f(segment.start.x(), segment.start.y(), segment.start.z());
+        glVertex3f(segment.end.x(), segment.end.y(), segment.end.z());
+        glEnd();
+        
+        // If this is a bend segment, draw additional visual indicators
+        if (segment.isBend) {
+            qDebug() << "[OpenGL] Drawing bend indicator for segment" << i;
+            // Draw a small sphere at the bend point
+            glPushMatrix();
+            glTranslatef(segment.start.x(), segment.start.y(), segment.start.z());
+            glColor4f(segment.color.x(), segment.color.y(), segment.color.z(), segment.color.w());
+            GLUquadric* quad = gluNewQuadric();
+            gluSphere(quad, segment.width * 2.0f, 8, 4);
+            gluDeleteQuadric(quad);
+            glPopMatrix();
+        }
+    }
+    
+    qDebug() << "[OpenGL] Finished rendering all segments";
+    
+    // Restore OpenGL state
+    glPopAttrib();
 }
 
 

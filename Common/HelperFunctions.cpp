@@ -56,6 +56,7 @@
 #include <QComboBox>
 #include <QPushButton>
 #include "RailJsonEditorDialog.h"
+#include "ConnectionCreationWidget.h"
 
 // Global vectors for tracking tree views and OpenGL widgets
 std::vector<QTreeView*> g_treeViews;
@@ -1917,6 +1918,90 @@ void setupComprehensiveContextMenu(QTreeView* treeView,
                     }
                 });
             }
+            
+            // --- Create Connection ---
+            QAction* createConnectionAction = menu.addAction("Create Connection...");
+            QObject::connect(createConnectionAction, &QAction::triggered, treeView, [=]() {
+                qDebug() << "[ContextMenu] Create Connection action triggered";
+                qDebug() << "[ContextMenu] openGLViewer:" << (openGLViewer ? "valid" : "null");
+                qDebug() << "[ContextMenu] openGLViewer address:" << static_cast<const void*>(openGLViewer);
+                
+                // Create connection widget in a new window
+                QWidget* connectionWindow = new QWidget();
+                connectionWindow->setWindowTitle("Create Connection");
+                connectionWindow->resize(600, 500);
+                
+                auto layout = new QVBoxLayout(connectionWindow);
+                auto connectionWidget = new ConnectionCreationWidget(customModel, connectionWindow);
+                layout->addWidget(connectionWidget);
+                
+                qDebug() << "[ContextMenu] Connection widget created";
+                
+                // Set the OpenGL widget for visualization
+                if (openGLViewer) {
+                    qDebug() << "[ContextMenu] Setting OpenGL widget for connection widget";
+                    connectionWidget->setOpenGLWidget(openGLViewer);
+                } else {
+                    qDebug() << "[ContextMenu] No OpenGL viewer available - this is the problem!";
+                }
+                
+                // Connect widget signals
+                QObject::connect(connectionWidget, &ConnectionCreationWidget::connectionCreated, 
+                    [=](std::shared_ptr<CadNode> connectionNode) {
+                        if (connectionNode) {
+                            // Get the selected connection points
+                            auto point1 = connectionWidget->getPoint1();
+                            auto point2 = connectionWidget->getPoint2();
+                            
+                            if (point1 && point2) {
+                                // Find the best placement location for the connection
+                                CadNode* placementNode = findBestConnectionPlacement(point1.get(), point2.get());
+                                
+                                // If no placement found, use the root node
+                                if (!placementNode) {
+                                    placementNode = const_cast<CadNode*>(customModel->getRootNodePointer());
+                                }
+                                
+                                if (placementNode) {
+                                    // Add the connection to the placement node
+                                    placementNode->children.push_back(connectionNode);
+                                    setParentPointersRecursive(placementNode);
+                                    
+                                    // Update the model - we need to update the placement node's index
+                                    QModelIndex placementIndex = customModel->indexForNode(placementNode);
+                                    if (placementIndex.isValid()) {
+                                        customModel->dataChanged(placementIndex, placementIndex);
+                                    } else {
+                                        // Fallback to updating the root if we can't find the placement index
+                                        QModelIndex rootIndex = customModel->index(0, 0);
+                                        customModel->dataChanged(rootIndex, rootIndex);
+                                    }
+                                    
+                                    // Update OpenGL viewer if available
+                                    if (openGLViewer) {
+                                        openGLViewer->markCacheDirty();
+                                        openGLViewer->update();
+                                    }
+                                    
+                                    QString placementName = QString::fromStdString(placementNode->name);
+                                    QMessageBox::information(treeView, "Success", 
+                                        QString("Connection '%1' created successfully and added to '%2'.").arg(QString::fromStdString(connectionNode->name), placementName));
+                                }
+                            }
+                        }
+                        
+                        // Close the window
+                        connectionWindow->close();
+                    });
+                
+                QObject::connect(connectionWidget, &ConnectionCreationWidget::connectionCancelled, 
+                    [=]() {
+                        connectionWindow->close();
+                    });
+                
+                // Show the window
+                connectionWindow->show();
+            });
         }
         
         // Handle XCAFLabelNode type (XCAFLabelTreeModel)
@@ -2367,4 +2452,463 @@ bool loadFromStep(const QString& stepFile,
     shapeTool = XCAFDoc_DocumentTool::ShapeTool(doc->Main());
     colorTool = XCAFDoc_DocumentTool::ColorTool(doc->Main());
     return true;
+}
+
+// Connection management functions
+std::shared_ptr<CadNode> createConnectionBetweenPoints(
+    const std::string& connectionName,
+    CadNode* point1,
+    CadNode* point2,
+    ConnectionNodeData::ConnectionType connectionType)
+{
+    if (!point1 || !point2 || point1->type != CadNodeType::ConnectionPoint || point2->type != CadNodeType::ConnectionPoint) {
+        return nullptr;
+    }
+    
+    // Check if points can be connected
+    if (!canConnectPoints(point1, point2)) {
+        return nullptr;
+    }
+    
+    // Create the connection node
+    auto connectionNode = std::make_shared<CadNode>();
+    connectionNode->name = connectionName;
+    connectionNode->type = CadNodeType::Connection;
+    connectionNode->color = CADNodeColor::fromSRGB(100, 100, 255); // Blue color for connections
+    
+    // Create connection data
+    auto connectionData = std::make_shared<ConnectionNodeData>();
+    connectionData->connectionType = connectionType;
+    connectionData->length = calculateDistanceBetweenPoints(point1, point2);
+    connectionData->isFlexible = (connectionType == ConnectionNodeData::ConnectionType::Cable || 
+                                 connectionType == ConnectionNodeData::ConnectionType::Hose ||
+                                 connectionType == ConnectionNodeData::ConnectionType::Wire);
+    
+        // Set default values for drag chain parameters
+    connectionData->pitchLength = 300.0; // 300mm pitch length by default for drag chains
+    connectionData->segmentCount = 3; // 3 segments by default for drag chains
+    connectionData->maxBendRadius = 100.0; // Default bend radius for drag chains
+    
+    // Calculate the effective length using drag chain calculation
+    if (connectionType == ConnectionNodeData::ConnectionType::DragChain) {
+        // Use attachment-aware calculation if attachments are locked
+        if (connectionData->startAttachment.isLocked || connectionData->endAttachment.isLocked) {
+            connectionData->length = calculateDragChainLengthWithAttachments(point1, point2,
+                                                                          connectionData->maxBendRadius,
+                                                                          connectionData->pitchLength,
+                                                                          connectionData->segmentCount,
+                                                                          connectionData->startAttachment,
+                                                                          connectionData->endAttachment);
+        } else {
+            // Calculate using pitch length and segments
+            double straightDistance = calculateDistanceBetweenPoints(point1, point2);
+            connectionData->length = connectionData->segmentCount * connectionData->pitchLength;
+            
+            // Add bend radius contribution
+            if (connectionData->maxBendRadius > 0.0) {
+                double typicalSegmentLength = connectionData->pitchLength;
+                int estimatedBends = std::max(1, static_cast<int>(straightDistance / typicalSegmentLength));
+                double bendLength = estimatedBends * (connectionData->maxBendRadius * M_PI / 2.0);
+                double transitionLength = estimatedBends * 20.0;
+                connectionData->length += bendLength + transitionLength;
+            }
+        }
+    } else {
+        // For non-drag chain connections, use standard distance calculation
+        connectionData->length = calculateDistanceBetweenPoints(point1, point2);
+    }
+    
+    connectionNode->data = connectionData;
+    
+    // Add connection points as children
+    connectionNode->children.push_back(std::make_shared<CadNode>(*point1));
+    connectionNode->children.push_back(std::make_shared<CadNode>(*point2));
+    
+    // Set parent pointers
+    setParentPointersRecursive(connectionNode.get());
+    
+    return connectionNode;
+}
+
+bool canConnectPoints(CadNode* point1, CadNode* point2)
+{
+    if (!point1 || !point2 || point1->type != CadNodeType::ConnectionPoint || point2->type != CadNodeType::ConnectionPoint) {
+        return false;
+    }
+    
+    auto data1 = point1->asConnectionPoint();
+    auto data2 = point2->asConnectionPoint();
+    
+    if (!data1 || !data2) {
+        return false;
+    }
+    
+    // Check if both points support the same connection types
+    // For now, we'll allow connection if both points support cables
+    return data1->canConnectCables() && data2->canConnectCables();
+}
+
+double calculateDistanceBetweenPoints(CadNode* point1, CadNode* point2)
+{
+    if (!point1 || !point2) {
+        return 0.0;
+    }
+    
+    // Validate that both nodes are connection points
+    if (point1->type != CadNodeType::ConnectionPoint || point2->type != CadNodeType::ConnectionPoint) {
+        return 0.0;
+    }
+    
+    try {
+        // Find the common parent to use as reference coordinate system
+        CadNode* commonParent = findCommonAncestor(point1, point2);
+        if (!commonParent) {
+            return 0.0;
+        }
+        
+        // Use local positions relative to their immediate parents
+        // This is a simplified approach - in a more complex implementation,
+        // we'd accumulate transforms up to the common parent
+        gp_Pnt pos1 = point1->loc.Transformation().TranslationPart();
+        gp_Pnt pos2 = point2->loc.Transformation().TranslationPart();
+        
+        // Calculate distance using Euclidean distance formula
+        double dx = pos2.X() - pos1.X();
+        double dy = pos2.Y() - pos1.Y();
+        double dz = pos2.Z() - pos1.Z();
+        
+        double distance = sqrt(dx*dx + dy*dy + dz*dz);
+        
+        // Validate the result
+        if (std::isnan(distance) || std::isinf(distance)) {
+            return 0.0;
+        }
+        
+        return distance;
+    }
+    catch (...) {
+        // Handle any exceptions from OpenCascade operations
+        return 0.0;
+    }
+}
+
+double calculateManhattanDistance(CadNode* point1, CadNode* point2)
+{
+    if (!point1 || !point2) {
+        return 0.0;
+    }
+    
+    // Validate that both nodes are connection points
+    if (point1->type != CadNodeType::ConnectionPoint || point2->type != CadNodeType::ConnectionPoint) {
+        return 0.0;
+    }
+    
+    try {
+        // Find the common parent to use as reference coordinate system
+        CadNode* commonParent = findCommonAncestor(point1, point2);
+        if (!commonParent) {
+            return 0.0;
+        }
+        
+        // Use local positions relative to their immediate parents
+        gp_Pnt pos1 = point1->loc.Transformation().TranslationPart();
+        gp_Pnt pos2 = point2->loc.Transformation().TranslationPart();
+        
+        // Calculate Manhattan distance (sum of absolute differences)
+        double dx = std::abs(pos2.X() - pos1.X());
+        double dy = std::abs(pos2.Y() - pos1.Y());
+        double dz = std::abs(pos2.Z() - pos1.Z());
+        
+        double distance = dx + dy + dz;
+        
+        // Validate the result
+        if (std::isnan(distance) || std::isinf(distance)) {
+            return 0.0;
+        }
+        
+        return distance;
+    }
+    catch (...) {
+        // Handle any exceptions from OpenCascade operations
+        return 0.0;
+    }
+}
+
+double calculatePathDistance(CadNode* point1, CadNode* point2, const std::vector<gp_Pnt>& waypoints)
+{
+    if (!point1 || !point2) {
+        return 0.0;
+    }
+    
+    // Validate that both nodes are connection points
+    if (point1->type != CadNodeType::ConnectionPoint || point2->type != CadNodeType::ConnectionPoint) {
+        return 0.0;
+    }
+    
+    try {
+        // Find the common parent to use as reference coordinate system
+        CadNode* commonParent = findCommonAncestor(point1, point2);
+        if (!commonParent) {
+            return 0.0;
+        }
+        
+        // Use local positions relative to their immediate parents
+        gp_Pnt pos1 = point1->loc.Transformation().TranslationPart();
+        gp_Pnt pos2 = point2->loc.Transformation().TranslationPart();
+        
+        double totalDistance = 0.0;
+        gp_Pnt currentPoint = pos1;
+        
+        // Calculate distance through waypoints
+        for (const auto& waypoint : waypoints) {
+            double dx = waypoint.X() - currentPoint.X();
+            double dy = waypoint.Y() - currentPoint.Y();
+            double dz = waypoint.Z() - currentPoint.Z();
+            
+            double segmentDistance = sqrt(dx*dx + dy*dy + dz*dz);
+            
+            if (std::isnan(segmentDistance) || std::isinf(segmentDistance)) {
+                return 0.0;
+            }
+            
+            totalDistance += segmentDistance;
+            currentPoint = waypoint;
+        }
+        
+        // Add final segment to end point
+        double dx = pos2.X() - currentPoint.X();
+        double dy = pos2.Y() - currentPoint.Y();
+        double dz = pos2.Z() - currentPoint.Z();
+        
+        double finalSegmentDistance = sqrt(dx*dx + dy*dy + dz*dz);
+        
+        if (std::isnan(finalSegmentDistance) || std::isinf(finalSegmentDistance)) {
+            return 0.0;
+        }
+        
+        totalDistance += finalSegmentDistance;
+        
+        return totalDistance;
+    }
+    catch (...) {
+        // Handle any exceptions from OpenCascade operations
+        return 0.0;
+    }
+}
+
+double calculateDragChainLength(CadNode* point1, CadNode* point2, double bendRadius, double extraLength)
+{
+    if (!point1 || !point2) {
+        return 0.0;
+    }
+    
+    // Get the straight-line distance using the improved calculation
+    double straightDistance = calculateDistanceBetweenPoints(point1, point2);
+    
+    if (straightDistance <= 0.0) {
+        return 0.0;
+    }
+    
+    // Calculate the total length for drag chains
+    double totalLength = straightDistance;
+    
+    // Add bend radius contribution for drag chains
+    if (bendRadius > 0.0) {
+        // Improved bend calculation based on distance and typical drag chain behavior
+        // For longer distances, we need more bends
+        double typicalSegmentLength = 300.0; // Typical drag chain segment length in mm
+        int estimatedBends = std::max(1, static_cast<int>(straightDistance / typicalSegmentLength));
+        
+        // Each bend adds approximately a quarter circle of length
+        double bendLength = estimatedBends * (bendRadius * M_PI / 2.0);
+        
+        // Add some additional length for the transition between segments
+        double transitionLength = estimatedBends * 20.0; // 20mm per transition
+        
+        totalLength += bendLength + transitionLength;
+    }
+    
+    // Add extra length for slack and manual adjustments
+    totalLength += extraLength;
+    
+    // Ensure we don't return negative or invalid values
+    if (std::isnan(totalLength) || std::isinf(totalLength) || totalLength < 0.0) {
+        return straightDistance + extraLength; // Fallback to basic calculation
+    }
+    
+    return totalLength;
+}
+
+// New function to calculate drag chain length with attachment configurations
+double calculateDragChainLengthWithAttachments(CadNode* point1, CadNode* point2, double bendRadius, double pitchLength, int segmentCount,
+                                             const ConnectionNodeData::AttachmentConfig& startAttachment,
+                                             const ConnectionNodeData::AttachmentConfig& endAttachment)
+{
+    if (!point1 || !point2) {
+        return 0.0;
+    }
+    
+    // Get the straight-line distance
+    double straightDistance = calculateDistanceBetweenPoints(point1, point2);
+    
+    if (straightDistance <= 0.0) {
+        return 0.0;
+    }
+    
+    double totalLength = straightDistance;
+    
+    // Use the specified segment count directly
+    int totalSegments = segmentCount;
+    
+    // Add segments for locked attachments
+    if (startAttachment.isLocked) {
+        totalSegments += 1; // Additional segment for start attachment
+    }
+    
+    if (endAttachment.isLocked) {
+        totalSegments += 1; // Additional segment for end attachment
+    }
+    
+    // Add bend radius contribution
+    if (bendRadius > 0.0) {
+        // Calculate bends based on attachment configurations
+        int estimatedBends = 1; // Base bend
+        
+        if (startAttachment.isLocked && endAttachment.isLocked) {
+            // Two locked attachments require more complex path
+            estimatedBends = 3; // Start bend, middle bend, end bend
+        } else if (startAttachment.isLocked || endAttachment.isLocked) {
+            // One locked attachment
+            estimatedBends = 2; // Start/end bend and middle bend
+        }
+        
+        // Each bend adds approximately a quarter circle of length
+        double bendLength = estimatedBends * (bendRadius * M_PI / 2.0);
+        
+        // Add transition length
+        double transitionLength = estimatedBends * 20.0; // 20mm per transition
+        
+        totalLength += bendLength + transitionLength;
+    }
+    
+    // Calculate length based on segment count
+    totalLength = totalSegments * pitchLength;
+    
+    // Ensure we don't return negative or invalid values
+    if (std::isnan(totalLength) || std::isinf(totalLength) || totalLength < 0.0) {
+        return totalSegments * pitchLength; // Fallback to basic calculation
+    }
+    
+    return totalLength;
+}
+
+std::vector<CadNode*> findConnectionPointsInTree(CadNode* root)
+{
+    std::vector<CadNode*> connectionPoints;
+    
+    if (!root) return connectionPoints;
+    
+    std::function<void(CadNode*)> traverse = [&](CadNode* node) {
+        if (node->type == CadNodeType::ConnectionPoint) {
+            connectionPoints.push_back(node);
+        }
+        
+        for (auto& child : node->children) {
+            traverse(child.get());
+        }
+    };
+    
+    traverse(root);
+    return connectionPoints;
+}
+
+// Helper function to find common ancestor of two nodes
+CadNode* findCommonAncestor(CadNode* node1, CadNode* node2) {
+    if (!node1 || !node2) return nullptr;
+    if (node1 == node2) return node1;
+    
+    // Get paths from root to each node
+    std::vector<CadNode*> path1, path2;
+    
+    // Build path for node1
+    CadNode* current = node1;
+    while (current) {
+        path1.push_back(current);
+        current = current->parent;
+    }
+    
+    // Build path for node2
+    current = node2;
+    while (current) {
+        path2.push_back(current);
+        current = current->parent;
+    }
+    
+    // Find the first common node from the end of both paths
+    int i = path1.size() - 1;
+    int j = path2.size() - 1;
+    
+    while (i >= 0 && j >= 0 && path1[i] == path2[j]) {
+        i--;
+        j--;
+    }
+    
+    // The common ancestor is the last common node
+    if (i + 1 < static_cast<int>(path1.size())) {
+        return path1[i + 1];
+    }
+    
+    // If no common ancestor found, return the root (last node in path1)
+    if (!path1.empty()) {
+        return path1.back();
+    }
+    
+    return nullptr;
+}
+
+// Helper function to find the best placement location for a connection
+CadNode* findBestConnectionPlacement(CadNode* point1, CadNode* point2) {
+    if (!point1 || !point2) return nullptr;
+    
+    // First, find the common ancestor
+    CadNode* commonAncestor = findCommonAncestor(point1, point2);
+    if (!commonAncestor) return nullptr;
+    
+    // If the common ancestor is the root, prefer to place under a physics object
+    // or assembly that contains both points
+    if (commonAncestor->type == CadNodeType::Custom) {
+        // Look for a physics object or assembly that contains both points
+        std::vector<CadNode*> path1, path2;
+        
+        // Build paths from common ancestor to each point
+        CadNode* current = point1;
+        while (current && current != commonAncestor) {
+            path1.push_back(current);
+            current = current->parent;
+        }
+        
+        current = point2;
+        while (current && current != commonAncestor) {
+            path2.push_back(current);
+            current = current->parent;
+        }
+        
+        // Look for physics objects or assemblies in the paths
+        for (auto node : path1) {
+            if (node->type == CadNodeType::Physics || 
+                (node->type == CadNodeType::Custom && node->name.find("Assembly") != std::string::npos)) {
+                return node;
+            }
+        }
+        
+        for (auto node : path2) {
+            if (node->type == CadNodeType::Physics || 
+                (node->type == CadNodeType::Custom && node->name.find("Assembly") != std::string::npos)) {
+                return node;
+            }
+        }
+    }
+    
+    // Default to common ancestor
+    return commonAncestor;
 }

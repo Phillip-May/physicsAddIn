@@ -115,6 +115,18 @@ public:
             return node == other.node && accumulatedLoc == other.accumulatedLoc;
         }
     };
+    
+    // Connection path segment for visualization
+    struct ConnectionPathSegment {
+        QVector3D start;
+        QVector3D end;
+        QVector4D color;
+        float width;
+        bool isBend;
+        
+        ConnectionPathSegment(const QVector3D& s, const QVector3D& e, const QVector4D& c = QVector4D(1, 0, 0, 1), float w = 2.0f, bool bend = false)
+            : start(s), end(e), color(c), width(w), isBend(bend) {}
+    };
 public slots:
     void clearSelection();
     void addToSelection(CadNode* node, const TopLoc_Location& accLoc);
@@ -127,6 +139,19 @@ public slots:
     void setSelectedFrameNode(CadNode* node, const TopLoc_Location& accLoc) { selectedFrameNode_ = node; selectedFrameNodeAccumulatedLoc_ = accLoc; update(); }
     void setSelectedFrameNode(CadNode* node) { selectedFrameNode_ = node; selectedFrameNodeAccumulatedLoc_ = node ? node->loc : TopLoc_Location(); update(); }
     void setSimulationManager(SimulationManager* simManager) { m_simulationManager = simManager; }
+    
+    // Custom drawing callback system
+    void addCustomDrawCallback(const std::function<void()>& callback);
+    void clearCustomDrawCallbacks();
+    
+    // Connection path visualization
+    void setConnectionPathSegments(const std::vector<ConnectionPathSegment>& segments);
+    void clearConnectionPathSegments();
+    void renderConnectionPathSegments();
+
+    // Simulation manager access
+    SimulationManager* getSimulationManager() const { return m_simulationManager; }
+
 protected:
     void initializeGL() override;
     void resizeGL(int w, int h) override;
@@ -231,6 +256,10 @@ private:
     void renderConvexHulls(const PhysicsNodeData* physData);
     void renderConnectionPoint(const CadNode* node, const CADNodeColor& color);
     void renderGroundPlane(const MutexRootNodeData& mutexData);
+    
+    // Custom drawing system
+    std::vector<std::function<void()>> m_customDrawCallbacks;
+    std::vector<ConnectionPathSegment> m_connectionPathSegments;
 
 signals:
     void facePicked(CadNode* node, const TopLoc_Location& accLoc);

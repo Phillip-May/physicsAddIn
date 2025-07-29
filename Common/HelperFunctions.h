@@ -148,4 +148,27 @@ bool loadFromJsonAndBin(const QString& railJsonFile, Handle(TDocStd_Document)& d
 TopoDS_Shape extrudeFace(const TopoDS_Face& face, double distance);
 bool loadFromStep(const QString& stepFile, Handle(TDocStd_Document)& doc, std::shared_ptr<CadNode>& cadRoot, std::unique_ptr<XCAFLabelNode>& labelRoot, Handle(XCAFDoc_ShapeTool)& shapeTool, Handle(XCAFDoc_ColorTool)& colorTool);
 
+// Connection management functions
+std::shared_ptr<CadNode> createConnectionBetweenPoints(
+    const std::string& connectionName,
+    CadNode* point1,
+    CadNode* point2,
+    ConnectionNodeData::ConnectionType connectionType = ConnectionNodeData::ConnectionType::Cable);
+
+bool canConnectPoints(CadNode* point1, CadNode* point2);
+double calculateDistanceBetweenPoints(CadNode* point1, CadNode* point2);
+double calculateManhattanDistance(CadNode* point1, CadNode* point2);
+double calculatePathDistance(CadNode* point1, CadNode* point2, const std::vector<gp_Pnt>& waypoints);
+double calculateDragChainLength(CadNode* point1, CadNode* point2, double bendRadius, double extraLength);
+double calculateDragChainLengthWithAttachments(CadNode* point1, CadNode* point2, double bendRadius, double pitchLength, int extraSegments,
+                                             const ConnectionNodeData::AttachmentConfig& startAttachment,
+                                             const ConnectionNodeData::AttachmentConfig& endAttachment);
+std::vector<CadNode*> findConnectionPointsInTree(CadNode* root);
+
+// Helper function to find common ancestor of two nodes
+CadNode* findCommonAncestor(CadNode* node1, CadNode* node2);
+
+// Helper function to find the best placement location for a connection
+CadNode* findBestConnectionPlacement(CadNode* point1, CadNode* point2);
+
 #endif // QTCADVIEWER_HELPERFUNCTIONS_H 
