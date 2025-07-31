@@ -18,6 +18,7 @@
 #include <QPainter>
 #include <QMouseEvent>
 #include <QFrame>
+#include <set>
 #include "CadNode.h"
 #include "CustomModelTreeModel.h"
 #include "CadOpenGLWidget.h"
@@ -56,12 +57,16 @@ signals:
     void startPointChanged(const QVector3D& point);
     void endPointChanged(const QVector3D& point);
     void controlPointChanged(int index, const QVector3D& point);
+    void controlPointAdded(int index, const QVector3D& point);
+    void controlPointRemoved(int index);
     
 protected:
     void paintEvent(QPaintEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
+    void mouseDoubleClickEvent(QMouseEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
     
 private:
     QVector3D m_startPoint;
@@ -140,10 +145,18 @@ public:
     // Clear the widget state
     void clearState();
     
-    // Clear solver statistics
+        // Clear solver statistics
     void clearSolverStatistics() { 
-        qDebug() << "[ConnectionWidget] clearSolverStatistics called - clearing all statistics";
+        qDebug() << "[ConnectionWidget] clearSolverStatistics called - clearing all statistics and segments";
         m_lastSolverStatistics = StoredSolverStatistics(); 
+        m_solverSegments.clear(); // Also clear stored segments to force re-run
+    }
+    
+    // Clear user modifications to control points
+    void clearUserControlPointModifications() {
+        qDebug() << "[ConnectionWidget] clearUserControlPointModifications called";
+        m_userModifiedControlPointIndices.clear();
+        m_userModifiedControlPoint = false;
     }
     
     // Set the OpenGL widget for visualization
@@ -175,7 +188,10 @@ private slots:
     void onStartPointChanged(const QVector3D& point);
     void onEndPointChanged(const QVector3D& point);
     void onControlPointChanged(int index, const QVector3D& point);
+    void onControlPointAdded(int index, const QVector3D& point);
+    void onControlPointRemoved(int index);
     void onDeviationThresholdChanged(double value);
+    void onChainDimensionsChanged(double value);
     
     // Test function for fixed segment lengths
     void testFixedSegmentLengths();
@@ -217,14 +233,22 @@ private:
     QDoubleSpinBox* m_optimizationStepSpin;
     QDoubleSpinBox* m_curveSmoothnessSpin;
     QDoubleSpinBox* m_deviationThresholdSpin;
+    QDoubleSpinBox* m_chainWidthSpin;
+    QDoubleSpinBox* m_chainHeightSpin;
     
     // Segment count is now always calculated automatically based on pitch length
     
     // Store current control points for visualization (auto-calculated only)
     std::vector<QVector3D> m_currentControlPoints;
     
+    // Store solver segments for 2D visualization
+    std::vector<BezierDragChainSegment> m_solverSegments;
+    
     // Track if user has manually modified the auto-calculated control point
     bool m_userModifiedControlPoint;
+    
+    // Track which specific control points have been modified by the user
+    std::set<int> m_userModifiedControlPointIndices;
     
     // 2D Visualization
     DragChain2DVisualization* m_2dVisualization;

@@ -86,6 +86,9 @@ QPoint CadOpenGLWidget_projectWorldToScreen(const QVector3D& world, int width, i
 static QVector3D unprojectScreenToWorld(const QPoint& screenPos, float depth, int width, int height, const QVector3D& cameraPos, const QQuaternion& cameraRot, float cameraZoom);
 static void accumulateBoundingBox(const CadNode* node, const TopLoc_Location& accumulatedLoc, Bnd_Box& bbox);
 
+// Forward declaration for normalizeVector
+static QVector3D normalizeVector(const QVector3D& vector);
+
 // Function to clear geometry cache
 void CadOpenGLWidget::clearGeometryCache() {
     for (auto& [shapePtr, cache] : m_geometryCache) {
@@ -2301,7 +2304,18 @@ void CadOpenGLWidget::renderConnectionPathSegments() {
     for (size_t i = 0; i < m_connectionPathSegments.size(); ++i) {
         const auto& segment = m_connectionPathSegments[i];
         qDebug() << "[OpenGL] Rendering segment" << i << "from" << segment.start << "to" << segment.end 
-                 << "color:" << segment.color << "width:" << segment.width;
+                 << "color:" << segment.color << "width:" << segment.width << "height:" << segment.height;
+        
+        // Check if segment dimensions are reasonable
+        if (segment.width < 1.0 || segment.height < 1.0) {
+            qDebug() << "[OpenGL] WARNING: Segment" << i << "has very small dimensions! Width:" << segment.width << "Height:" << segment.height;
+        }
+        
+        // Check if segment length is reasonable
+        float segmentLength = (segment.end - segment.start).length();
+        if (segmentLength < 0.1) {
+            qDebug() << "[OpenGL] WARNING: Segment" << i << "has very small length:" << segmentLength;
+        }
         
         // Check for NaN or infinite values
         if (std::isnan(segment.start.x()) || std::isnan(segment.start.y()) || std::isnan(segment.start.z()) ||
@@ -2312,14 +2326,85 @@ void CadOpenGLWidget::renderConnectionPathSegments() {
             continue;
         }
         
-        // Set line color and width
-        glColor4f(segment.color.x(), segment.color.y(), segment.color.z(), segment.color.w());
-        glLineWidth(segment.width);
+        // Calculate segment direction and length
+        QVector3D segmentDirection = normalizeVector(segment.end - segment.start);
         
-        // Draw the line segment
-        glBegin(GL_LINES);
-        glVertex3f(segment.start.x(), segment.start.y(), segment.start.z());
-        glVertex3f(segment.end.x(), segment.end.y(), segment.end.z());
+        // Calculate perpendicular vectors for the cross-section
+        QVector3D up(0, 0, 1);
+        QVector3D right = normalizeVector(QVector3D::crossProduct(segmentDirection, up));
+        if (right.length() < 0.1f) {
+            // If segment is vertical, use a different up vector
+            up = QVector3D(1, 0, 0);
+            right = normalizeVector(QVector3D::crossProduct(segmentDirection, up));
+        }
+        up = normalizeVector(QVector3D::crossProduct(right, segmentDirection));
+        
+        // Calculate the four corners of the rectangular cross-section
+        float halfWidth = segment.width * 0.5f;
+        float halfHeight = segment.height * 0.5f;
+        
+        QVector3D corner1 = segment.start + right * halfWidth + up * halfHeight;
+        QVector3D corner2 = segment.start + right * halfWidth - up * halfHeight;
+        QVector3D corner3 = segment.start - right * halfWidth - up * halfHeight;
+        QVector3D corner4 = segment.start - right * halfWidth + up * halfHeight;
+        
+        QVector3D corner5 = segment.end + right * halfWidth + up * halfHeight;
+        QVector3D corner6 = segment.end + right * halfWidth - up * halfHeight;
+        QVector3D corner7 = segment.end - right * halfWidth - up * halfHeight;
+        QVector3D corner8 = segment.end - right * halfWidth + up * halfHeight;
+        
+        // Set color
+        glColor4f(segment.color.x(), segment.color.y(), segment.color.z(), segment.color.w());
+        
+        // Enable lighting for 3D appearance
+        glEnable(GL_LIGHTING);
+        glEnable(GL_LIGHT0);
+        
+        // Draw the 3D rectangular prism
+        glBegin(GL_QUADS);
+        
+        // Front face
+        glNormal3f(segmentDirection.x(), segmentDirection.y(), segmentDirection.z());
+        glVertex3f(corner1.x(), corner1.y(), corner1.z());
+        glVertex3f(corner2.x(), corner2.y(), corner2.z());
+        glVertex3f(corner6.x(), corner6.y(), corner6.z());
+        glVertex3f(corner5.x(), corner5.y(), corner5.z());
+        
+        // Back face
+        glNormal3f(-segmentDirection.x(), -segmentDirection.y(), -segmentDirection.z());
+        glVertex3f(corner4.x(), corner4.y(), corner4.z());
+        glVertex3f(corner8.x(), corner8.y(), corner8.z());
+        glVertex3f(corner7.x(), corner7.y(), corner7.z());
+        glVertex3f(corner3.x(), corner3.y(), corner3.z());
+        
+        // Right face
+        glNormal3f(right.x(), right.y(), right.z());
+        glVertex3f(corner1.x(), corner1.y(), corner1.z());
+        glVertex3f(corner5.x(), corner5.y(), corner5.z());
+        glVertex3f(corner8.x(), corner8.y(), corner8.z());
+        glVertex3f(corner4.x(), corner4.y(), corner4.z());
+        
+        // Left face
+        glNormal3f(-right.x(), -right.y(), -right.z());
+        glVertex3f(corner2.x(), corner2.y(), corner2.z());
+        glVertex3f(corner3.x(), corner3.y(), corner3.z());
+        glVertex3f(corner7.x(), corner7.y(), corner7.z());
+        glVertex3f(corner6.x(), corner6.y(), corner6.z());
+        
+        // Top face
+        glNormal3f(up.x(), up.y(), up.z());
+        glVertex3f(corner1.x(), corner1.y(), corner1.z());
+        glVertex3f(corner4.x(), corner4.y(), corner4.z());
+        glVertex3f(corner3.x(), corner3.y(), corner3.z());
+        glVertex3f(corner2.x(), corner2.y(), corner2.z());
+        
+        // Bottom face
+        glNormal3f(-up.x(), -up.y(), -up.z());
+        glVertex3f(corner5.x(), corner5.y(), corner5.z());
+        glVertex3f(corner6.x(), corner6.y(), corner6.z());
+        glVertex3f(corner7.x(), corner7.y(), corner7.z());
+        glVertex3f(corner8.x(), corner8.y(), corner8.z());
+        
         glEnd();
         
         // If this is a bend segment, draw additional visual indicators
@@ -2330,7 +2415,7 @@ void CadOpenGLWidget::renderConnectionPathSegments() {
             glTranslatef(segment.start.x(), segment.start.y(), segment.start.z());
             glColor4f(segment.color.x(), segment.color.y(), segment.color.z(), segment.color.w());
             GLUquadric* quad = gluNewQuadric();
-            gluSphere(quad, segment.width * 2.0f, 8, 4);
+            gluSphere(quad, std::max(segment.width, segment.height) * 1.5f, 8, 4);
             gluDeleteQuadric(quad);
             glPopMatrix();
         }
@@ -2431,7 +2516,11 @@ void CadOpenGLWidget::renderControlPointMarkers() {
     glPopAttrib();
 }
 
-
-
-
+// Helper function to normalize a vector
+static QVector3D normalizeVector(const QVector3D& vector)
+{
+    double length = vector.length();
+    if (length < 0.001) return QVector3D(0, 0, 0);
+    return vector / length;
+}
 

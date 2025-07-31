@@ -122,10 +122,11 @@ public:
         QVector3D end;
         QVector4D color;
         float width;
+        float height;
         bool isBend;
         
-        ConnectionPathSegment(const QVector3D& s, const QVector3D& e, const QVector4D& c = QVector4D(1, 0, 0, 1), float w = 2.0f, bool bend = false)
-            : start(s), end(e), color(c), width(w), isBend(bend) {}
+        ConnectionPathSegment(const QVector3D& s, const QVector3D& e, const QVector4D& c = QVector4D(1, 0, 0, 1), float w = 2.0f, float h = 2.0f, bool bend = false)
+            : start(s), end(e), color(c), width(w), height(h), isBend(bend) {}
     };
     
     struct ControlPointMarker {
