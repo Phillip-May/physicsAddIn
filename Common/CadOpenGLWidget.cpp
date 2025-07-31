@@ -770,6 +770,9 @@ void CadOpenGLWidget::paintGL() {
     // Render connection path segments
     renderConnectionPathSegments();
     
+    // Render control point markers
+    renderControlPointMarkers();
+    
     // Print end of paintGL
     std::ostringstream endOss;
     endOss << std::this_thread::get_id();
@@ -2334,6 +2337,95 @@ void CadOpenGLWidget::renderConnectionPathSegments() {
     }
     
     qDebug() << "[OpenGL] Finished rendering all segments";
+    
+    // Restore OpenGL state
+    glPopAttrib();
+}
+
+void CadOpenGLWidget::setControlPointMarkers(const std::vector<ControlPointMarker>& markers) {
+    qDebug() << "[OpenGL] setControlPointMarkers called with" << markers.size() << "markers";
+    m_controlPointMarkers = markers;
+    update();
+}
+
+void CadOpenGLWidget::clearControlPointMarkers() {
+    qDebug() << "[OpenGL] clearControlPointMarkers called, clearing" << m_controlPointMarkers.size() << "markers";
+    m_controlPointMarkers.clear();
+    update();
+}
+
+void CadOpenGLWidget::renderControlPointMarkers() {
+    qDebug() << "[OpenGL] renderControlPointMarkers called with" << m_controlPointMarkers.size() << "markers";
+    if (m_controlPointMarkers.empty()) {
+        qDebug() << "[OpenGL] No control point markers to render";
+        return;
+    }
+    
+    // Save current OpenGL state
+    glPushAttrib(GL_ALL_ATTRIB_BITS);
+    
+    // Enable blending for transparency
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    
+    // Disable depth writing for overlay markers
+    glDepthMask(GL_FALSE);
+    
+    // Disable lighting for consistent colors
+    glDisable(GL_LIGHTING);
+    
+    for (size_t i = 0; i < m_controlPointMarkers.size(); ++i) {
+        const auto& marker = m_controlPointMarkers[i];
+        qDebug() << "[OpenGL] Rendering control point marker" << i << "at" << marker.position 
+                 << "color:" << marker.color << "size:" << marker.size << "label:" << marker.label;
+        
+        // Check for NaN or infinite values
+        if (std::isnan(marker.position.x()) || std::isnan(marker.position.y()) || std::isnan(marker.position.z()) ||
+            std::isinf(marker.position.x()) || std::isinf(marker.position.y()) || std::isinf(marker.position.z())) {
+            qDebug() << "[OpenGL] WARNING: Control point marker" << i << "has invalid coordinates, skipping";
+            continue;
+        }
+        
+        // Set color
+        glColor4f(marker.color.x(), marker.color.y(), marker.color.z(), marker.color.w());
+        
+        // Draw a sphere at the control point position
+        glPushMatrix();
+        glTranslatef(marker.position.x(), marker.position.y(), marker.position.z());
+        
+        GLUquadric* quad = gluNewQuadric();
+        gluSphere(quad, marker.size, 12, 8);
+        gluDeleteQuadric(quad);
+        
+        glPopMatrix();
+        
+        // Draw coordinate axes at the control point to show orientation
+        float axisLength = marker.size * 2.0f;
+        
+        // X-axis (red)
+        glColor4f(1.0f, 0.0f, 0.0f, 1.0f);
+        glLineWidth(2.0f);
+        glBegin(GL_LINES);
+        glVertex3f(marker.position.x(), marker.position.y(), marker.position.z());
+        glVertex3f(marker.position.x() + axisLength, marker.position.y(), marker.position.z());
+        glEnd();
+        
+        // Y-axis (green)
+        glColor4f(0.0f, 1.0f, 0.0f, 1.0f);
+        glBegin(GL_LINES);
+        glVertex3f(marker.position.x(), marker.position.y(), marker.position.z());
+        glVertex3f(marker.position.x(), marker.position.y() + axisLength, marker.position.z());
+        glEnd();
+        
+        // Z-axis (blue)
+        glColor4f(0.0f, 0.0f, 1.0f, 1.0f);
+        glBegin(GL_LINES);
+        glVertex3f(marker.position.x(), marker.position.y(), marker.position.z());
+        glVertex3f(marker.position.x(), marker.position.y(), marker.position.z() + axisLength);
+        glEnd();
+    }
+    
+    qDebug() << "[OpenGL] Finished rendering all control point markers";
     
     // Restore OpenGL state
     glPopAttrib();

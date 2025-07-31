@@ -127,6 +127,16 @@ public:
         ConnectionPathSegment(const QVector3D& s, const QVector3D& e, const QVector4D& c = QVector4D(1, 0, 0, 1), float w = 2.0f, bool bend = false)
             : start(s), end(e), color(c), width(w), isBend(bend) {}
     };
+    
+    struct ControlPointMarker {
+        QVector3D position;
+        QVector4D color;
+        float size;
+        QString label;
+        
+        ControlPointMarker(const QVector3D& pos, const QVector4D& c = QVector4D(1, 1, 0, 1), float s = 8.0f, const QString& l = "")
+            : position(pos), color(c), size(s), label(l) {}
+    };
 public slots:
     void clearSelection();
     void addToSelection(CadNode* node, const TopLoc_Location& accLoc);
@@ -148,6 +158,11 @@ public slots:
     void setConnectionPathSegments(const std::vector<ConnectionPathSegment>& segments);
     void clearConnectionPathSegments();
     void renderConnectionPathSegments();
+    
+    // Control point markers visualization
+    void setControlPointMarkers(const std::vector<ControlPointMarker>& markers);
+    void clearControlPointMarkers();
+    void renderControlPointMarkers();
 
     // Simulation manager access
     SimulationManager* getSimulationManager() const { return m_simulationManager; }
@@ -260,6 +275,7 @@ private:
     // Custom drawing system
     std::vector<std::function<void()>> m_customDrawCallbacks;
     std::vector<ConnectionPathSegment> m_connectionPathSegments;
+    std::vector<ControlPointMarker> m_controlPointMarkers;
 
 signals:
     void facePicked(CadNode* node, const TopLoc_Location& accLoc);

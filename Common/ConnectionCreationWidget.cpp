@@ -2,17 +2,23 @@
 #include "HelperFunctions.h"
 #include "CadOpenGLWidget.h"
 #include "SimulationManager.h"
-#include "DragChainConstraintSolver.h"
+#include "BezierDragChainSolver.h"
 #include <QApplication>
 #include <QScreen>
 #include <QVector3D>
 #include <cmath>
+#include <QPainter>
+#include <QMouseEvent>
+#include <QPainterPath>
+
+
 
 ConnectionCreationWidget::ConnectionCreationWidget(CustomModelTreeModel* model, QWidget* parent)
     : QWidget(parent)
     , m_model(model)
-    , m_point1()
-    , m_point2()
+    , m_point1(nullptr)
+    , m_point2(nullptr)
+    , m_userModifiedControlPoint(false)
 {
     setWindowTitle("Create Connection");
     resize(600, 500);
@@ -78,107 +84,62 @@ void ConnectionCreationWidget::setupUI()
     m_pitchLengthSpin->setRange(10.0, 1000.0);
     m_pitchLengthSpin->setValue(18.0);
     m_pitchLengthSpin->setSuffix(" mm");
-    m_pitchLengthSpin->setToolTip("Length of each drag chain segment");
+    m_pitchLengthSpin->setToolTip("Length of each drag chain segment (segment count is calculated automatically)");
     propertiesLayout->addRow("Pitch Length:", m_pitchLengthSpin);
     
-    m_segmentCountSpin = new QSpinBox();
-    m_segmentCountSpin->setRange(1, 50);
-    m_segmentCountSpin->setValue(3);
-    m_segmentCountSpin->setSuffix(" segments");
-    m_segmentCountSpin->setToolTip("Total number of segments for the drag chain");
-    propertiesLayout->addRow("Segment Count:", m_segmentCountSpin);
+    // Bézier curve solver parameters
+    m_optimizationStepSpin = new QDoubleSpinBox();
+    m_optimizationStepSpin->setRange(0.01, 1.0);
+    m_optimizationStepSpin->setValue(0.1);
+    m_optimizationStepSpin->setSuffix(" step size");
+    m_optimizationStepSpin->setDecimals(2);
+    m_optimizationStepSpin->setToolTip("Optimization step size for control point adjustment");
+    propertiesLayout->addRow("Optimization Step:", m_optimizationStepSpin);
     
-    // Solver parameter controls
-    m_maxIterationsSpin = new QSpinBox();
-    m_maxIterationsSpin->setRange(1, 1000000);
-    m_maxIterationsSpin->setValue(100);
-    m_maxIterationsSpin->setSuffix(" iterations");
-    m_maxIterationsSpin->setToolTip("Maximum number of solver iterations");
-    propertiesLayout->addRow("Max Iterations:", m_maxIterationsSpin);
+    m_curveSmoothnessSpin = new QDoubleSpinBox();
+    m_curveSmoothnessSpin->setRange(0.1, 10.0);
+    m_curveSmoothnessSpin->setValue(1.0);
+    m_curveSmoothnessSpin->setSuffix(" smoothness");
+    m_curveSmoothnessSpin->setDecimals(1);
+    m_curveSmoothnessSpin->setToolTip("Curve smoothness factor (higher = smoother)");
+    propertiesLayout->addRow("Curve Smoothness:", m_curveSmoothnessSpin);
     
-    m_convergenceToleranceSpin = new QDoubleSpinBox();
-    m_convergenceToleranceSpin->setRange(0.001, 10.0);
-    m_convergenceToleranceSpin->setValue(0.01);
-    m_convergenceToleranceSpin->setSuffix(" mm");
-    m_convergenceToleranceSpin->setDecimals(3);
-    m_convergenceToleranceSpin->setToolTip("Convergence tolerance for solver");
-    propertiesLayout->addRow("Convergence Tolerance:", m_convergenceToleranceSpin);
+    // Deviation threshold parameter
+    m_deviationThresholdSpin = new QDoubleSpinBox();
+    m_deviationThresholdSpin->setRange(0.1, 100.0);
+    m_deviationThresholdSpin->setValue(1.8); // Default to 10% of typical pitch length
+    m_deviationThresholdSpin->setSuffix(" mm");
+    m_deviationThresholdSpin->setDecimals(1);
+    m_deviationThresholdSpin->setToolTip("Distance threshold for flagging segments as deviating from the intended path");
+    propertiesLayout->addRow("Deviation Threshold:", m_deviationThresholdSpin);
     
-    m_simulationTimeStepSpin = new QDoubleSpinBox();
-    m_simulationTimeStepSpin->setRange(0.001, 0.1);
-    m_simulationTimeStepSpin->setValue(1.0/60.0);
-    m_simulationTimeStepSpin->setSuffix(" s");
-    m_simulationTimeStepSpin->setDecimals(4);
-    m_simulationTimeStepSpin->setToolTip("Physics simulation time step");
-    propertiesLayout->addRow("Simulation Time Step:", m_simulationTimeStepSpin);
+    // Segment count is now always calculated automatically based on pitch length
+    // Enhanced visualization, strict angle constraints, and path recovery are always enabled
     
     mainLayout->addWidget(propertiesGroup);
     
-    // Attachment configuration for drag chains
-    auto attachmentGroup = new QGroupBox("Attachment Configuration");
-    auto attachmentLayout = new QHBoxLayout(attachmentGroup);
+    // 2D Visualization
+    auto visualizationGroup = new QGroupBox("2D Path Visualization");
+    auto visualizationLayout = new QVBoxLayout(visualizationGroup);
     
-    // Start attachment configuration
-    m_startAttachmentGroup = new QGroupBox("Start Attachment");
-    auto startAttachmentLayout = new QFormLayout(m_startAttachmentGroup);
+    m_2dVisualization = new DragChain2DVisualization();
+    m_2dVisualization->setMinimumHeight(300);
+    m_2dVisualization->setMaximumHeight(400);
+    m_2dVisualization->setToolTip("2D visualization of the drag chain path. Click and drag to move the control point.");
+    visualizationLayout->addWidget(m_2dVisualization);
     
-    m_lockStartAttachmentCheck = new QCheckBox("Lock Start Attachment");
-    m_lockStartAttachmentCheck->setToolTip("Lock the plane and direction for the start of the drag chain");
-    startAttachmentLayout->addRow("", m_lockStartAttachmentCheck);
+    mainLayout->addWidget(visualizationGroup);
     
-    m_startPlaneCombo = new QComboBox();
-    m_startPlaneCombo->addItem("XY Plane (Z+)", 0);
-    m_startPlaneCombo->addItem("XY Plane (Z-)", 1);
-    m_startPlaneCombo->addItem("XZ Plane (Y+)", 2);
-    m_startPlaneCombo->addItem("XZ Plane (Y-)", 3);
-    m_startPlaneCombo->addItem("YZ Plane (X+)", 4);
-    m_startPlaneCombo->addItem("YZ Plane (X-)", 5);
-    m_startPlaneCombo->setToolTip("Plane normal for start attachment");
-    startAttachmentLayout->addRow("Plane Normal:", m_startPlaneCombo);
+    // Connect 2D visualization signals
+    connect(m_2dVisualization, &DragChain2DVisualization::startPointChanged, this, &ConnectionCreationWidget::onStartPointChanged);
+    connect(m_2dVisualization, &DragChain2DVisualization::endPointChanged, this, &ConnectionCreationWidget::onEndPointChanged);
+    connect(m_2dVisualization, &DragChain2DVisualization::controlPointChanged, this, &ConnectionCreationWidget::onControlPointChanged);
     
-    m_startDirectionCombo = new QComboBox();
-    m_startDirectionCombo->addItem("X+ Direction", 0);
-    m_startDirectionCombo->addItem("X- Direction", 1);
-    m_startDirectionCombo->addItem("Y+ Direction", 2);
-    m_startDirectionCombo->addItem("Y- Direction", 3);
-    m_startDirectionCombo->addItem("Z+ Direction", 4);
-    m_startDirectionCombo->addItem("Z- Direction", 5);
-    m_startDirectionCombo->setToolTip("Direction vector for start attachment");
-    startAttachmentLayout->addRow("Direction:", m_startDirectionCombo);
+    // Connect deviation threshold changes
+    connect(m_deviationThresholdSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), 
+            this, &ConnectionCreationWidget::onDeviationThresholdChanged);
     
-    attachmentLayout->addWidget(m_startAttachmentGroup);
-    
-    // End attachment configuration
-    m_endAttachmentGroup = new QGroupBox("End Attachment");
-    auto endAttachmentLayout = new QFormLayout(m_endAttachmentGroup);
-    
-    m_lockEndAttachmentCheck = new QCheckBox("Lock End Attachment");
-    m_lockEndAttachmentCheck->setToolTip("Lock the plane and direction for the end of the drag chain");
-    endAttachmentLayout->addRow("", m_lockEndAttachmentCheck);
-    
-    m_endPlaneCombo = new QComboBox();
-    m_endPlaneCombo->addItem("XY Plane (Z+)", 0);
-    m_endPlaneCombo->addItem("XY Plane (Z-)", 1);
-    m_endPlaneCombo->addItem("XZ Plane (Y+)", 2);
-    m_endPlaneCombo->addItem("XZ Plane (Y-)", 3);
-    m_endPlaneCombo->addItem("YZ Plane (X+)", 4);
-    m_endPlaneCombo->addItem("YZ Plane (X-)", 5);
-    m_endPlaneCombo->setToolTip("Plane normal for end attachment");
-    endAttachmentLayout->addRow("Plane Normal:", m_endPlaneCombo);
-    
-    m_endDirectionCombo = new QComboBox();
-    m_endDirectionCombo->addItem("X+ Direction", 0);
-    m_endDirectionCombo->addItem("X- Direction", 1);
-    m_endDirectionCombo->addItem("Y+ Direction", 2);
-    m_endDirectionCombo->addItem("Y- Direction", 3);
-    m_endDirectionCombo->addItem("Z+ Direction", 4);
-    m_endDirectionCombo->addItem("Z- Direction", 5);
-    m_endDirectionCombo->setToolTip("Direction vector for end attachment");
-    endAttachmentLayout->addRow("Direction:", m_endDirectionCombo);
-    
-    attachmentLayout->addWidget(m_endAttachmentGroup);
-    
-    mainLayout->addWidget(attachmentGroup);
+    mainLayout->addWidget(propertiesGroup);
     
     // Connection info
     auto infoGroup = new QGroupBox("Connection Information");
@@ -205,6 +166,15 @@ void ConnectionCreationWidget::setupUI()
     m_solverIterationsLabel = new QLabel("Solver Iterations: --");
     infoLayout->addRow("Solver Iterations:", m_solverIterationsLabel);
     
+    m_cableLengthLabel = new QLabel("Cable Length: --");
+    infoLayout->addRow("Cable Length:", m_cableLengthLabel);
+    
+    m_segmentCountLabel = new QLabel("Segment Count: --");
+    infoLayout->addRow("Segment Count:", m_segmentCountLabel);
+    
+    m_segmentAnglesLabel = new QLabel("Segment Angles: --");
+    infoLayout->addRow("Segment Angles:", m_segmentAnglesLabel);
+    
     mainLayout->addWidget(infoGroup);
     
     // Buttons
@@ -230,15 +200,8 @@ void ConnectionCreationWidget::setupUI()
     connect(m_isFlexibleCheck, &QCheckBox::toggled, this, &ConnectionCreationWidget::onConnectionTypeChanged);
     connect(m_maxBendRadiusSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &ConnectionCreationWidget::onConnectionTypeChanged);
     connect(m_pitchLengthSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &ConnectionCreationWidget::onConnectionTypeChanged);
-    connect(m_segmentCountSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &ConnectionCreationWidget::onConnectionTypeChanged);
-    
-    // Connect attachment configuration signals
-    connect(m_lockStartAttachmentCheck, &QCheckBox::toggled, this, &ConnectionCreationWidget::onAttachmentConfigChanged);
-    connect(m_lockEndAttachmentCheck, &QCheckBox::toggled, this, &ConnectionCreationWidget::onAttachmentConfigChanged);
-    connect(m_startPlaneCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ConnectionCreationWidget::onAttachmentConfigChanged);
-    connect(m_endPlaneCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ConnectionCreationWidget::onAttachmentConfigChanged);
-    connect(m_startDirectionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ConnectionCreationWidget::onAttachmentConfigChanged);
-    connect(m_endDirectionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ConnectionCreationWidget::onAttachmentConfigChanged);
+    connect(m_optimizationStepSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &ConnectionCreationWidget::onConnectionTypeChanged);
+    connect(m_curveSmoothnessSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &ConnectionCreationWidget::onConnectionTypeChanged);
     
     connect(m_createButton, &QPushButton::clicked, this, &ConnectionCreationWidget::onCreateConnection);
     connect(m_updateVisualizationButton, &QPushButton::clicked, this, &ConnectionCreationWidget::onUpdateVisualization);
@@ -326,6 +289,11 @@ void ConnectionCreationWidget::onConnectionTypeChanged(int index)
 {
     Q_UNUSED(index)
     
+    // Reset user modification flag when connection type changes
+    m_userModifiedControlPoint = false;
+    // Clear current control points to force fresh auto-calculation
+    m_currentControlPoints.clear();
+    
     // Only clear solver statistics if we're changing to a different connection type
     // or if we don't have valid statistics yet
     if (!hasValidSolverStatistics()) {
@@ -338,88 +306,56 @@ void ConnectionCreationWidget::onConnectionTypeChanged(int index)
     updateSolverStatisticsDisplay();
 }
 
-void ConnectionCreationWidget::onAttachmentConfigChanged()
-{
-    // Only clear solver statistics if we don't have valid statistics yet
-    if (!hasValidSolverStatistics()) {
-        clearSolverStatistics();
-    } else {
-        qDebug() << "[ConnectionWidget] Preserving existing solver statistics during attachment config change";
-    }
-    
-    updateConnectionPathVisualization();
-    updateSolverStatisticsDisplay();
-}
-
 void ConnectionCreationWidget::onUpdateVisualization()
 {
     qDebug() << "[ConnectionWidget] Manual visualization update requested";
     updateConnectionPathVisualization();
 }
 
-// Helper methods for converting between combo box indices and vectors
-QVector3D ConnectionCreationWidget::getPlaneNormalFromIndex(int index) const
-{
-    switch (index) {
-        case 0: return QVector3D(0, 0, 1);   // XY Plane (Z+)
-        case 1: return QVector3D(0, 0, -1);  // XY Plane (Z-)
-        case 2: return QVector3D(0, 1, 0);   // XZ Plane (Y+)
-        case 3: return QVector3D(0, -1, 0);  // XZ Plane (Y-)
-        case 4: return QVector3D(1, 0, 0);   // YZ Plane (X+)
-        case 5: return QVector3D(-1, 0, 0);  // YZ Plane (X-)
-        default: return QVector3D(0, 0, 1);
-    }
-}
 
-QVector3D ConnectionCreationWidget::getDirectionFromIndex(int index) const
+
+QVector3D ConnectionCreationWidget::projectTo2DPlane(const QVector3D& point, const QVector3D& startPoint, const QVector3D& endPoint) const
 {
-    switch (index) {
-        case 0: return QVector3D(1, 0, 0);   // X+ Direction
-        case 1: return QVector3D(-1, 0, 0);  // X- Direction
-        case 2: return QVector3D(0, 1, 0);   // Y+ Direction
-        case 3: return QVector3D(0, -1, 0);  // Y- Direction
-        case 4: return QVector3D(0, 0, 1);   // Z+ Direction
-        case 5: return QVector3D(0, 0, -1);  // Z- Direction
-        default: return QVector3D(1, 0, 0);
+    // Define the 2D plane using the start and end points
+    QVector3D direction = (endPoint - startPoint).normalized();
+    
+    // Calculate the plane normal (perpendicular to the direction)
+    QVector3D planeNormal;
+    if (std::abs(direction.x()) < 0.9f) {
+        planeNormal = QVector3D::crossProduct(QVector3D(1, 0, 0), direction);
+    } else {
+        planeNormal = QVector3D::crossProduct(QVector3D(0, 1, 0), direction);
     }
+    planeNormal.normalize();
+    
+    // Project the point onto the plane
+    // Formula: projected = point - (point - startPoint) · planeNormal * planeNormal
+    QVector3D pointToStart = point - startPoint;
+    double distanceFromPlane = QVector3D::dotProduct(pointToStart, planeNormal);
+    QVector3D projectedPoint = point - planeNormal * distanceFromPlane;
+    
+    return projectedPoint;
 }
 
 std::vector<CadOpenGLWidget::ConnectionPathSegment> ConnectionCreationWidget::createDragChainPath(
-    const QVector3D& point1, const QVector3D& point2, const QVector3D& direction, 
-    double distance, double bendRadius, double pitchLength, int segmentCount,
-    bool startLocked, bool endLocked)
+    const QVector3D& point1, const QVector3D& point2, const QVector3D& direction,
+    double distance, double bendRadius, double pitchLength)
 {
     qDebug() << "[ConnectionWidget] Creating constraint-based drag chain path";
-    qDebug() << "[ConnectionWidget] Parameters - distance:" << distance << "pitchLength:" << pitchLength << "segmentCount:" << segmentCount;
-    qDebug() << "[ConnectionWidget] Attachments - startLocked:" << startLocked << "endLocked:" << endLocked;
+    qDebug() << "[ConnectionWidget] Parameters - distance:" << distance << "pitchLength:" << pitchLength;
     
-    // Create constraint solver instance
-    DragChainConstraintSolver solver;
+    // Create Bézier curve solver instance
+    BezierDragChainSolver solver;
     
     // Set solver parameters from GUI
-    solver.setMaxIterations(m_maxIterationsSpin->value());
-    solver.setConvergenceTolerance(m_convergenceToleranceSpin->value());
+    solver.setMaxIterations(50); // Fixed reasonable value for Bézier solver
+    solver.setConvergenceTolerance(0.01); // Fixed reasonable value for Bézier solver
     solver.setBendRadiusTolerance(0.1);
-    solver.setSimulationTimeStep(m_simulationTimeStepSpin->value());
-        
-    // Get attachment configurations
-    QVector3D startDirection = direction;
-    QVector3D endDirection = direction;
-    QVector3D startPlaneNormal(0, 0, 1);
-    QVector3D endPlaneNormal(0, 0, 1);
-    
-    if (startLocked) {
-        startDirection = getDirectionFromIndex(m_startDirectionCombo->currentIndex());
-        startPlaneNormal = getPlaneNormalFromIndex(m_startPlaneCombo->currentIndex());
-    }
-        
-        if (endLocked) {
-        endDirection = getDirectionFromIndex(m_endDirectionCombo->currentIndex());
-        endPlaneNormal = getPlaneNormalFromIndex(m_endPlaneCombo->currentIndex());
-        }
+    solver.setOptimizationStep(m_optimizationStepSpin->value());
+    solver.setCurveSmoothness(m_curveSmoothnessSpin->value());
         
     // Set up callback for real-time statistics updates
-    solver.setStatisticsCallback([this](const DragChainConstraintSolver::SolverStatistics& stats) {
+    solver.setStatisticsCallback([this](const BezierDragChainSolver::SolverStatistics& stats) {
         onSolverStatisticsUpdated(stats);
         // Force GUI update to ensure real-time display
         QApplication::processEvents();
@@ -430,20 +366,73 @@ std::vector<CadOpenGLWidget::ConnectionPathSegment> ConnectionCreationWidget::cr
                 .arg(stats.minSegmentLength, 0, 'f', 1)
                 .arg(stats.maxSegmentLength, 0, 'f', 1)
                 .arg(stats.averageSegmentLength, 0, 'f', 1));
-            m_solverIterationsLabel->setText(QString("Solver Iterations: %1/%2 (Solving...)")
-                .arg(stats.iterationsUsed)
-                .arg(m_maxIterationsSpin->value()));
+            m_solverIterationsLabel->setText(QString("Solver Iterations: %1/50 (Solving...)")
+                .arg(stats.iterationsUsed));
         }
     });
     
-    // Solve the drag chain path using OpenCascade constraint solver
-    std::vector<DragChainSegment> solvedSegments = solver.solveDragChainPath(
-        point1, point2,
-        startDirection, endDirection,
-        pitchLength, bendRadius, segmentCount,
-        startLocked, endLocked,
-        startPlaneNormal, endPlaneNormal
-    );
+    // Solve the drag chain path using strict angle constraints
+    std::vector<BezierDragChainSegment> solvedSegments;
+    
+    // Prepare control points for the solver
+    std::vector<QVector3D> controlPoints;
+    
+    // Check if user has manually modified the control point
+    if (m_userModifiedControlPoint && !m_currentControlPoints.empty()) {
+        // Use the existing modified control point, but project it to the 2D plane
+        qDebug() << "[ConnectionWidget] Using user-modified control point";
+        for (const auto& controlPoint : m_currentControlPoints) {
+            // Project the control point to the 2D plane defined by start and end points
+            QVector3D projectedControlPoint = projectTo2DPlane(controlPoint, point1, point2);
+            controlPoints.push_back(projectedControlPoint);
+            qDebug() << "[ConnectionWidget] Using modified control point (projected):" << projectedControlPoint;
+        }
+    } else {
+        // Auto-calculate a single control point in the 2D plane
+        qDebug() << "[ConnectionWidget] Using auto-calculated control point";
+        
+        QVector3D midPoint = (point1 + point2) * 0.5f;
+        QVector3D direction = (point2 - point1).normalized();
+        
+        // Calculate perpendicular axis in the 2D plane
+        QVector3D perpendicular;
+        if (std::abs(direction.x()) < 0.9f) {
+            perpendicular = QVector3D::crossProduct(QVector3D(1, 0, 0), direction);
+        } else {
+            perpendicular = QVector3D::crossProduct(QVector3D(0, 1, 0), direction);
+        }
+        perpendicular.normalize();
+        
+        double distance = (point2 - point1).length();
+        double controlDistance = distance * 0.3; // 30% of total distance
+        
+        QVector3D autoControlPoint = midPoint + perpendicular * controlDistance;
+        controlPoints.push_back(autoControlPoint);
+        qDebug() << "[ConnectionWidget] Auto-calculated control point:" << autoControlPoint;
+    }
+    
+    // Always use strict angle constraint solver with path recovery enabled
+    if (!controlPoints.empty()) {
+        qDebug() << "[ConnectionWidget] Using strict angle constraint solver with path recovery";
+        solvedSegments = solver.calculateSegmentsWithStrictAngleConstraints(
+            point1, point2, controlPoints[0],
+            pitchLength, bendRadius,
+            true  // Always enable path recovery
+        );
+    } else {
+        qDebug() << "[ConnectionWidget] No control points available, using fallback solver";
+        // Fallback to multi-control point solver
+        solvedSegments = solver.solveDragChainPathWithMultipleControlPoints(
+            point1, point2, controlPoints,
+            pitchLength, bendRadius
+        );
+    }
+    
+    qDebug() << "[ConnectionWidget] createDragChainPath: Solver returned" << solvedSegments.size() << "segments";
+    if (!solvedSegments.empty()) {
+        qDebug() << "[ConnectionWidget] First segment:" << solvedSegments[0].startPoint << "->" << solvedSegments[0].endPoint;
+        qDebug() << "[ConnectionWidget] Last segment:" << solvedSegments.back().startPoint << "->" << solvedSegments.back().endPoint;
+    }
                 
     // Store solver statistics for later use
     const auto& stats = solver.getLastSolverStatistics();
@@ -451,7 +440,7 @@ std::vector<CadOpenGLWidget::ConnectionPathSegment> ConnectionCreationWidget::cr
     qDebug() << "[ConnectionWidget]   Raw stats - Distance to target:" << stats.finalDistanceToTarget << "mm";
     qDebug() << "[ConnectionWidget]   Raw stats - Converged:" << stats.converged;
     qDebug() << "[ConnectionWidget]   Raw stats - Iterations:" << stats.iterationsUsed;
-    qDebug() << "[ConnectionWidget]   Raw stats - Simulation time:" << stats.simulationTime << "s";
+    qDebug() << "[ConnectionWidget]   Raw stats - Computation time:" << stats.computationTime << "s";
     qDebug() << "[ConnectionWidget]   Raw stats - Min segment length:" << stats.minSegmentLength << "mm";
     qDebug() << "[ConnectionWidget]   Raw stats - Max segment length:" << stats.maxSegmentLength << "mm";
     qDebug() << "[ConnectionWidget]   Raw stats - Avg segment length:" << stats.averageSegmentLength << "mm";
@@ -464,12 +453,17 @@ std::vector<CadOpenGLWidget::ConnectionPathSegment> ConnectionCreationWidget::cr
     m_lastSolverStatistics.iterationsUsed = stats.iterationsUsed;
     m_lastSolverStatistics.finalDistanceToTarget = stats.finalDistanceToTarget;
     m_lastSolverStatistics.converged = stats.converged;
-    m_lastSolverStatistics.simulationTime = stats.simulationTime;
-    m_lastSolverStatistics.rigidBodiesCreated = stats.rigidBodiesCreated;
-    m_lastSolverStatistics.jointsCreated = stats.jointsCreated;
+    m_lastSolverStatistics.simulationTime = stats.computationTime;
+    m_lastSolverStatistics.controlPointsOptimized = stats.controlPointsOptimized;
+    m_lastSolverStatistics.jointsCreated = 0; // Not applicable for Bézier solver
     m_lastSolverStatistics.minSegmentLength = stats.minSegmentLength;
     m_lastSolverStatistics.maxSegmentLength = stats.maxSegmentLength;
     m_lastSolverStatistics.averageSegmentLength = stats.averageSegmentLength;
+    m_lastSolverStatistics.minSegmentAngle = stats.minSegmentAngle;
+    m_lastSolverStatistics.maxSegmentAngle = stats.maxSegmentAngle;
+    m_lastSolverStatistics.averageSegmentAngle = stats.averageSegmentAngle;
+    m_lastSolverStatistics.totalCableLength = stats.totalCableLength;
+    m_lastSolverStatistics.totalSegments = stats.totalSegments;
     
     qDebug() << "[ConnectionWidget] createDragChainPath: Stored solver statistics:";
     qDebug() << "[ConnectionWidget]   Stored - Distance to target:" << m_lastSolverStatistics.finalDistanceToTarget << "mm";
@@ -483,71 +477,321 @@ std::vector<CadOpenGLWidget::ConnectionPathSegment> ConnectionCreationWidget::cr
     // Update GUI labels immediately with solver statistics
     updateSolverStatisticsDisplay();
     
-    // Force GUI update to ensure the statistics are displayed
-    QApplication::processEvents();
+    // Analyze segments for deviation tracking
+    std::vector<bool> segmentDeviations;
+    std::vector<double> segmentDistancesToTarget;
     
-    // Show completion status with enhanced information
-    if (m_lastSolverStatistics.converged) {
-        m_segmentLengthsLabel->setText(QString("Segment Lengths: Min=%1, Max=%2, Avg=%3 mm (✓ Solved)")
-            .arg(m_lastSolverStatistics.minSegmentLength, 0, 'f', 1)
-            .arg(m_lastSolverStatistics.maxSegmentLength, 0, 'f', 1)
-            .arg(m_lastSolverStatistics.averageSegmentLength, 0, 'f', 1));
-        m_solverIterationsLabel->setText(QString("Solver Iterations: %1/%2 (✓ Complete)")
-            .arg(m_lastSolverStatistics.iterationsUsed)
-            .arg(m_maxIterationsSpin->value()));
-    } else {
-        m_segmentLengthsLabel->setText(QString("Segment Lengths: Min=%1, Max=%2, Avg=%3 mm (⚠ Not Converged)")
-            .arg(m_lastSolverStatistics.minSegmentLength, 0, 'f', 1)
-            .arg(m_lastSolverStatistics.maxSegmentLength, 0, 'f', 1)
-            .arg(m_lastSolverStatistics.averageSegmentLength, 0, 'f', 1));
-        m_solverIterationsLabel->setText(QString("Solver Iterations: %1/%2 (⚠ Incomplete)")
-            .arg(m_lastSolverStatistics.iterationsUsed)
-            .arg(m_maxIterationsSpin->value()));
-    }
-    
-    // Force another GUI update to ensure the final status is displayed
-    QApplication::processEvents();
-    
-    // Final check to ensure statistics are displayed correctly
-    qDebug() << "[ConnectionWidget] Final solver statistics after completion:";
-    qDebug() << "[ConnectionWidget]   Iterations:" << m_lastSolverStatistics.iterationsUsed;
-    qDebug() << "[ConnectionWidget]   Converged:" << m_lastSolverStatistics.converged;
-    qDebug() << "[ConnectionWidget]   Min segment length:" << m_lastSolverStatistics.minSegmentLength << "mm";
-    qDebug() << "[ConnectionWidget]   Max segment length:" << m_lastSolverStatistics.maxSegmentLength << "mm";
-    qDebug() << "[ConnectionWidget]   Avg segment length:" << m_lastSolverStatistics.averageSegmentLength << "mm";
-    
-    // Convert solved segments to visualization format
-    std::vector<ConnectionPathSegment> solverSegments = solver.convertToVisualizationSegments(
-        solvedSegments,
-        QVector4D(1, 0, 0, 0.8f),  // Main path color
-        QVector4D(0, 1, 0, 1.0f)   // Indicator color
-    );
+    if (!solvedSegments.empty()) {
+        qDebug() << "[ConnectionWidget] Analyzing segments for deviation tracking...";
         
-    // Convert to CadOpenGLWidget::ConnectionPathSegment format
+        // Helper function to normalize vectors
+        auto normalizeVector = [](const QVector3D& vector) -> QVector3D {
+            double length = vector.length();
+            if (length < 0.001) return QVector3D(0, 0, 0);
+            return vector / length;
+        };
+        
+        // Get the current control point position (either user-modified or auto-calculated)
+        QVector3D currentControlPoint;
+        if (!m_currentControlPoints.empty()) {
+            currentControlPoint = m_currentControlPoints[0];
+        } else {
+            // Fallback to auto-calculated control point if none available
+            QVector3D midPoint = (point1 + point2) * 0.5f;
+            QVector3D direction = (point2 - point1).normalized();
+            
+            // Calculate perpendicular axis in the 2D plane
+            QVector3D perpendicular;
+            if (std::abs(direction.x()) < 0.9f) {
+                perpendicular = QVector3D::crossProduct(QVector3D(1, 0, 0), direction);
+            } else {
+                perpendicular = QVector3D::crossProduct(QVector3D(0, 1, 0), direction);
+            }
+            perpendicular.normalize();
+            
+            double distance = (point2 - point1).length();
+            double controlDistance = distance * 0.3; // 30% of total distance
+            
+            currentControlPoint = midPoint + perpendicular * controlDistance;
+        }
+        
+        qDebug() << "[ConnectionWidget] Using current control point for deviation analysis:" << currentControlPoint;
+        
+        // Check if the current control point is significantly different from the one used by the solver
+        // If so, we should re-run the solver instead of just analyzing deviations
+        if (!solvedSegments.empty() && !m_currentControlPoints.empty()) {
+            // Get the control point that was used by the solver (stored in the first segment)
+            QVector3D solverControlPoint = solvedSegments[0].controlPoint;
+            double controlPointDistance = (currentControlPoint - solverControlPoint).length();
+            double maxControlPointDistance = pitchLength * 0.5; // 50% of pitch length as threshold
+            
+            if (controlPointDistance > maxControlPointDistance) {
+                qDebug() << "[ConnectionWidget] Control point has changed significantly:";
+                qDebug() << "[ConnectionWidget]   Solver control point:" << solverControlPoint;
+                qDebug() << "[ConnectionWidget]   Current control point:" << currentControlPoint;
+                qDebug() << "[ConnectionWidget]   Distance:" << controlPointDistance << "mm (threshold:" << maxControlPointDistance << "mm)";
+                qDebug() << "[ConnectionWidget]   Re-running solver with new control point...";
+                
+                // Clear solver statistics to force re-calculation
+                clearSolverStatistics();
+                
+                // Return empty segments to trigger solver re-run
+                return std::vector<CadOpenGLWidget::ConnectionPathSegment>();
+            } else {
+                qDebug() << "[ConnectionWidget] Control point change is minor, using existing solver results";
+            }
+        }
+        
+        // Calculate the final distance to target
+        double finalDistanceToTarget = (solvedSegments.back().endPoint - point2).length();
+        qDebug() << "[ConnectionWidget] Final distance to target:" << finalDistanceToTarget << "mm";
+        
+        // Use the deviation threshold from the GUI
+        double deviationThreshold = m_deviationThresholdSpin->value();
+        bool hasSignificantDeviation = finalDistanceToTarget > deviationThreshold;
+        
+        if (hasSignificantDeviation) {
+            qDebug() << "[ConnectionWidget] Significant deviation detected, analyzing individual segments...";
+            
+            // Calculate cumulative distance to target for each segment
+            QVector3D currentPoint = point1;
+            
+            for (size_t i = 0; i < solvedSegments.size(); ++i) {
+                const auto& segment = solvedSegments[i];
+                
+                // Calculate distance from this segment's end point to the target
+                double distanceToTarget = (segment.endPoint - point2).length();
+                
+                // Determine if this segment contributes significantly to the final deviation
+                bool causesDeviation = false;
+                
+                if (i > 0) {
+                    // For middle segments, evaluate against the Bézier curve direction at the current position
+                    // When control point is far from start/end line, segments should follow the curve, not straight line
+                    
+                    // Calculate the current position along the Bézier curve
+                    QVector3D currentPosition = solvedSegments[i-1].endPoint;
+                    
+                    // Calculate the Bézier curve direction at the current position
+                    // For a quadratic Bézier curve: B'(t) = 2(1-t)(P1-P0) + 2t(P2-P1)
+                    // We need to find the t parameter for the current position
+                    double t = 0.0;
+                    if (i < solvedSegments.size() - 1) {
+                        // For middle segments, estimate t based on segment position
+                        t = static_cast<double>(i) / (solvedSegments.size() - 1);
+                    } else {
+                        // For last segment, use t close to 1
+                        t = 0.9;
+                    }
+                    
+                    // Calculate Bézier curve tangent at this t value
+                    QVector3D bezierTangent = 2.0 * (1.0 - t) * (currentControlPoint - point1) + 
+                                             2.0 * t * (point2 - currentControlPoint);
+                    QVector3D idealDirection = normalizeVector(bezierTangent);
+                    QVector3D actualDirection = normalizeVector(segment.endPoint - solvedSegments[i-1].endPoint);
+                    
+                    // Calculate angle between ideal and actual direction
+                    double dot = QVector3D::dotProduct(idealDirection, actualDirection);
+                    dot = (dot < -1.0) ? -1.0 : (dot > 1.0) ? 1.0 : dot;
+                    double angleDeviation = std::acos(dot);
+                    
+                    // Adjust threshold based on control point distance (similar to first segment)
+                    double controlPointDistance = (currentControlPoint - point1).length();
+                    double startEndDistance = (point2 - point1).length();
+                    double controlPointRatio = controlPointDistance / startEndDistance;
+                    
+                    double baseAngleThreshold = 15.0 * M_PI / 180.0; // 15 degrees base
+                    double adjustedThreshold = baseAngleThreshold * (1.0 + controlPointRatio * 0.3); // Allow some deviation for far control points
+                    
+                    // Only consider it a deviation if:
+                    // 1. Angle deviation is significant (adjusted threshold)
+                    // 2. Distance to target is getting worse (not improving)
+                    bool significantAngleDeviation = angleDeviation > adjustedThreshold;
+                    bool movingAwayFromTarget = distanceToTarget > (solvedSegments[i-1].endPoint - point2).length();
+                    
+                    causesDeviation = significantAngleDeviation || movingAwayFromTarget;
+                    
+                    qDebug() << "[ConnectionWidget] Segment" << i << "analysis (improved):";
+                    qDebug() << "[ConnectionWidget]   Estimated t parameter:" << t;
+                    qDebug() << "[ConnectionWidget]   Control point ratio:" << controlPointRatio;
+                    qDebug() << "[ConnectionWidget]   Bézier tangent direction:" << idealDirection;
+                    qDebug() << "[ConnectionWidget]   Actual direction:" << actualDirection;
+                    qDebug() << "[ConnectionWidget]   Angle deviation:" << angleDeviation * 180.0 / M_PI << "degrees";
+                    qDebug() << "[ConnectionWidget]   Adjusted threshold:" << adjustedThreshold * 180.0 / M_PI << "degrees";
+                    qDebug() << "[ConnectionWidget]   Distance to target:" << distanceToTarget << "mm";
+                    qDebug() << "[ConnectionWidget]   Moving away from target:" << movingAwayFromTarget;
+                    qDebug() << "[ConnectionWidget]   Causes deviation:" << causesDeviation;
+                } else {
+                    // First segment - check if it follows the Bézier curve direction properly
+                    // When control point is far from start/end, we need to evaluate the actual Bézier curve direction
+                    
+                    // Calculate the Bézier curve direction at t=0 (start point)
+                    // For a quadratic Bézier curve: B'(t) = 2(1-t)(P1-P0) + 2t(P2-P1)
+                    // At t=0: B'(0) = 2(P1-P0) = 2(controlPoint - startPoint)
+                    QVector3D bezierDirection = normalizeVector(currentControlPoint - point1);
+                    
+                    // The first segment should follow the Bézier curve direction, not necessarily point directly to the control point
+                    // Calculate the ideal direction based on the Bézier curve tangent
+                    QVector3D idealDirection = bezierDirection;
+                    QVector3D actualDirection = normalizeVector(segment.endPoint - point1);
+                    
+                    double dot = QVector3D::dotProduct(idealDirection, actualDirection);
+                    dot = (dot < -1.0) ? -1.0 : (dot > 1.0) ? 1.0 : dot;
+                    double angleDeviation = std::acos(dot);
+                    
+                    // For the first segment, be more lenient and consider the control point distance
+                    // If control point is far from start/end line, the first segment may need to curve more
+                    double controlPointDistance = (currentControlPoint - point1).length();
+                    double startEndDistance = (point2 - point1).length();
+                    double controlPointRatio = controlPointDistance / startEndDistance;
+                    
+                    // Adjust angle threshold based on control point distance
+                    // If control point is far, allow more deviation since the curve needs to bend more
+                    double baseAngleThreshold = 30.0 * M_PI / 180.0; // 30 degrees base
+                    double adjustedThreshold = baseAngleThreshold * (1.0 + controlPointRatio * 0.5); // Allow more deviation for far control points
+                    
+                    causesDeviation = angleDeviation > adjustedThreshold;
+                    
+                    qDebug() << "[ConnectionWidget] First segment analysis (improved):";
+                    qDebug() << "[ConnectionWidget]   Current control point:" << currentControlPoint;
+                    qDebug() << "[ConnectionWidget]   Control point distance ratio:" << controlPointRatio;
+                    qDebug() << "[ConnectionWidget]   Bézier curve direction:" << bezierDirection;
+                    qDebug() << "[ConnectionWidget]   Actual direction:" << actualDirection;
+                    qDebug() << "[ConnectionWidget]   Angle deviation:" << angleDeviation * 180.0 / M_PI << "degrees";
+                    qDebug() << "[ConnectionWidget]   Adjusted threshold:" << adjustedThreshold * 180.0 / M_PI << "degrees";
+                    qDebug() << "[ConnectionWidget]   Distance to target:" << distanceToTarget << "mm";
+                    qDebug() << "[ConnectionWidget]   Causes deviation:" << causesDeviation;
+                }
+                
+                segmentDeviations.push_back(causesDeviation);
+                segmentDistancesToTarget.push_back(distanceToTarget);
+                
+                currentPoint = segment.endPoint;
+            }
+            
+            qDebug() << "[ConnectionWidget] Deviation analysis complete:";
+            qDebug() << "[ConnectionWidget]   Total segments:" << solvedSegments.size();
+            qDebug() << "[ConnectionWidget]   Deviating segments:" << std::count(segmentDeviations.begin(), segmentDeviations.end(), true);
+            qDebug() << "[ConnectionWidget]   Final distance to target:" << segmentDistancesToTarget.back() << "mm";
+        } else {
+            qDebug() << "[ConnectionWidget] No significant deviation detected, all segments are normal";
+            // If there's no significant deviation, mark all segments as normal
+            for (size_t i = 0; i < solvedSegments.size(); ++i) {
+                segmentDeviations.push_back(false);
+                segmentDistancesToTarget.push_back((solvedSegments[i].endPoint - point2).length());
+            }
+        }
+        
+        // Pass deviation data to 2D visualization
+        if (m_2dVisualization) {
+            m_2dVisualization->setDeviationThreshold(m_deviationThresholdSpin->value()); // Use GUI parameter
+            m_2dVisualization->setDeviationData(segmentDeviations, segmentDistancesToTarget);
+            
+            // Pass the actual solver-generated segments to the 2D visualization
+            m_2dVisualization->setSolverSegments(solvedSegments);
+            qDebug() << "[ConnectionWidget] Passed" << solvedSegments.size() << "solver segments to 2D visualization";
+        }
+    }
+    
+    // Convert Bézier segments to OpenGL segments with violation detection
     std::vector<CadOpenGLWidget::ConnectionPathSegment> segments;
-    for (const auto& solverSegment : solverSegments) {
-        segments.emplace_back(solverSegment.start, solverSegment.end, solverSegment.color, solverSegment.width, solverSegment.isBend);
-    }
     
-    // Add attachment indicators if locked
-    if (startLocked) {
-        QVector3D startDir = getDirectionFromIndex(m_startDirectionCombo->currentIndex());
-        QVector3D startIndicatorStart = point1 - startDir * (bendRadius * 0.2f);
-        QVector3D startIndicatorEnd = point1 + startDir * (bendRadius * 0.2f);
+    if (!solvedSegments.empty()) {
+        qDebug() << "[ConnectionWidget] Converting" << solvedSegments.size() << "Bézier segments to OpenGL segments";
+        
+        int bendRadiusViolationCount = 0;
+        int bendAngleViolationCount = 0;
+        
+        for (size_t i = 0; i < solvedSegments.size(); ++i) {
+            const auto& bezierSegment = solvedSegments[i];
+            
+            // Check if this segment violates bend radius constraints
+            bool violatesBendRadius = (bezierSegment.bendRadius < 0.0);
+            if (violatesBendRadius) {
+                bendRadiusViolationCount++;
+                qDebug() << "[ConnectionWidget] Segment" << i << "violates bend radius constraint!";
+                qDebug() << "[ConnectionWidget]   Bend radius:" << std::abs(bezierSegment.bendRadius) << "mm";
+                qDebug() << "[ConnectionWidget]   Maximum allowed:" << bendRadius << "mm";
+                qDebug() << "[ConnectionWidget]   Violation severity:" << std::abs(bezierSegment.bendRadius) - bendRadius << "mm over limit";
+            }
+            
+            // Check if this segment violates bend angle constraints
+            bool violatesBendAngle = false;
+            if (bezierSegment.isBend && bezierSegment.bendRadius > 0.0) {
+                double maxBendAngle = 2.0 * std::asin(pitchLength / (2.0 * bendRadius));
+                violatesBendAngle = bezierSegment.bendAngle > maxBendAngle;
+                if (violatesBendAngle) {
+                    bendAngleViolationCount++;
+                    qDebug() << "[ConnectionWidget] Segment" << i << "violates bend angle constraint!";
+                    qDebug() << "[ConnectionWidget]   Bend angle:" << bezierSegment.bendAngle * 180.0 / M_PI << "degrees";
+                    qDebug() << "[ConnectionWidget]   Maximum allowed:" << maxBendAngle * 180.0 / M_PI << "degrees";
+                    qDebug() << "[ConnectionWidget]   Violation severity:" << (bezierSegment.bendAngle - maxBendAngle) * 180.0 / M_PI << "degrees over limit";
+                }
+            }
+            
+            // Check if this segment causes deviation
+            bool causesDeviation = (i < segmentDeviations.size()) ? segmentDeviations[i] : false;
+            
+            // Use alternating colors for better visualization, with warning colors for violations
+            // Priority: Bend angle violations > Path deviations > Normal segments
+            QVector4D segmentColor;
+            if (violatesBendAngle) {
+                segmentColor = QVector4D(1.0f, 1.0f, 0.0f, 0.9f); // Yellow for bend angle violations
+            } else if (violatesBendRadius) {
+                segmentColor = QVector4D(1.0f, 0.5f, 0.0f, 0.9f); // Orange for bend radius violations
+            } else if (causesDeviation) {
+                segmentColor = QVector4D(1.0f, 0.0f, 0.0f, 0.9f); // Red for deviations
+            } else if (i % 2 == 0) {
+                segmentColor = QVector4D(0.0f, 1.0f, 0.0f, 0.8f); // Green
+            } else {
+                segmentColor = QVector4D(0.0f, 0.0f, 1.0f, 0.8f); // Blue
+            }
+            
+            // Create OpenGL segment
+            segments.push_back(CadOpenGLWidget::ConnectionPathSegment(
+                bezierSegment.startPoint, bezierSegment.endPoint, segmentColor, 3.0f, false));
+            
+            // Warning indicators removed from 3D view - only keep the main path segments
+            
+            qDebug() << "[ConnectionWidget] Segment" << i << ":" << bezierSegment.startPoint << "->" << bezierSegment.endPoint;
+            if (causesDeviation) {
+                qDebug() << "[ConnectionWidget]   ⚠️ CAUSES DEVIATION";
+            }
+        }
+        
+        qDebug() << "[ConnectionWidget] Created" << segments.size() << "OpenGL segments with" << bendRadiusViolationCount << "bend radius violations and" << bendAngleViolationCount << "bend angle violations";
+        
+        // Update GUI to show violation information
+        if (bendAngleViolationCount > 0 || bendRadiusViolationCount > 0) {
+            QString violationText;
+            if (bendAngleViolationCount > 0 && bendRadiusViolationCount > 0) {
+                violationText = QString("Compatibility: ⚠️ %1 bend angle + %2 bend radius violations").arg(bendAngleViolationCount).arg(bendRadiusViolationCount);
+            } else if (bendAngleViolationCount > 0) {
+                violationText = QString("Compatibility: ⚠️ %1 segments violate bend angle").arg(bendAngleViolationCount);
+            } else {
+                violationText = QString("Compatibility: ⚠️ %1 segments violate bend radius").arg(bendRadiusViolationCount);
+            }
+            m_compatibilityLabel->setText(violationText);
+            m_compatibilityLabel->setStyleSheet("color: orange; font-weight: bold;");
+        } else {
+            m_compatibilityLabel->setText("Compatibility: ✓ All segments within constraints");
+            m_compatibilityLabel->setStyleSheet("color: green; font-weight: bold;");
+        }
+    } else {
+        qDebug() << "[ConnectionWidget] WARNING: No segments generated by solver!";
+        
+        // Fallback: create a simple straight line segment
+        qDebug() << "[ConnectionWidget] Creating fallback straight line segment";
         segments.push_back(CadOpenGLWidget::ConnectionPathSegment(
-            startIndicatorStart, startIndicatorEnd, QVector4D(0, 1, 0, 1.0f), 5.0f, true));
+            point1, point2, QVector4D(1.0f, 0.0f, 0.0f, 0.8f), 3.0f, false));
     }
     
-    if (endLocked) {
-        QVector3D endDir = getDirectionFromIndex(m_endDirectionCombo->currentIndex());
-        QVector3D endIndicatorStart = point2 - endDir * (bendRadius * 0.2f);
-        QVector3D endIndicatorEnd = point2 + endDir * (bendRadius * 0.2f);
-        segments.push_back(CadOpenGLWidget::ConnectionPathSegment(
-            endIndicatorStart, endIndicatorEnd, QVector4D(0, 1, 0, 1.0f), 5.0f, true));
+    // Store the control points for visualization (including auto-calculated ones)
+    m_currentControlPoints.clear();
+    for (const auto& controlPoint : controlPoints) {
+        m_currentControlPoints.push_back(controlPoint);
     }
-    
-    qDebug() << "[ConnectionWidget] Created constraint-based drag chain with" << segments.size() << "segments";
-    qDebug() << "[ConnectionWidget] Solved segments:" << solvedSegments.size();
+    qDebug() << "[ConnectionWidget] Stored" << m_currentControlPoints.size() << "custom control points for visualization";
     
     return segments;
 }
@@ -573,13 +817,40 @@ void ConnectionCreationWidget::updateSolverStatisticsDisplay()
             .arg(m_lastSolverStatistics.converged ? "✓ Converged" : "✗ Not Converged");
         m_segmentLengthsLabel->setText(segmentLengthsText);
         
-        QString iterationsText = QString("Solver Iterations: %1/%2 (%.3f s) [%3 bodies, %4 joints]")
-            .arg(m_lastSolverStatistics.iterationsUsed)
-            .arg(m_maxIterationsSpin->value())
+        QString iterationsText = QString("Solver: Mathematical calculation (%.3f s) [%1 segments, pitch: %.1f mm]")
             .arg(m_lastSolverStatistics.simulationTime, 0, 'f', 3)
-            .arg(m_lastSolverStatistics.rigidBodiesCreated)
-            .arg(m_lastSolverStatistics.jointsCreated);
+            .arg(m_lastSolverStatistics.controlPointsOptimized)
+            .arg(m_pitchLengthSpin->value());
         m_solverIterationsLabel->setText(iterationsText);
+        
+        // Display cable length and segment count
+        QString cableLengthText = QString("Cable Length: %1 mm")
+            .arg(m_lastSolverStatistics.totalCableLength, 0, 'f', 1);
+        m_cableLengthLabel->setText(cableLengthText);
+        
+        QString segmentCountText = QString("Segment Count: %1")
+            .arg(m_lastSolverStatistics.totalSegments);
+        m_segmentCountLabel->setText(segmentCountText);
+        
+        // Display segment angle statistics
+        QString segmentAnglesText = QString("Segment Angles: Min=%1°, Max=%2°, Avg=%3°")
+            .arg(m_lastSolverStatistics.minSegmentAngle * 180.0 / M_PI, 0, 'f', 1)
+            .arg(m_lastSolverStatistics.maxSegmentAngle * 180.0 / M_PI, 0, 'f', 1)
+            .arg(m_lastSolverStatistics.averageSegmentAngle * 180.0 / M_PI, 0, 'f', 1);
+        m_segmentAnglesLabel->setText(segmentAnglesText);
+        
+        // Check for violations and update compatibility label
+        double maxAllowedAngle = 2.0 * std::asin(m_pitchLengthSpin->value() / (2.0 * m_maxBendRadiusSpin->value()));
+        bool hasViolations = (m_lastSolverStatistics.maxSegmentAngle > 0.0 && 
+                             m_lastSolverStatistics.maxSegmentAngle > maxAllowedAngle);
+        
+        if (hasViolations) {
+            m_compatibilityLabel->setText("Compatibility: ⚠️ Some segments exceed bend radius");
+            m_compatibilityLabel->setStyleSheet("color: orange; font-weight: bold;");
+        } else {
+            m_compatibilityLabel->setText("Compatibility: ✓ All segments within constraints");
+            m_compatibilityLabel->setStyleSheet("color: green; font-weight: bold;");
+        }
         
         qDebug() << "[ConnectionWidget] Updated GUI labels from stored statistics:";
         qDebug() << "[ConnectionWidget]   Segment lengths label:" << segmentLengthsText;
@@ -591,6 +862,9 @@ void ConnectionCreationWidget::updateSolverStatisticsDisplay()
         qDebug() << "[ConnectionWidget] No stored solver statistics available";
         m_segmentLengthsLabel->setText("Segment Lengths: --");
         m_solverIterationsLabel->setText("Solver Iterations: --");
+        m_cableLengthLabel->setText("Cable Length: --");
+        m_segmentCountLabel->setText("Segment Count: --");
+        m_segmentAnglesLabel->setText("Segment Angles: --");
         
         // Force GUI update to ensure labels are displayed
         QApplication::processEvents();
@@ -608,6 +882,9 @@ void ConnectionCreationWidget::updateConnectionInfo()
         m_placementLabel->setText("Placement: --");
         m_segmentLengthsLabel->setText("Segment Lengths: --");
         m_solverIterationsLabel->setText("Solver Iterations: --");
+        m_cableLengthLabel->setText("Cable Length: --");
+        m_segmentCountLabel->setText("Segment Count: --");
+        m_segmentAnglesLabel->setText("Segment Angles: --");
         m_createButton->setEnabled(false);
         return;
     }
@@ -628,8 +905,6 @@ void ConnectionCreationWidget::updateConnectionInfo()
     
     // Check if this is a drag chain with locked attachments
     bool isDragChain = (m_connectionTypeCombo->currentData().toInt() == static_cast<int>(ConnectionNodeData::ConnectionType::DragChain));
-    bool startLocked = m_lockStartAttachmentCheck->isChecked();
-    bool endLocked = m_lockEndAttachmentCheck->isChecked();
     
     if (isDragChain) {
         qDebug() << "[ConnectionWidget] updateConnectionInfo: Using drag chain solver for statistics";
@@ -647,21 +922,21 @@ void ConnectionCreationWidget::updateConnectionInfo()
             
             // Calculate effective length based on stored statistics
             effectiveLength = distance; // Use basic distance for now
-            totalSegments = m_segmentCountSpin->value();
-            baseSegments = static_cast<int>(std::ceil(distance / m_pitchLengthSpin->value()));
+            totalSegments = m_lastSolverStatistics.controlPointsOptimized;
+            baseSegments = m_lastSolverStatistics.controlPointsOptimized;
         } else {
             qDebug() << "[ConnectionWidget] updateConnectionInfo: No solver statistics available yet";
             // Don't call the solver here - let updateConnectionPathVisualization handle it
             
             // Use fallback calculation
             effectiveLength = distance;
-            totalSegments = m_segmentCountSpin->value();
+            totalSegments = static_cast<int>(std::ceil(distance / m_pitchLengthSpin->value()));
             baseSegments = static_cast<int>(std::ceil(distance / m_pitchLengthSpin->value()));
         }
             } else {
             // Use standard calculation with pitch length and segments
             double pitchLength = m_pitchLengthSpin->value();
-            int segmentCount = m_segmentCountSpin->value();
+            int segmentCount = static_cast<int>(std::ceil(distance / pitchLength));
             
             // Clear solver information for non-solver calculations
             m_segmentLengthsLabel->setText("Segment Lengths: -- (Non-Drag Chain)");
@@ -739,20 +1014,7 @@ void ConnectionCreationWidget::onCreateConnection()
             connectionData->isFlexible = m_isFlexibleCheck->isChecked();
             connectionData->maxBendRadius = m_maxBendRadiusSpin->value();
             connectionData->pitchLength = m_pitchLengthSpin->value();
-            connectionData->segmentCount = m_segmentCountSpin->value();
-            
-            // Set attachment configurations for drag chains
-            if (connectionData->connectionType == ConnectionNodeData::ConnectionType::DragChain) {
-                // Start attachment configuration
-                connectionData->startAttachment.isLocked = m_lockStartAttachmentCheck->isChecked();
-                connectionData->startAttachment.planeNormal = getPlaneNormalFromIndex(m_startPlaneCombo->currentIndex());
-                connectionData->startAttachment.direction = getDirectionFromIndex(m_startDirectionCombo->currentIndex());
-                
-                // End attachment configuration
-                connectionData->endAttachment.isLocked = m_lockEndAttachmentCheck->isChecked();
-                connectionData->endAttachment.planeNormal = getPlaneNormalFromIndex(m_endPlaneCombo->currentIndex());
-                connectionData->endAttachment.direction = getDirectionFromIndex(m_endDirectionCombo->currentIndex());
-            }
+            connectionData->segmentCount = m_lastSolverStatistics.controlPointsOptimized;
         }
         
         // Emit signal
@@ -769,7 +1031,7 @@ void ConnectionCreationWidget::onCancel()
     clearState();
 }
 
-void ConnectionCreationWidget::onSolverStatisticsUpdated(const DragChainConstraintSolver::SolverStatistics& stats)
+void ConnectionCreationWidget::onSolverStatisticsUpdated(const BezierDragChainSolver::SolverStatistics& stats)
 {
     qDebug() << "[ConnectionWidget] onSolverStatisticsUpdated: Real-time statistics update received";
     qDebug() << "[ConnectionWidget]   Min segment length:" << stats.minSegmentLength << "mm";
@@ -777,18 +1039,23 @@ void ConnectionCreationWidget::onSolverStatisticsUpdated(const DragChainConstrai
     qDebug() << "[ConnectionWidget]   Avg segment length:" << stats.averageSegmentLength << "mm";
     qDebug() << "[ConnectionWidget]   Converged:" << stats.converged;
     qDebug() << "[ConnectionWidget]   Iterations:" << stats.iterationsUsed;
-    qDebug() << "[ConnectionWidget]   Simulation time:" << stats.simulationTime << "s";
+    qDebug() << "[ConnectionWidget]   Computation time:" << stats.computationTime << "s";
     
     // Update stored statistics
     m_lastSolverStatistics.iterationsUsed = stats.iterationsUsed;
     m_lastSolverStatistics.finalDistanceToTarget = stats.finalDistanceToTarget;
     m_lastSolverStatistics.converged = stats.converged;
-    m_lastSolverStatistics.simulationTime = stats.simulationTime;
-    m_lastSolverStatistics.rigidBodiesCreated = stats.rigidBodiesCreated;
-    m_lastSolverStatistics.jointsCreated = stats.jointsCreated;
+    m_lastSolverStatistics.simulationTime = stats.computationTime;
+    m_lastSolverStatistics.controlPointsOptimized = stats.controlPointsOptimized;
+    m_lastSolverStatistics.jointsCreated = 0; // Not applicable for Bézier solver
     m_lastSolverStatistics.minSegmentLength = stats.minSegmentLength;
     m_lastSolverStatistics.maxSegmentLength = stats.maxSegmentLength;
     m_lastSolverStatistics.averageSegmentLength = stats.averageSegmentLength;
+    m_lastSolverStatistics.minSegmentAngle = stats.minSegmentAngle;
+    m_lastSolverStatistics.maxSegmentAngle = stats.maxSegmentAngle;
+    m_lastSolverStatistics.averageSegmentAngle = stats.averageSegmentAngle;
+    m_lastSolverStatistics.totalCableLength = stats.totalCableLength;
+    m_lastSolverStatistics.totalSegments = stats.totalSegments;
     
     // Update GUI immediately with real-time statistics
     updateSolverStatisticsDisplay();
@@ -835,19 +1102,36 @@ void ConnectionCreationWidget::clearState()
     m_isFlexibleCheck->setChecked(true);
     m_maxBendRadiusSpin->setValue(50.0);
     m_pitchLengthSpin->setValue(300.0);
-    m_segmentCountSpin->setValue(3);
     
-    // Reset attachment configuration UI
-    m_lockStartAttachmentCheck->setChecked(false);
-    m_lockEndAttachmentCheck->setChecked(false);
-    m_startPlaneCombo->setCurrentIndex(0);
-    m_endPlaneCombo->setCurrentIndex(0);
-    m_startDirectionCombo->setCurrentIndex(0);
-    m_endDirectionCombo->setCurrentIndex(0);
+    // Reset Bézier curve solver parameters
+    m_optimizationStepSpin->setValue(0.1);
+    m_curveSmoothnessSpin->setValue(1.0);
     
-    updateConnectionInfo();
+    // Enhanced visualization, strict angle constraints, and path recovery are always enabled
+    
+    // Reset control point settings
+    m_currentControlPoints.clear();
+    m_userModifiedControlPoint = false;
+    
+    // Clear solver statistics
+    clearSolverStatistics();
+    
+    // Clear visualizations
+    if (m_openGLWidget) {
+        m_openGLWidget->clearConnectionPathSegments();
+        m_openGLWidget->clearControlPointMarkers();
+    }
+    
+    if (m_2dVisualization) {
+        m_2dVisualization->clear();
+    }
+    
+    // Update visualization
     updateConnectionPathVisualization();
-} 
+    updateSolverStatisticsDisplay();
+    
+    qDebug() << "[ConnectionWidget] Widget state cleared";
+}
 
 void ConnectionCreationWidget::setOpenGLWidget(CadOpenGLWidget* openGLWidget)
 {
@@ -874,7 +1158,8 @@ void ConnectionCreationWidget::updateConnectionPathVisualization()
     
     if (!m_point1 || !m_point2) {
         qDebug() << "[ConnectionWidget] One or both points not selected, clearing segments";
-            m_openGLWidget->clearConnectionPathSegments();
+        m_openGLWidget->clearConnectionPathSegments();
+        m_openGLWidget->clearControlPointMarkers();
         return;
     }
     
@@ -1020,23 +1305,19 @@ void ConnectionCreationWidget::updateConnectionPathVisualization()
     // Get connection parameters
     double bendRadius = m_maxBendRadiusSpin->value();
     double pitchLength = m_pitchLengthSpin->value();
-    int segmentCount = m_segmentCountSpin->value();
     bool isFlexible = m_isFlexibleCheck->isChecked();
     bool isDragChain = (m_connectionTypeCombo->currentData().toInt() == static_cast<int>(ConnectionNodeData::ConnectionType::DragChain));
-    bool startLocked = m_lockStartAttachmentCheck->isChecked();
-    bool endLocked = m_lockEndAttachmentCheck->isChecked();
     
-    qDebug() << "[ConnectionWidget] Connection parameters - bendRadius:" << bendRadius << "pitchLength:" << pitchLength << "segmentCount:" << segmentCount << "isFlexible:" << isFlexible;
-    qDebug() << "[ConnectionWidget] Drag chain settings - isDragChain:" << isDragChain << "startLocked:" << startLocked << "endLocked:" << endLocked;
+    qDebug() << "[ConnectionWidget] Connection parameters - bendRadius:" << bendRadius << "pitchLength:" << pitchLength << "isFlexible:" << isFlexible;
+    qDebug() << "[ConnectionWidget] Drag chain settings - isDragChain:" << isDragChain;
     
     if (isFlexible && bendRadius > 0.0) {
         if (isDragChain) {
             qDebug() << "[ConnectionWidget] Creating unified drag chain path";
-            qDebug() << "[ConnectionWidget]   startLocked:" << startLocked << "endLocked:" << endLocked;
             
             // Always use solver for drag chains to enforce constraints properly
             qDebug() << "[ConnectionWidget]   Will call solver (drag chain requires constraint enforcement)";
-            segments = createDragChainPath(point1, point2, direction, distance, bendRadius, pitchLength, segmentCount, startLocked, endLocked);
+            segments = createDragChainPath(point1, point2, direction, distance, bendRadius, pitchLength);
         } else {
             qDebug() << "[ConnectionWidget] Creating simple path with one bend for non-drag chain";
             // Create a simple path with one bend for non-drag chain connections
@@ -1087,6 +1368,42 @@ void ConnectionCreationWidget::updateConnectionPathVisualization()
     m_openGLWidget->setConnectionPathSegments(segments);
     qDebug() << "[ConnectionWidget] setConnectionPathSegments call completed";
     
+    // Create and set control point markers
+    std::vector<CadOpenGLWidget::ControlPointMarker> controlPointMarkers;
+    
+    // Use stored control points (including auto-calculated ones)
+    for (size_t i = 0; i < m_currentControlPoints.size(); ++i) {
+        const auto& controlPoint = m_currentControlPoints[i];
+        QString label = QString("CP%1").arg(i + 1);
+        
+        // Use different colors for different control points
+        QVector4D color;
+        switch (i % 4) {
+            case 0: color = QVector4D(1.0f, 0.0f, 0.0f, 0.8f); break; // Red
+            case 1: color = QVector4D(0.0f, 1.0f, 0.0f, 0.8f); break; // Green
+            case 2: color = QVector4D(0.0f, 0.0f, 1.0f, 0.8f); break; // Blue
+            case 3: color = QVector4D(1.0f, 1.0f, 0.0f, 0.8f); break; // Yellow
+        }
+        
+        controlPointMarkers.emplace_back(controlPoint, color, 12.0f, label);
+        qDebug() << "[ConnectionWidget] Added control point marker" << i << "at" << controlPoint << "with label" << label;
+    }
+    
+    // Set the control point markers in the OpenGL widget
+    m_openGLWidget->setControlPointMarkers(controlPointMarkers);
+    qDebug() << "[ConnectionWidget] setControlPointMarkers call completed with" << controlPointMarkers.size() << "markers";
+    
+    // Update 2D visualization
+    if (m_2dVisualization) {
+        m_2dVisualization->setStartPoint(point1);
+        m_2dVisualization->setEndPoint(point2);
+        
+        // Use stored control points (including auto-calculated ones)
+        m_2dVisualization->setControlPoints(m_currentControlPoints);
+        m_2dVisualization->setPitchLength(pitchLength);
+        m_2dVisualization->setBendRadius(bendRadius);
+    }
+    
     // Update connection info to display solver statistics
     qDebug() << "[ConnectionWidget] updateConnectionPathVisualization: About to call updateConnectionInfo with iterationsUsed:" << m_lastSolverStatistics.iterationsUsed;
     qDebug() << "[ConnectionWidget] updateConnectionPathVisualization: converged:" << m_lastSolverStatistics.converged;
@@ -1117,4 +1434,1124 @@ bool ConnectionCreationWidget::hasValidSolverStatistics() const
              << ", avgLength:" << m_lastSolverStatistics.averageSegmentLength << ")";
     
     return hasValid;
-} 
+}
+
+
+
+void ConnectionCreationWidget::onStartPointChanged(const QVector3D& point)
+{
+    qDebug() << "[ConnectionWidget] 2D visualization changed start point to:" << point;
+    // Update the 2D visualization with new start point
+    m_2dVisualization->setStartPoint(point);
+    updateConnectionPathVisualization();
+}
+
+void ConnectionCreationWidget::onEndPointChanged(const QVector3D& point)
+{
+    qDebug() << "[ConnectionWidget] 2D visualization changed end point to:" << point;
+    // Update the 2D visualization with new end point
+    m_2dVisualization->setEndPoint(point);
+    updateConnectionPathVisualization();
+}
+
+void ConnectionCreationWidget::onControlPointChanged(int index, const QVector3D& point)
+{
+    qDebug() << "[ConnectionWidget] 2D visualization changed control point" << index << "to:" << point;
+    
+    // User modified the auto-calculated control point
+    m_userModifiedControlPoint = true;
+    
+    // Project the control point to the 2D plane if we have start and end points
+    QVector3D projectedPoint = point;
+    if (m_point1 && m_point2) {
+        // Get the world positions of the start and end points
+        QVector3D startPoint, endPoint;
+        // For now, we'll use the 2D visualization's start and end points
+        // In a real implementation, you'd get these from the actual 3D positions
+        if (m_2dVisualization) {
+            // Use the 2D visualization's current start and end points for projection
+            // This ensures the control point stays in the same plane as the curve
+            projectedPoint = projectTo2DPlane(point, m_2dVisualization->getStartPoint(), m_2dVisualization->getEndPoint());
+        }
+    }
+    
+    // Update the current control points with the projected position
+    if (m_currentControlPoints.empty()) {
+        m_currentControlPoints.push_back(projectedPoint);
+    } else {
+        m_currentControlPoints[0] = projectedPoint;
+    }
+    
+    qDebug() << "[ConnectionWidget] Updated auto-calculated control point to:" << projectedPoint;
+    
+    // Clear solver statistics to force re-calculation with new control point
+    clearSolverStatistics();
+    
+    // Update visualization to re-run solver with new control point
+    updateConnectionPathVisualization();
+}
+
+void ConnectionCreationWidget::onDeviationThresholdChanged(double value)
+{
+    qDebug() << "[ConnectionWidget] Deviation threshold changed to:" << value << "mm";
+    
+    // Update 2D visualization with new threshold
+    if (m_2dVisualization) {
+        m_2dVisualization->setDeviationThreshold(value);
+    }
+    
+    // Re-run path creation with new threshold
+    updateConnectionPathVisualization();
+}
+
+// 2D Visualization Widget Implementation
+DragChain2DVisualization::DragChain2DVisualization(QWidget* parent)
+    : QFrame(parent)
+    , m_pitchLength(18.0)
+    , m_bendRadius(18.0)
+    , m_hasStartPoint(false)
+    , m_hasEndPoint(false)
+    , m_selectedPointIndex(-1)
+    , m_dragging(false)
+    , m_deviationThreshold(1.0) // 1mm threshold for deviation detection
+{
+    setFrameStyle(QFrame::Box);
+    setLineWidth(1);
+    setMidLineWidth(0);
+    setStyleSheet("QFrame { background-color: white; border: 1px solid gray; }");
+    
+    // Enable mouse tracking for hover effects
+    setMouseTracking(true);
+    
+    // Set focus policy for keyboard events
+    setFocusPolicy(Qt::StrongFocus);
+}
+
+void DragChain2DVisualization::setStartPoint(const QVector3D& point)
+{
+    m_startPoint = point;
+    m_hasStartPoint = true;
+    updateTransform();
+    update();
+}
+
+void DragChain2DVisualization::setEndPoint(const QVector3D& point)
+{
+    m_endPoint = point;
+    m_hasEndPoint = true;
+    updateTransform();
+    update();
+}
+
+void DragChain2DVisualization::setControlPoints(const std::vector<QVector3D>& points)
+{
+    m_controlPoints = points;
+    updateTransform();
+    update();
+}
+
+void DragChain2DVisualization::setPitchLength(double pitchLength)
+{
+    m_pitchLength = pitchLength;
+    update();
+}
+
+void DragChain2DVisualization::setBendRadius(double bendRadius)
+{
+    m_bendRadius = bendRadius;
+    update();
+}
+
+void DragChain2DVisualization::clear()
+{
+    m_hasStartPoint = false;
+    m_hasEndPoint = false;
+    m_controlPoints.clear();
+    m_selectedPointIndex = -1;
+    m_dragging = false;
+    update();
+}
+
+void DragChain2DVisualization::paintEvent(QPaintEvent* event)
+{
+    Q_UNUSED(event)
+    
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing);
+    
+    // Draw background
+    painter.fillRect(rect(), Qt::white);
+    
+    // Update transform if needed
+    updateTransform();
+    
+    // Draw grid
+    drawGrid(painter);
+    
+    // Draw Bézier curve
+    drawBezierCurve(painter);
+    
+    // Draw segments
+    drawSegments(painter);
+    
+    // Draw points
+    drawPoints(painter);
+}
+
+void DragChain2DVisualization::mousePressEvent(QMouseEvent* event)
+{
+    if (event->button() == Qt::LeftButton) {
+        QPoint pos = event->pos();
+        QVector3D worldPos = screenToWorld(pos);
+        
+        // Check if clicking on a control point
+        for (size_t i = 0; i < m_controlPoints.size(); ++i) {
+            QPoint screenPoint = worldToScreen(m_controlPoints[i]);
+            if ((pos - screenPoint).manhattanLength() < 10) {
+                m_selectedPointIndex = static_cast<int>(i);
+                m_dragging = true;
+                m_lastMousePos = pos;
+                update();
+                return;
+            }
+        }
+        
+        // Check if clicking on start or end point
+        if (m_hasStartPoint) {
+            QPoint screenPoint = worldToScreen(m_startPoint);
+            if ((pos - screenPoint).manhattanLength() < 10) {
+                m_selectedPointIndex = -2; // Start point
+                m_dragging = true;
+                m_lastMousePos = pos;
+                update();
+                return;
+            }
+        }
+        
+        if (m_hasEndPoint) {
+            QPoint screenPoint = worldToScreen(m_endPoint);
+            if ((pos - screenPoint).manhattanLength() < 10) {
+                m_selectedPointIndex = -3; // End point
+                m_dragging = true;
+                m_lastMousePos = pos;
+                update();
+                return;
+            }
+        }
+        
+        // If not clicking on any point, deselect
+        m_selectedPointIndex = -1;
+        m_dragging = false;
+        update();
+    }
+}
+
+void DragChain2DVisualization::mouseMoveEvent(QMouseEvent* event)
+{
+    if (m_dragging && m_selectedPointIndex >= -3) {
+        QPoint pos = event->pos();
+        QVector3D worldPos = screenToWorld(pos);
+        
+        if (m_selectedPointIndex == -2) {
+            // Moving start point
+            m_startPoint = worldPos;
+            emit startPointChanged(worldPos);
+        } else if (m_selectedPointIndex == -3) {
+            // Moving end point
+            m_endPoint = worldPos;
+            emit endPointChanged(worldPos);
+        } else if (m_selectedPointIndex >= 0) {
+            // Moving control point
+            m_controlPoints[m_selectedPointIndex] = worldPos;
+            emit controlPointChanged(m_selectedPointIndex, worldPos);
+        }
+        
+        update();
+    }
+}
+
+void DragChain2DVisualization::mouseReleaseEvent(QMouseEvent* event)
+{
+    if (event->button() == Qt::LeftButton) {
+        m_dragging = false;
+    }
+}
+
+QPoint DragChain2DVisualization::worldToScreen(const QVector3D& worldPos) const
+{
+    QPointF transformed = m_transform.map(QPointF(worldPos.x(), worldPos.y()));
+    return transformed.toPoint();
+}
+
+QVector3D DragChain2DVisualization::screenToWorld(const QPoint& screenPos) const
+{
+    QPointF transformed = m_transform.inverted().map(QPointF(screenPos));
+    return QVector3D(transformed.x(), transformed.y(), 0.0f);
+}
+
+void DragChain2DVisualization::updateTransform()
+{
+    // Calculate world bounds
+    QVector3D minPoint, maxPoint;
+    bool firstPoint = true;
+    
+    if (m_hasStartPoint) {
+        minPoint = maxPoint = m_startPoint;
+        firstPoint = false;
+    }
+    
+    if (m_hasEndPoint) {
+        if (firstPoint) {
+            minPoint = maxPoint = m_endPoint;
+            firstPoint = false;
+        } else {
+            minPoint.setX(std::min(minPoint.x(), m_endPoint.x()));
+            minPoint.setY(std::min(minPoint.y(), m_endPoint.y()));
+            maxPoint.setX(std::max(maxPoint.x(), m_endPoint.x()));
+            maxPoint.setY(std::max(maxPoint.y(), m_endPoint.y()));
+        }
+    }
+    
+    for (const auto& point : m_controlPoints) {
+        if (firstPoint) {
+            minPoint = maxPoint = point;
+            firstPoint = false;
+        } else {
+            minPoint.setX(std::min(minPoint.x(), point.x()));
+            minPoint.setY(std::min(minPoint.y(), point.y()));
+            maxPoint.setX(std::max(maxPoint.x(), point.x()));
+            maxPoint.setY(std::max(maxPoint.y(), point.y()));
+        }
+    }
+    
+    // Add padding
+    double padding = 50.0;
+    m_worldBounds = QRectF(minPoint.x() - padding, minPoint.y() - padding,
+                           maxPoint.x() - minPoint.x() + 2 * padding,
+                           maxPoint.y() - minPoint.y() + 2 * padding);
+    
+    // If no points, use default bounds
+    if (firstPoint) {
+        m_worldBounds = QRectF(-100, -100, 200, 200);
+    }
+    
+    m_screenBounds = rect();
+    
+    // Create transform from world to screen
+    double scaleX = m_screenBounds.width() / m_worldBounds.width();
+    double scaleY = m_screenBounds.height() / m_worldBounds.height();
+    double scale = std::min(scaleX, scaleY);
+    
+    m_transform.reset();
+    m_transform.translate(m_screenBounds.center().x(), m_screenBounds.center().y());
+    m_transform.scale(scale, scale);
+    m_transform.translate(-m_worldBounds.center().x(), -m_worldBounds.center().y());
+}
+
+void DragChain2DVisualization::drawGrid(QPainter& painter)
+{
+    painter.setPen(QPen(Qt::lightGray, 1, Qt::DotLine));
+    
+    // Draw grid lines every 10 units
+    double gridSpacing = 10.0;
+    QRectF worldRect = m_worldBounds;
+    
+    // Vertical lines
+    for (double x = worldRect.left(); x <= worldRect.right(); x += gridSpacing) {
+        QPoint p1 = worldToScreen(QVector3D(x, worldRect.top(), 0));
+        QPoint p2 = worldToScreen(QVector3D(x, worldRect.bottom(), 0));
+        painter.drawLine(p1, p2);
+    }
+    
+    // Horizontal lines
+    for (double y = worldRect.top(); y <= worldRect.bottom(); y += gridSpacing) {
+        QPoint p1 = worldToScreen(QVector3D(worldRect.left(), y, 0));
+        QPoint p2 = worldToScreen(QVector3D(worldRect.right(), y, 0));
+        painter.drawLine(p1, p2);
+    }
+}
+
+void DragChain2DVisualization::drawPoints(QPainter& painter)
+{
+    // Draw start point
+    if (m_hasStartPoint) {
+        QPoint screenPos = worldToScreen(m_startPoint);
+        painter.setPen(QPen(Qt::green, 2));
+        painter.setBrush(QBrush(Qt::green));
+        painter.drawEllipse(screenPos, 6, 6);
+        
+        // Draw label
+        painter.setPen(Qt::black);
+        painter.drawText(screenPos + QPoint(10, -10), "Start");
+    }
+    
+    // Draw end point
+    if (m_hasEndPoint) {
+        QPoint screenPos = worldToScreen(m_endPoint);
+        painter.setPen(QPen(Qt::red, 2));
+        painter.setBrush(QBrush(Qt::red));
+        painter.drawEllipse(screenPos, 6, 6);
+        
+        // Draw label
+        painter.setPen(Qt::black);
+        painter.drawText(screenPos + QPoint(10, -10), "End");
+    }
+    
+    // Draw control points
+    for (size_t i = 0; i < m_controlPoints.size(); ++i) {
+        QPoint screenPos = worldToScreen(m_controlPoints[i]);
+        
+        // Use different colors for different control points
+        QColor color;
+        switch (i % 4) {
+            case 0: color = Qt::blue; break;
+            case 1: color = Qt::magenta; break;
+            case 2: color = Qt::cyan; break;
+            case 3: color = Qt::darkYellow; break;
+        }
+        
+        painter.setPen(QPen(color, 2));
+        painter.setBrush(QBrush(color));
+        painter.drawEllipse(screenPos, 5, 5);
+        
+        // Draw label
+        painter.setPen(Qt::black);
+        painter.drawText(screenPos + QPoint(10, -10), QString("CP%1").arg(i + 1));
+    }
+    
+    // Highlight selected point
+    if (m_selectedPointIndex >= -3) {
+        QPoint screenPos;
+        if (m_selectedPointIndex == -2) {
+            screenPos = worldToScreen(m_startPoint);
+        } else if (m_selectedPointIndex == -3) {
+            screenPos = worldToScreen(m_endPoint);
+        } else if (m_selectedPointIndex >= 0) {
+            screenPos = worldToScreen(m_controlPoints[m_selectedPointIndex]);
+        }
+        
+        painter.setPen(QPen(Qt::black, 3));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawEllipse(screenPos, 10, 10);
+    }
+}
+
+void DragChain2DVisualization::drawBezierCurve(QPainter& painter)
+{
+    if (!m_hasStartPoint || !m_hasEndPoint) return;
+    
+    // Create a series of Bézier curves through control points
+    std::vector<QVector3D> curvePoints;
+    curvePoints.push_back(m_startPoint);
+    curvePoints.insert(curvePoints.end(), m_controlPoints.begin(), m_controlPoints.end());
+    curvePoints.push_back(m_endPoint);
+    
+    if (curvePoints.size() < 3) return;
+    
+    painter.setPen(QPen(Qt::blue, 2, Qt::SolidLine));
+    
+    // Draw each Bézier curve segment
+    for (size_t i = 0; i < curvePoints.size() - 2; ++i) {
+        QVector3D p0 = curvePoints[i];
+        QVector3D p1 = curvePoints[i + 1];
+        QVector3D p2 = curvePoints[i + 2];
+        
+        // Draw quadratic Bézier curve
+        QPainterPath path;
+        QPoint startPoint = worldToScreen(p0);
+        path.moveTo(startPoint);
+        
+        // Sample the curve
+        for (int t = 1; t <= 20; ++t) {
+            double tVal = t / 20.0;
+            QVector3D point = (1 - tVal) * (1 - tVal) * p0 + 
+                             2 * (1 - tVal) * tVal * p1 + 
+                             tVal * tVal * p2;
+            QPoint screenPoint = worldToScreen(point);
+            path.lineTo(screenPoint);
+        }
+        
+        painter.drawPath(path);
+    }
+}
+
+void DragChain2DVisualization::drawSegments(QPainter& painter)
+{
+    if (!m_hasStartPoint || !m_hasEndPoint) return;
+    
+    // Create a series of Bézier curves through control points
+    std::vector<QVector3D> curvePoints;
+    curvePoints.push_back(m_startPoint);
+    curvePoints.insert(curvePoints.end(), m_controlPoints.begin(), m_controlPoints.end());
+    curvePoints.push_back(m_endPoint);
+    
+    if (curvePoints.size() < 3) return;
+    
+    // Draw both the ideal Bézier curve (dashed) and the actual solver path (solid)
+    
+    // First, draw the ideal Bézier curve segments (dashed line)
+    painter.setPen(QPen(Qt::lightGray, 2, Qt::DashLine));
+    
+    for (size_t i = 0; i < curvePoints.size() - 2; ++i) {
+        QVector3D p0 = curvePoints[i];
+        QVector3D p1 = curvePoints[i + 1];
+        QVector3D p2 = curvePoints[i + 2];
+        
+        // Calculate total arc length of this Bézier curve segment
+        double totalArcLength = calculateBezierArcLength(p0, p1, p2, 0.0, 1.0);
+        int segmentCount = static_cast<int>(std::ceil(totalArcLength / m_pitchLength));
+        
+        if (segmentCount < 1) continue;
+        
+        // Generate segment points along the Bézier curve
+        QVector3D currentPoint = p0;
+        double currentT = 0.0;
+        
+        for (int j = 0; j < segmentCount; ++j) {
+            // Find the t parameter for the end of this segment
+            double nextT = findBezierParameterForArcLength(p0, p1, p2, m_pitchLength, currentT);
+            
+            // If this is the last segment, ensure we reach the end point
+            if (j == segmentCount - 1) {
+                nextT = 1.0;
+            }
+            
+            // Evaluate the Bézier curve at the end point
+            QVector3D segmentEnd = evaluateBezierCurve(p0, p1, p2, nextT);
+            
+            // Draw the ideal segment (dashed)
+            QPoint startScreen = worldToScreen(currentPoint);
+            QPoint endScreen = worldToScreen(segmentEnd);
+            painter.drawLine(startScreen, endScreen);
+            
+            // Update for next iteration
+            currentPoint = segmentEnd;
+            currentT = nextT;
+        }
+    }
+    
+    // Now draw the actual solver-generated path (solid line) with deviation highlighting
+    if (!m_solverSegments.empty()) {
+        qDebug() << "[2DVisualization] Drawing" << m_solverSegments.size() << "actual solver segments";
+        
+        for (size_t i = 0; i < m_solverSegments.size(); ++i) {
+            const auto& segment = m_solverSegments[i];
+            
+            QPoint startScreen = worldToScreen(segment.startPoint);
+            QPoint endScreen = worldToScreen(segment.endPoint);
+            
+            // Check if this segment causes deviation
+            bool isDeviationSegment = false;
+            double distanceToTarget = 0.0;
+            
+            if (i < m_segmentDeviations.size()) {
+                isDeviationSegment = m_segmentDeviations[i];
+            }
+            
+            if (i < m_segmentDistancesToTarget.size()) {
+                distanceToTarget = m_segmentDistancesToTarget[i];
+            }
+            
+            // Check for bend angle violations
+            bool violatesBendAngle = false;
+            if (segment.isBend && segment.bendRadius > 0.0) {
+                // Calculate maximum allowed bend angle based on bend radius constraint
+                double maxBendAngle = 2.0 * std::asin(m_pitchLength / (2.0 * m_bendRadius));
+                violatesBendAngle = segment.bendAngle > maxBendAngle;
+            }
+            
+            // Set color based on violation type (bend angle violations take priority)
+            if (violatesBendAngle) {
+                // Orange for bend angle violations
+                painter.setPen(QPen(Qt::darkYellow, 4, Qt::SolidLine));
+            } else if (isDeviationSegment) {
+                // Red for segments that cause deviation
+                painter.setPen(QPen(Qt::red, 4, Qt::SolidLine));
+            } else {
+                // Green for normal segments
+                painter.setPen(QPen(Qt::darkGreen, 3, Qt::SolidLine));
+            }
+            
+            painter.drawLine(startScreen, endScreen);
+            
+            // Draw segment marker (small circle at segment end)
+            if (violatesBendAngle) {
+                painter.setBrush(QBrush(Qt::darkYellow));
+                painter.setPen(QPen(Qt::darkYellow, 2));
+            } else if (isDeviationSegment) {
+                painter.setBrush(QBrush(Qt::red));
+                painter.setPen(QPen(Qt::red, 2));
+            } else {
+                painter.setBrush(QBrush(Qt::darkGreen));
+                painter.setPen(QPen(Qt::darkGreen, 1));
+            }
+            painter.drawEllipse(endScreen, 4, 4);
+            
+            // Draw violation indicators for problematic segments
+            if (violatesBendAngle) {
+                QPoint centerScreen = worldToScreen(segment.startPoint);
+                
+                // Draw bend angle violation warning (diamond shape)
+                QPolygonF diamond;
+                diamond << QPointF(centerScreen.x(), centerScreen.y() - 8)
+                      << QPointF(centerScreen.x() + 6, centerScreen.y())
+                      << QPointF(centerScreen.x(), centerScreen.y() + 8)
+                      << QPointF(centerScreen.x() - 6, centerScreen.y());
+                
+                painter.setBrush(QBrush(Qt::darkYellow));
+                painter.setPen(QPen(Qt::darkYellow, 1));
+                painter.drawPolygon(diamond);
+                
+                // Bend angle violation indicator (no text)
+            } else if (isDeviationSegment) {
+                QPoint centerScreen = worldToScreen(segment.startPoint);
+                
+                // Draw deviation warning triangle
+                QPolygonF triangle;
+                triangle << QPointF(centerScreen.x(), centerScreen.y() - 8)
+                       << QPointF(centerScreen.x() - 6, centerScreen.y() + 4)
+                       << QPointF(centerScreen.x() + 6, centerScreen.y() + 4);
+                
+                painter.setBrush(QBrush(Qt::red));
+                painter.setPen(QPen(Qt::red, 1));
+                painter.drawPolygon(triangle);
+                
+                // Deviation indicator (no text)
+            }
+        }
+        
+        // Draw bend radius indicators where segments change direction significantly
+        for (size_t i = 1; i < m_solverSegments.size(); ++i) {
+            const auto& prevSegment = m_solverSegments[i-1];
+            const auto& currentSegment = m_solverSegments[i];
+            
+            QVector3D prevDir = normalizeVector(prevSegment.endPoint - prevSegment.startPoint);
+            QVector3D currentDir = normalizeVector(currentSegment.endPoint - currentSegment.startPoint);
+            
+            double dot = dotProduct(prevDir, currentDir);
+            dot = (dot < -1.0) ? -1.0 : (dot > 1.0) ? 1.0 : dot;
+            double angle = std::acos(dot);
+            
+            if (angle > 0.1) { // Significant direction change
+                QPoint centerScreen = worldToScreen(prevSegment.endPoint);
+                
+                // Check if this waypoint is part of a deviation segment or has bend angle violations
+                bool isDeviationWaypoint = false;
+                bool hasBendAngleViolation = false;
+                
+                if (i < m_segmentDeviations.size()) {
+                    isDeviationWaypoint = m_segmentDeviations[i];
+                }
+                
+                // Check for bend angle violation at this waypoint
+                if (i < m_solverSegments.size()) {
+                    const auto& currentSegment = m_solverSegments[i];
+                    if (currentSegment.isBend && currentSegment.bendRadius > 0.0) {
+                        double maxBendAngle = 2.0 * std::asin(m_pitchLength / (2.0 * m_bendRadius));
+                        hasBendAngleViolation = currentSegment.bendAngle > maxBendAngle;
+                    }
+                }
+                
+                // Draw bend radius indicator with appropriate color (bend angle violations take priority)
+                if (hasBendAngleViolation) {
+                    painter.setPen(QPen(Qt::darkYellow, 2, Qt::SolidLine));
+                    painter.setBrush(QBrush(Qt::darkYellow));
+                } else if (isDeviationWaypoint) {
+                    painter.setPen(QPen(Qt::red, 2, Qt::SolidLine));
+                    painter.setBrush(QBrush(Qt::red));
+                } else {
+                    painter.setPen(QPen(Qt::blue, 2, Qt::SolidLine));
+                    painter.setBrush(Qt::NoBrush);
+                }
+                painter.drawEllipse(centerScreen, 8, 8);
+                
+                // Draw angle indicator
+                painter.setPen(Qt::black);
+                painter.setFont(QFont("Arial", 7));
+                painter.drawText(centerScreen + QPoint(10, -10), 
+                               QString("%1°").arg(static_cast<int>(angle * 180.0 / M_PI)));
+            }
+        }
+        
+        // Draw end point deviation indicator if the final waypoint doesn't match the target
+        if (!m_solverSegments.empty()) {
+            const auto& lastSegment = m_solverSegments.back();
+            double finalDistanceToTarget = (lastSegment.endPoint - m_endPoint).length();
+            if (finalDistanceToTarget > m_deviationThreshold) {
+                QPoint endScreen = worldToScreen(lastSegment.endPoint);
+                QPoint targetScreen = worldToScreen(m_endPoint);
+                
+                // Draw line from actual end to target end
+                painter.setPen(QPen(Qt::red, 2, Qt::DashLine));
+                painter.drawLine(endScreen, targetScreen);
+                
+                // Draw target end point with different color
+                painter.setPen(QPen(Qt::red, 3));
+                painter.setBrush(QBrush(Qt::red));
+                painter.drawEllipse(targetScreen, 8, 8);
+                
+                // Draw deviation text
+                painter.setPen(Qt::red);
+                painter.setFont(QFont("Arial", 9, QFont::Bold));
+                QString deviationText = QString("MISS: %1mm").arg(finalDistanceToTarget, 0, 'f', 1);
+                painter.drawText(targetScreen + QPoint(15, -15), deviationText);
+                
+                // Draw arrow indicating direction of deviation
+                QVector3D deviationVector = m_endPoint - lastSegment.endPoint;
+                QVector3D arrowDirection = normalizeVector(deviationVector);
+                QPoint arrowStart = worldToScreen(lastSegment.endPoint);
+                QPoint arrowEnd = worldToScreen(lastSegment.endPoint + arrowDirection * 20.0);
+                
+                // Draw arrow
+                painter.setPen(QPen(Qt::red, 2, Qt::SolidLine));
+                painter.drawLine(arrowStart, arrowEnd);
+                
+                // Draw arrowhead
+                QVector3D perpendicular = normalizeVector(QVector3D::crossProduct(arrowDirection, QVector3D(0, 0, 1)));
+                QPoint arrowHead1 = worldToScreen(lastSegment.endPoint + arrowDirection * 20.0 + perpendicular * 5.0);
+                QPoint arrowHead2 = worldToScreen(lastSegment.endPoint + arrowDirection * 20.0 - perpendicular * 5.0);
+                painter.drawLine(arrowEnd, arrowHead1);
+                painter.drawLine(arrowEnd, arrowHead2);
+            }
+        }
+    } else {
+        // Fallback to constraint-respecting path if no solver segments available
+        qDebug() << "[2DVisualization] No solver segments available, using constraint-respecting path";
+        
+        // Calculate maximum bend angle allowed by the bend radius constraint
+        double maxBendAngle = 2.0 * std::asin(m_pitchLength / (2.0 * m_bendRadius));
+        
+        // Generate constraint-respecting waypoints
+        std::vector<QVector3D> waypoints;
+        waypoints.push_back(m_startPoint);
+        
+        for (size_t i = 0; i < curvePoints.size() - 2; ++i) {
+            QVector3D p0 = curvePoints[i];
+            QVector3D p1 = curvePoints[i + 1];
+            QVector3D p2 = curvePoints[i + 2];
+            
+            // Generate constraint-respecting waypoints for this segment
+            auto segmentWaypoints = generateConstraintRespectingWaypoints(p0, p2, p1, m_pitchLength, maxBendAngle);
+            
+            // Add waypoints (skip first if it's the same as the last waypoint)
+            for (size_t j = 1; j < segmentWaypoints.size(); ++j) {
+                if (waypoints.empty() || (segmentWaypoints[j] - waypoints.back()).length() > 0.1) {
+                    waypoints.push_back(segmentWaypoints[j]);
+                }
+            }
+        }
+        
+        // Draw the constraint-respecting segments with deviation highlighting
+        for (size_t i = 0; i < waypoints.size() - 1; ++i) {
+            QPoint startScreen = worldToScreen(waypoints[i]);
+            QPoint endScreen = worldToScreen(waypoints[i + 1]);
+            
+            // Check if this segment causes deviation
+            bool isDeviationSegment = false;
+            double distanceToTarget = 0.0;
+            
+            if (i < m_segmentDeviations.size()) {
+                isDeviationSegment = m_segmentDeviations[i];
+            }
+            
+            if (i < m_segmentDistancesToTarget.size()) {
+                distanceToTarget = m_segmentDistancesToTarget[i];
+            }
+            
+            // Set color based on deviation status
+            if (isDeviationSegment) {
+                // Red for segments that cause deviation
+                painter.setPen(QPen(Qt::red, 4, Qt::SolidLine));
+            } else {
+                // Green for normal segments
+                painter.setPen(QPen(Qt::darkGreen, 3, Qt::SolidLine));
+            }
+            
+            painter.drawLine(startScreen, endScreen);
+            
+            // Draw segment marker (small circle at segment end)
+            if (isDeviationSegment) {
+                painter.setBrush(QBrush(Qt::red));
+                painter.setPen(QPen(Qt::red, 2));
+            } else {
+                painter.setBrush(QBrush(Qt::darkGreen));
+                painter.setPen(QPen(Qt::darkGreen, 1));
+            }
+            painter.drawEllipse(endScreen, 4, 4);
+            
+            // Draw deviation indicator for problematic segments
+            if (isDeviationSegment) {
+                QPoint centerScreen = worldToScreen(waypoints[i]);
+                
+                // Draw warning triangle
+                QPolygonF triangle;
+                triangle << QPointF(centerScreen.x(), centerScreen.y() - 8)
+                       << QPointF(centerScreen.x() - 6, centerScreen.y() + 4)
+                       << QPointF(centerScreen.x() + 6, centerScreen.y() + 4);
+                
+                painter.setBrush(QBrush(Qt::red));
+                painter.setPen(QPen(Qt::red, 1));
+                painter.drawPolygon(triangle);
+                
+                // Draw deviation text - REMOVED
+                // painter.setPen(Qt::red);
+                // painter.setFont(QFont("Arial", 8, QFont::Bold));
+                // QString deviationText = QString("Δ%1mm").arg(distanceToTarget, 0, 'f', 1);
+                // painter.drawText(centerScreen + QPoint(10, -10), deviationText);
+            }
+        }
+        
+        // Draw bend radius indicators where segments change direction significantly
+        for (size_t i = 1; i < waypoints.size() - 1; ++i) {
+            QVector3D prevDir = normalizeVector(waypoints[i] - waypoints[i-1]);
+            QVector3D nextDir = normalizeVector(waypoints[i+1] - waypoints[i]);
+            
+            double dot = dotProduct(prevDir, nextDir);
+            dot = (dot < -1.0) ? -1.0 : (dot > 1.0) ? 1.0 : dot;
+            double angle = std::acos(dot);
+            
+            if (angle > 0.1) { // Significant direction change
+                QPoint centerScreen = worldToScreen(waypoints[i]);
+                
+                // Check if this waypoint is part of a deviation segment
+                bool isDeviationWaypoint = false;
+                if (i < m_segmentDeviations.size()) {
+                    isDeviationWaypoint = m_segmentDeviations[i];
+                }
+                
+                // Draw bend radius indicator with appropriate color
+                if (isDeviationWaypoint) {
+                    painter.setPen(QPen(Qt::red, 2, Qt::SolidLine));
+                    painter.setBrush(QBrush(Qt::red));
+                } else {
+                    painter.setPen(QPen(Qt::blue, 2, Qt::SolidLine));
+                    painter.setBrush(Qt::NoBrush);
+                }
+                painter.drawEllipse(centerScreen, 8, 8);
+                
+                // Draw angle indicator
+                painter.setPen(Qt::black);
+                painter.setFont(QFont("Arial", 7));
+                painter.drawText(centerScreen + QPoint(10, -10), 
+                               QString("%1°").arg(static_cast<int>(angle * 180.0 / M_PI)));
+            }
+        }
+        
+        // Draw end point deviation indicator if the final waypoint doesn't match the target
+        if (!waypoints.empty()) {
+            double finalDistanceToTarget = (waypoints.back() - m_endPoint).length();
+            if (finalDistanceToTarget > m_deviationThreshold) {
+                QPoint endScreen = worldToScreen(waypoints.back());
+                QPoint targetScreen = worldToScreen(m_endPoint);
+                
+                // Draw line from actual end to target end
+                painter.setPen(QPen(Qt::red, 2, Qt::DashLine));
+                painter.drawLine(endScreen, targetScreen);
+                
+                // Draw target end point with different color
+                painter.setPen(QPen(Qt::red, 3));
+                painter.setBrush(QBrush(Qt::red));
+                painter.drawEllipse(targetScreen, 8, 8);
+                
+                // Draw deviation text
+                painter.setPen(Qt::red);
+                painter.setFont(QFont("Arial", 9, QFont::Bold));
+                QString deviationText = QString("MISS: %1mm").arg(finalDistanceToTarget, 0, 'f', 1);
+                painter.drawText(targetScreen + QPoint(15, -15), deviationText);
+                
+                // Draw arrow indicating direction of deviation
+                QVector3D deviationVector = m_endPoint - waypoints.back();
+                QVector3D arrowDirection = normalizeVector(deviationVector);
+                QPoint arrowStart = worldToScreen(waypoints.back());
+                QPoint arrowEnd = worldToScreen(waypoints.back() + arrowDirection * 20.0);
+                
+                // Draw arrow
+                painter.setPen(QPen(Qt::red, 2, Qt::SolidLine));
+                painter.drawLine(arrowStart, arrowEnd);
+                
+                // Draw arrowhead
+                QVector3D perpendicular = normalizeVector(QVector3D::crossProduct(arrowDirection, QVector3D(0, 0, 1)));
+                QPoint arrowHead1 = worldToScreen(waypoints.back() + arrowDirection * 20.0 + perpendicular * 5.0);
+                QPoint arrowHead2 = worldToScreen(waypoints.back() + arrowDirection * 20.0 - perpendicular * 5.0);
+                painter.drawLine(arrowEnd, arrowHead1);
+                painter.drawLine(arrowEnd, arrowHead2);
+            }
+        }
+    }
+}
+
+// Helper functions for Bézier curve calculations
+double DragChain2DVisualization::calculateBezierArcLength(const QVector3D& p0, const QVector3D& p1, const QVector3D& p2, double tStart, double tEnd)
+{
+    // Simple numerical integration for arc length
+    const int numSamples = 100;
+    double arcLength = 0.0;
+    
+    for (int i = 0; i < numSamples; ++i) {
+        double t1 = tStart + (tEnd - tStart) * i / numSamples;
+        double t2 = tStart + (tEnd - tStart) * (i + 1) / numSamples;
+        
+        QVector3D point1 = evaluateBezierCurve(p0, p1, p2, t1);
+        QVector3D point2 = evaluateBezierCurve(p0, p1, p2, t2);
+        
+        arcLength += (point2 - point1).length();
+    }
+    
+    return arcLength;
+}
+
+double DragChain2DVisualization::findBezierParameterForArcLength(const QVector3D& p0, const QVector3D& p1, const QVector3D& p2, double targetLength, double tStart)
+{
+    // Binary search to find t parameter for target arc length
+    double tMin = tStart;
+    double tMax = 1.0;
+    double tolerance = 0.001;
+    
+    while (tMax - tMin > tolerance) {
+        double tMid = (tMin + tMax) / 2.0;
+        double arcLength = calculateBezierArcLength(p0, p1, p2, tStart, tMid);
+        
+        if (arcLength < targetLength) {
+            tMin = tMid;
+        } else {
+            tMax = tMid;
+        }
+    }
+    
+    return (tMin + tMax) / 2.0;
+}
+
+QVector3D DragChain2DVisualization::evaluateBezierCurve(const QVector3D& p0, const QVector3D& p1, const QVector3D& p2, double t)
+{
+    // Quadratic Bézier curve evaluation
+    return (1 - t) * (1 - t) * p0 + 2 * (1 - t) * t * p1 + t * t * p2;
+}
+
+// Helper functions for constraint-respecting path generation
+std::vector<QVector3D> DragChain2DVisualization::generateConstraintRespectingWaypoints(
+    const QVector3D& startPoint,
+    const QVector3D& endPoint,
+    const QVector3D& controlPoint,
+    double pitchLength,
+    double maxBendAngle)
+{
+    std::vector<QVector3D> waypoints;
+    waypoints.push_back(startPoint);
+    
+    // Calculate total arc length of the Bézier curve
+    double totalArcLength = calculateBezierArcLength(startPoint, controlPoint, endPoint, 0.0, 1.0);
+    int segmentCount = static_cast<int>(std::ceil(totalArcLength / pitchLength));
+    
+    // Ensure at least 2 segments for a meaningful path
+    if (segmentCount < 2) segmentCount = 2;
+    
+    // Define the plane using start, end, and control points
+    QVector3D planeNormal = normalizeVector(QVector3D::crossProduct(endPoint - startPoint, controlPoint - startPoint));
+    if (planeNormal.length() < 0.001) {
+        // If the three points are collinear, use a default plane normal
+        planeNormal = QVector3D(0, 0, 1);
+    }
+    
+    // Helper function to project a point onto the plane
+    auto projectToPlane = [&](const QVector3D& point) -> QVector3D {
+        QVector3D pointToStart = point - startPoint;
+        double distanceFromPlane = QVector3D::dotProduct(pointToStart, planeNormal);
+        return point - planeNormal * distanceFromPlane;
+    };
+    
+    // Generate waypoints that respect the bend angle constraint
+    QVector3D currentPoint = startPoint;
+    QVector3D currentDirection = normalizeVector(controlPoint - startPoint);
+    
+    for (int i = 1; i <= segmentCount; ++i) {
+        // Calculate target position along the Bézier curve
+        double t = static_cast<double>(i) / segmentCount;
+        QVector3D targetPoint = evaluateBezierCurve(startPoint, controlPoint, endPoint, t);
+        
+        // Calculate the ideal direction to the target
+        QVector3D idealDirection = normalizeVector(targetPoint - currentPoint);
+        
+        // Check if the angle change exceeds the maximum allowed bend angle
+                    double dot = dotProduct(currentDirection, idealDirection);
+            dot = (dot < -1.0) ? -1.0 : (dot > 1.0) ? 1.0 : dot;
+            double angleChange = std::acos(dot);
+        
+        if (angleChange > maxBendAngle && i < segmentCount) {
+            // Need to create an intermediate waypoint to respect the bend angle constraint
+            
+            // Calculate the maximum allowed direction change
+            QVector3D rotationAxis = normalizeVector(crossProduct(currentDirection, idealDirection));
+            if (rotationAxis.length() < 0.001) {
+                // Vectors are parallel, no rotation needed
+                rotationAxis = QVector3D(0, 0, 1);
+            }
+            
+            // Ensure rotation axis is in the plane
+            rotationAxis = normalizeVector(QVector3D::crossProduct(planeNormal, rotationAxis));
+            
+            // Rotate current direction by the maximum allowed angle
+            QVector3D constrainedDirection = rotateVector(currentDirection, rotationAxis, maxBendAngle);
+            
+            // Calculate intermediate waypoint
+            QVector3D intermediatePoint = currentPoint + constrainedDirection * pitchLength;
+            
+            // Project the waypoint onto the plane to ensure it stays in the intended plane
+            intermediatePoint = projectToPlane(intermediatePoint);
+            
+            waypoints.push_back(intermediatePoint);
+            
+            // Update for next iteration
+            currentPoint = intermediatePoint;
+            currentDirection = normalizeVector(intermediatePoint - waypoints[waypoints.size() - 2]);
+        } else {
+            // Angle change is acceptable, move directly to target
+            currentPoint = targetPoint;
+            currentDirection = idealDirection;
+        }
+    }
+    
+    // Ensure the last waypoint is exactly the end point
+    waypoints.back() = endPoint;
+    
+    return waypoints;
+}
+
+QVector3D DragChain2DVisualization::normalizeVector(const QVector3D& vector)
+{
+    double length = vector.length();
+    if (length < 0.001) return QVector3D(0, 0, 0);
+    return vector / length;
+}
+
+QVector3D DragChain2DVisualization::crossProduct(const QVector3D& a, const QVector3D& b)
+{
+    return QVector3D::crossProduct(a, b);
+}
+
+double DragChain2DVisualization::dotProduct(const QVector3D& a, const QVector3D& b)
+{
+    return QVector3D::dotProduct(a, b);
+}
+
+double ConnectionCreationWidget::safeClamp(double value, double min, double max) const
+{
+    return (value < min) ? min : (value > max) ? max : value;
+}
+
+QVector3D DragChain2DVisualization::rotateVector(const QVector3D& vector, const QVector3D& axis, double angle)
+{
+    // Rodrigues' rotation formula
+    QVector3D unitAxis = normalizeVector(axis);
+    double cosAngle = std::cos(angle);
+    double sinAngle = std::sin(angle);
+    
+    return vector * cosAngle + 
+           crossProduct(unitAxis, vector) * sinAngle + 
+           unitAxis * dotProduct(unitAxis, vector) * (1.0 - cosAngle);
+}
+
+void ConnectionCreationWidget::testFixedSegmentLengths()
+{
+    qDebug() << "[ConnectionWidget] Testing fixed segment lengths...";
+    
+    if (!m_point1 || !m_point2) {
+        qDebug() << "[ConnectionWidget] No points selected for testing";
+        return;
+    }
+    
+    // Get the world positions
+    QVector3D point1(0, 0, 0); // Placeholder - in real implementation, get from model
+    QVector3D point2(100, 50, 0); // Placeholder - in real implementation, get from model
+    
+    double pitchLength = m_pitchLengthSpin->value();
+    double maxBendRadius = m_maxBendRadiusSpin->value();
+    
+    qDebug() << "[ConnectionWidget] Test parameters:";
+    qDebug() << "[ConnectionWidget]   Point1:" << point1;
+    qDebug() << "[ConnectionWidget]   Point2:" << point2;
+    qDebug() << "[ConnectionWidget]   Pitch length:" << pitchLength;
+    qDebug() << "[ConnectionWidget]   Max bend radius:" << maxBendRadius;
+    
+    // Create solver and test
+    BezierDragChainSolver solver;
+    auto segments = solver.solveDragChainPathSimple(point1, point2, (point1 + point2) * 0.5f, pitchLength, maxBendRadius);
+    
+    qDebug() << "[ConnectionWidget] Generated" << segments.size() << "segments";
+    
+    // Verify all segments have exactly the pitch length
+    bool allCorrect = true;
+    for (size_t i = 0; i < segments.size(); ++i) {
+        double segmentLength = (segments[i].endPoint - segments[i].startPoint).length();
+        double difference = std::abs(segmentLength - pitchLength);
+        
+        qDebug() << "[ConnectionWidget] Segment" << i << ":";
+        qDebug() << "[ConnectionWidget]   Length:" << segmentLength << "mm";
+        qDebug() << "[ConnectionWidget]   Expected:" << pitchLength << "mm";
+        qDebug() << "[ConnectionWidget]   Difference:" << difference << "mm";
+        
+        if (difference > 0.001) {
+            qDebug() << "[ConnectionWidget]   ERROR: Segment length is not fixed!";
+            allCorrect = false;
+        }
+    }
+    
+    if (allCorrect) {
+        qDebug() << "[ConnectionWidget] ✓ All segments have exactly the pitch length!";
+    } else {
+        qDebug() << "[ConnectionWidget] ✗ Some segments have incorrect lengths!";
+    }
+}
+
+void ConnectionCreationWidget::testDeviationFlagging()
+{
+    qDebug() << "[ConnectionWidget] Testing deviation flagging functionality...";
+    
+    if (!m_point1 || !m_point2) {
+        qDebug() << "[ConnectionWidget] No points selected for testing";
+        return;
+    }
+    
+    // Create test deviation data
+    std::vector<bool> testDeviations = {false, true, false, true, false};
+    std::vector<double> testDistances = {50.0, 45.2, 40.1, 35.8, 30.5};
+    
+    qDebug() << "[ConnectionWidget] Test deviation data:";
+    for (size_t i = 0; i < testDeviations.size(); ++i) {
+        qDebug() << "[ConnectionWidget]   Segment" << i << ":" << (testDeviations[i] ? "DEVIATES" : "normal") << "distance:" << testDistances[i] << "mm";
+    }
+    
+    // Pass test data to 2D visualization
+    if (m_2dVisualization) {
+        m_2dVisualization->setDeviationThreshold(5.0); // 5mm threshold
+        m_2dVisualization->setDeviationData(testDeviations, testDistances);
+        qDebug() << "[ConnectionWidget] ✓ Test deviation data passed to 2D visualization";
+    } else {
+        qDebug() << "[ConnectionWidget] ✗ No 2D visualization available for testing";
+    }
+}
+
+void DragChain2DVisualization::setDeviationThreshold(double threshold)
+{
+    m_deviationThreshold = threshold;
+    update();
+}
+
+void DragChain2DVisualization::setDeviationData(const std::vector<bool>& segmentDeviations, 
+                                               const std::vector<double>& segmentDistancesToTarget)
+{
+    m_segmentDeviations = segmentDeviations;
+    m_segmentDistancesToTarget = segmentDistancesToTarget;
+    update();
+}
+
+void DragChain2DVisualization::setActualPathSegments(const std::vector<QVector3D>& pathWaypoints)
+{
+    m_actualPathWaypoints = pathWaypoints;
+    update();
+}
+
+void DragChain2DVisualization::setSolverSegments(const std::vector<BezierDragChainSegment>& solverSegments)
+{
+    m_solverSegments = solverSegments;
+    update();
+}

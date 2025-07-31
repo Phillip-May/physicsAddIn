@@ -11,7 +11,7 @@ HEADERS += \
     $$PWD/SimulationManager.h \
     $$PWD/XCAFLabelTreeModel.h \
     $$PWD/ConnectionCreationWidget.h \
-    $$PWD/DragChainConstraintSolver.h
+    $$PWD/BezierDragChainSolver.h
 #    $$PWD/PhysXEngine.h \
 #    $$PWD/SceneConfigurationDialog.h \
 #    $$PWD/SoftBodyConfigDialog.h \
@@ -33,7 +33,7 @@ SOURCES += \
     $$PWD/SimulationManager.cpp \
     $$PWD/XCAFLabelTreeModel.cpp \
     $$PWD/ConnectionCreationWidget.cpp \
-    $$PWD/DragChainConstraintSolver.cpp
+    $$PWD/BezierDragChainSolver.cpp
 #    $$PWD/PhysXEngine.cpp \
 #    $$PWD/SceneConfigurationDialog.cpp \
 #    $$PWD/SoftBodyConfigDialog.cpp \
