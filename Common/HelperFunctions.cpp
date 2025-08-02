@@ -11,6 +11,7 @@
 #include <QMessageBox>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QVector3D>
 #include <QIODevice>
 #include <QAbstractItemView>
 #include <QModelIndex>
@@ -57,6 +58,7 @@
 #include <QPushButton>
 #include "RailJsonEditorDialog.h"
 #include "ConnectionCreationWidget.h"
+#include "SimulationManager.h"
 
 // Global vectors for tracking tree views and OpenGL widgets
 std::vector<QTreeView*> g_treeViews;
@@ -1298,14 +1300,15 @@ template void connectTreeAndViewer(QTreeView* tree, CadOpenGLWidget* viewer, Cad
 
 // Shared context menu setup function
 void setupContextMenu(QTreeView* treeView, CustomModelTreeModel* model, const Handle(TDocStd_Document)& doc) {
-    setupComprehensiveContextMenu(treeView, model, doc);
+    setupComprehensiveContextMenu(treeView, model, doc, nullptr, nullptr);
 }
 
 // Comprehensive context menu setup function that can handle different node types
 void setupComprehensiveContextMenu(QTreeView* treeView, 
                                    QAbstractItemModel* model, 
                                    const Handle(TDocStd_Document)& doc,
-                                   CadOpenGLWidget* openGLViewer) {
+                                   CadOpenGLWidget* openGLViewer,
+                                   SimulationManager* simManager) {
     treeView->setContextMenuPolicy(Qt::CustomContextMenu);
     QObject::connect(treeView, &QTreeView::customContextMenuRequested, treeView, [=](const QPoint& pos) {
         QModelIndex idx = treeView->indexAt(pos);
@@ -1921,6 +1924,16 @@ void setupComprehensiveContextMenu(QTreeView* treeView,
             
             // --- Create Connection ---
             QAction* createConnectionAction = menu.addAction("Create Connection...");
+            
+            // Add test action for drag chain creation
+            QAction* testDragChainAction = menu.addAction("Test Drag Chain Creation");
+            QObject::connect(testDragChainAction, &QAction::triggered, treeView, [=]() {
+                qDebug() << "[ContextMenu] Test drag chain creation triggered from root";
+                if (simManager) {
+                    simManager->forceDragChainCreation();
+                }
+            });
+            
             QObject::connect(createConnectionAction, &QAction::triggered, treeView, [=]() {
                 qDebug() << "[ContextMenu] Create Connection action triggered";
                 qDebug() << "[ContextMenu] openGLViewer:" << (openGLViewer ? "valid" : "null");
@@ -2002,6 +2015,93 @@ void setupComprehensiveContextMenu(QTreeView* treeView,
                 // Show the window
                 connectionWindow->show();
             });
+            
+            // --- Edit Connection (only for connection nodes) ---
+            if (node->type == CadNodeType::Connection) {
+                QAction* editConnectionAction = menu.addAction("Edit Connection...");
+                
+                // Add test action for drag chain creation
+                QAction* testDragChainAction = menu.addAction("Test Drag Chain Creation");
+                QObject::connect(testDragChainAction, &QAction::triggered, treeView, [=]() {
+                    qDebug() << "[ContextMenu] Test drag chain creation triggered";
+                    if (simManager) {
+                        simManager->forceDragChainCreation();
+                    }
+                });
+                QObject::connect(editConnectionAction, &QAction::triggered, treeView, [=]() {
+                    qDebug() << "[ContextMenu] Edit Connection action triggered for node:" << QString::fromStdString(node->name);
+                    
+                    // Create connection widget in a new window
+                    QWidget* connectionWindow = new QWidget();
+                    connectionWindow->setWindowTitle("Edit Connection - " + QString::fromStdString(node->name));
+                    connectionWindow->resize(600, 500);
+                    
+                    auto layout = new QVBoxLayout(connectionWindow);
+                    auto connectionWidget = new ConnectionCreationWidget(customModel, connectionWindow);
+                    layout->addWidget(connectionWidget);
+                    
+                    // Set the OpenGL widget for visualization
+                    if (openGLViewer) {
+                        connectionWidget->setOpenGLWidget(openGLViewer);
+                    }
+                    
+                    // Load settings from the connection node
+                    std::shared_ptr<CadNode> connectionNodeShared = std::make_shared<CadNode>(*node);
+                    bool settingsLoaded = connectionWidget->loadSettingsFromConnectionNode(connectionNodeShared);
+                    
+                    if (settingsLoaded) {
+                        qDebug() << "[ContextMenu] Successfully loaded settings from connection node";
+                    } else {
+                        qDebug() << "[ContextMenu] Failed to load settings from connection node, using defaults";
+                    }
+                    
+                    // Connect widget signals
+                    QObject::connect(connectionWidget, &ConnectionCreationWidget::connectionCreated, 
+                        [=](std::shared_ptr<CadNode> newConnectionNode) {
+                            if (newConnectionNode) {
+                                // Replace the old connection node with the new one
+                                // Find the parent of the old node
+                                CadNode* parent = node->parent;
+                                if (parent) {
+                                    // Find and replace the old node
+                                    for (auto& child : parent->children) {
+                                        if (child.get() == node) {
+                                            child = newConnectionNode;
+                                            newConnectionNode->parent = parent;
+                                            break;
+                                        }
+                                    }
+                                    
+                                    // Update the model
+                                    QModelIndex parentIndex = customModel->indexForNode(parent);
+                                    if (parentIndex.isValid()) {
+                                        customModel->dataChanged(parentIndex, parentIndex);
+                                    }
+                                    
+                                    // Update OpenGL viewer if available
+                                    if (openGLViewer) {
+                                        openGLViewer->markCacheDirty();
+                                        openGLViewer->update();
+                                    }
+                                    
+                                    QMessageBox::information(treeView, "Success", 
+                                        QString("Connection '%1' updated successfully.").arg(QString::fromStdString(newConnectionNode->name)));
+                                }
+                            }
+                            
+                            // Close the window
+                            connectionWindow->close();
+                        });
+                    
+                    QObject::connect(connectionWidget, &ConnectionCreationWidget::connectionCancelled, 
+                        [=]() {
+                            connectionWindow->close();
+                        });
+                    
+                    // Show the window
+                    connectionWindow->show();
+                });
+            }
         }
         
         // Handle XCAFLabelNode type (XCAFLabelTreeModel)
@@ -2049,7 +2149,7 @@ void initTreeAndOpenGLWidget(std::shared_ptr<CadNode>& inputRoot,
     }
     
     // Setup comprehensive context menu using the new shared function
-    setupComprehensiveContextMenu(treeView, qtModel, doc, openGLViewer);
+    setupComprehensiveContextMenu(treeView, qtModel, doc, openGLViewer, simManager);
     
     // Add tabs
     treeTabWidget->addTab(treeView, name + " Tree");
@@ -2470,11 +2570,56 @@ std::shared_ptr<CadNode> createConnectionBetweenPoints(
         return nullptr;
     }
     
+    // Debug: Check connection point positions
+    qDebug() << "[Connection] Creating connection between points:"
+             << QString::fromStdString(point1->name) << "and" << QString::fromStdString(point2->name);
+    
+    if (point1->loc.IsIdentity()) {
+        qDebug() << "[Connection] WARNING: Point1 has identity location!";
+    } else {
+        gp_Trsf trsf1 = point1->loc.Transformation();
+        gp_Pnt pos1 = trsf1.TranslationPart();
+        qDebug() << "[Connection] Point1 position:" << pos1.X() << pos1.Y() << pos1.Z();
+    }
+    
+    if (point2->loc.IsIdentity()) {
+        qDebug() << "[Connection] WARNING: Point2 has identity location!";
+    } else {
+        gp_Trsf trsf2 = point2->loc.Transformation();
+        gp_Pnt pos2 = trsf2.TranslationPart();
+        qDebug() << "[Connection] Point2 position:" << pos2.X() << pos2.Y() << pos2.Z();
+    }
+    
     // Create the connection node
     auto connectionNode = std::make_shared<CadNode>();
     connectionNode->name = connectionName;
     connectionNode->type = CadNodeType::Connection;
     connectionNode->color = CADNodeColor::fromSRGB(100, 100, 255); // Blue color for connections
+    
+    // Set the connection node position to the midpoint between the two connection points
+    if (!point1->loc.IsIdentity() && !point2->loc.IsIdentity()) {
+        gp_Trsf trsf1 = point1->loc.Transformation();
+        gp_Trsf trsf2 = point2->loc.Transformation();
+        gp_Pnt pos1 = trsf1.TranslationPart();
+        gp_Pnt pos2 = trsf2.TranslationPart();
+        
+        // Calculate midpoint
+        gp_Pnt midpoint((pos1.X() + pos2.X()) / 2.0, 
+                       (pos1.Y() + pos2.Y()) / 2.0, 
+                       (pos1.Z() + pos2.Z()) / 2.0);
+        
+        // Set connection node position
+        gp_Trsf connectionTrsf;
+        connectionTrsf.SetTranslation(gp_Vec(midpoint.X(), midpoint.Y(), midpoint.Z()));
+        connectionNode->loc = TopLoc_Location(connectionTrsf);
+        
+        qDebug() << "[Connection] Point1 position:" << pos1.X() << pos1.Y() << pos1.Z();
+        qDebug() << "[Connection] Point2 position:" << pos2.X() << pos2.Y() << pos2.Z();
+        qDebug() << "[Connection] Set connection node position to midpoint:"
+                 << midpoint.X() << midpoint.Y() << midpoint.Z();
+    } else {
+        qDebug() << "[Connection] WARNING: Connection points have identity locations, using origin";
+    }
     
     // Create connection data
     auto connectionData = std::make_shared<ConnectionNodeData>();
@@ -2520,9 +2665,125 @@ std::shared_ptr<CadNode> createConnectionBetweenPoints(
     
     connectionNode->data = connectionData;
     
-    // Add connection points as children
-    connectionNode->children.push_back(std::make_shared<CadNode>(*point1));
-    connectionNode->children.push_back(std::make_shared<CadNode>(*point2));
+    // If connection points have identity locations, try to get position from JSON data
+    if (point1->loc.IsIdentity() || point2->loc.IsIdentity()) {
+        qDebug() << "[Connection] Connection points have identity locations, trying JSON data...";
+        
+        // Try to get position from the connection data's JSON settings
+        if (connectionData && !connectionData->creationSettingsJson.isEmpty()) {
+            QJsonDocument doc = QJsonDocument::fromJson(connectionData->creationSettingsJson.toUtf8());
+            if (doc.isObject()) {
+                QJsonObject settings = doc.object();
+                if (settings.contains("visualization")) {
+                    QJsonObject visSettings = settings["visualization"].toObject();
+                    QVector3D startPoint(0, 0, 0);
+                    QVector3D endPoint(0, 0, 0);
+                    
+                    if (visSettings.contains("startPoint")) {
+                        QJsonObject startObj = visSettings["startPoint"].toObject();
+                        startPoint = QVector3D(
+                            startObj["x"].toDouble(),
+                            startObj["y"].toDouble(),
+                            startObj["z"].toDouble()
+                        );
+                    }
+                    if (visSettings.contains("endPoint")) {
+                        QJsonObject endObj = visSettings["endPoint"].toObject();
+                        endPoint = QVector3D(
+                            endObj["x"].toDouble(),
+                            endObj["y"].toDouble(),
+                            endObj["z"].toDouble()
+                        );
+                    }
+                    
+                    // Calculate midpoint from JSON data
+                    QVector3D midpoint = (startPoint + endPoint) * 0.5;
+                    gp_Trsf connectionTrsf;
+                    connectionTrsf.SetTranslation(gp_Vec(midpoint.x(), midpoint.y(), midpoint.z()));
+                    connectionNode->loc = TopLoc_Location(connectionTrsf);
+                    
+                    qDebug() << "[Connection] Set connection node position from JSON data:"
+                             << "startPoint:" << startPoint << "endPoint:" << endPoint
+                             << "midpoint:" << midpoint;
+                } else {
+                    qDebug() << "[Connection] No visualization settings in JSON";
+                }
+            } else {
+                qDebug() << "[Connection] Failed to parse JSON settings";
+            }
+        } else {
+            qDebug() << "[Connection] No JSON settings available";
+        }
+    }
+    
+    // Add connection points as children with proper world positioning
+    auto childPoint1 = std::make_shared<CadNode>(*point1);
+    auto childPoint2 = std::make_shared<CadNode>(*point2);
+    
+    // Give unique names to distinguish the connection points
+    childPoint1->name = "Connection_Point_1";
+    childPoint2->name = "Connection_Point_2";
+    
+    // Calculate the world positions of the original connection points
+    QVector3D worldPos1(0, 0, 0);
+    QVector3D worldPos2(0, 0, 0);
+    
+    if (!point1->loc.IsIdentity()) {
+        gp_Trsf trsf1 = point1->loc.Transformation();
+        gp_Pnt pos1 = trsf1.TranslationPart();
+        worldPos1 = QVector3D(pos1.X(), pos1.Y(), pos1.Z());
+    }
+    
+    if (!point2->loc.IsIdentity()) {
+        gp_Trsf trsf2 = point2->loc.Transformation();
+        gp_Pnt pos2 = trsf2.TranslationPart();
+        worldPos2 = QVector3D(pos2.X(), pos2.Y(), pos2.Z());
+    }
+    
+    // Calculate the connection node's world position (midpoint)
+    QVector3D connectionWorldPos = (worldPos1 + worldPos2) * 0.5;
+    
+    // Set child point positions relative to the connection node
+    QVector3D relativePos1 = worldPos1 - connectionWorldPos;
+    QVector3D relativePos2 = worldPos2 - connectionWorldPos;
+    
+    // Create transformations for the child points
+    gp_Trsf childTrsf1;
+    childTrsf1.SetTranslation(gp_Vec(relativePos1.x(), relativePos1.y(), relativePos1.z()));
+    childPoint1->loc = TopLoc_Location(childTrsf1);
+    
+    gp_Trsf childTrsf2;
+    childTrsf2.SetTranslation(gp_Vec(relativePos2.x(), relativePos2.y(), relativePos2.z()));
+    childPoint2->loc = TopLoc_Location(childTrsf2);
+    
+    qDebug() << "[Connection] Original connection points:";
+    qDebug() << "[Connection] Point1 name:" << QString::fromStdString(point1->name);
+    qDebug() << "[Connection] Point2 name:" << QString::fromStdString(point2->name);
+    qDebug() << "[Connection] Point1 == Point2:" << (point1 == point2);
+    qDebug() << "[Connection] Original world positions:";
+    qDebug() << "[Connection] Point1 world:" << worldPos1;
+    qDebug() << "[Connection] Point2 world:" << worldPos2;
+    qDebug() << "[Connection] Connection node world:" << connectionWorldPos;
+    qDebug() << "[Connection] Child1 relative:" << relativePos1;
+    qDebug() << "[Connection] Child2 relative:" << relativePos2;
+    
+    connectionNode->children.push_back(childPoint1);
+    connectionNode->children.push_back(childPoint2);
+    
+    // Debug: Check the actual positions of the connection points after adding as children
+    qDebug() << "[Connection] After adding children:";
+    for (size_t i = 0; i < connectionNode->children.size(); ++i) {
+        const auto& child = connectionNode->children[i];
+        if (child->type == CadNodeType::ConnectionPoint) {
+            if (child->loc.IsIdentity()) {
+                qDebug() << "[Connection] Child" << i << "has identity location";
+            } else {
+                gp_Trsf trsf = child->loc.Transformation();
+                gp_Pnt pos = trsf.TranslationPart();
+                qDebug() << "[Connection] Child" << i << "position:" << pos.X() << pos.Y() << pos.Z();
+            }
+        }
+    }
     
     // Set parent pointers
     setParentPointersRecursive(connectionNode.get());
@@ -2911,4 +3172,359 @@ CadNode* findBestConnectionPlacement(CadNode* point1, CadNode* point2) {
     
     // Default to common ancestor
     return commonAncestor;
+}
+
+// SHARED: Get connection point positions using the same logic as preview
+// This ensures both preview and simulation use identical position calculation
+std::pair<QVector3D, QVector3D> getConnectionPointPositions(
+    CadNode* connectionNode,
+    const std::function<bool()>& hasNodeUpdates,
+    const std::function<const std::unordered_map<CadNode*, TopLoc_Location>&()>& getLatestNodeLocations)
+{
+    QVector3D startPoint(0, 0, 0);
+    QVector3D endPoint(0, 0, 0);
+    
+    // Helper function to get node location (same as in preview)
+    auto getNodeLocation = [&](const CadNode* node) -> TopLoc_Location {
+        if (!node) return TopLoc_Location();
+        
+        // If we have node updates, check for updated locations
+        if (hasNodeUpdates()) {
+            const auto& nodeLocations = getLatestNodeLocations();
+            auto it = nodeLocations.find(const_cast<CadNode*>(node));
+            if (it != nodeLocations.end()) {
+                return it->second;
+            }
+        }
+        
+        // Fall back to the node's original location
+        return node->loc;
+    };
+    
+    // Helper function to find accumulated location for a node (same logic as preview)
+    std::function<TopLoc_Location(CadNode*, CadNode*, TopLoc_Location)> findAccumulatedLocation = 
+        [&](CadNode* target, CadNode* current, TopLoc_Location parentAccum) -> TopLoc_Location {
+            if (!current) return TopLoc_Location();
+            
+            // Get the node location
+            TopLoc_Location nodeLoc = getNodeLocation(current);
+            
+            // Always accumulate the transform for this node
+            TopLoc_Location newAccumulatedLoc = parentAccum * nodeLoc;
+            
+            // If this is our target, return the accumulated location
+            if (current == target) {
+                return newAccumulatedLoc;
+            }
+            
+            // Recursively search children
+            for (const auto& child : current->children) {
+                if (child) {
+                    TopLoc_Location childLoc = findAccumulatedLocation(target, child.get(), newAccumulatedLoc);
+                    if (!childLoc.IsIdentity()) {
+                        // Found the target in this child branch
+                        return childLoc;
+                    }
+                }
+            }
+            
+            return TopLoc_Location();
+        };
+    
+    // Find connection points in the scene graph
+    std::vector<CadNode*> connectionPoints;
+    for (const auto& child : connectionNode->children) {
+        if (child && child->type == CadNodeType::ConnectionPoint) {
+            connectionPoints.push_back(child.get());
+        }
+    }
+    
+    if (connectionPoints.size() >= 2) {
+        // Get the root node for location calculation
+        CadNode* rootNode = nullptr;
+        // Find root by traversing up from connection node
+        CadNode* current = connectionNode;
+        while (current && current->parent) {
+            current = current->parent;
+        }
+        rootNode = current;
+        
+        if (rootNode) {
+            // Calculate actual positions using the same logic as preview
+            TopLoc_Location startLoc = findAccumulatedLocation(connectionPoints[0], rootNode, TopLoc_Location());
+            TopLoc_Location endLoc = findAccumulatedLocation(connectionPoints[1], rootNode, TopLoc_Location());
+            
+            if (!startLoc.IsIdentity() && !endLoc.IsIdentity()) {
+                gp_Trsf startTrsf = startLoc.Transformation();
+                gp_Trsf endTrsf = endLoc.Transformation();
+                gp_Pnt startPos = startTrsf.TranslationPart();
+                gp_Pnt endPos = endTrsf.TranslationPart();
+                
+                startPoint = QVector3D(startPos.X(), startPos.Y(), startPos.Z());
+                endPoint = QVector3D(endPos.X(), endPos.Y(), endPos.Z());
+                
+                qDebug() << "[Shared] Calculated actual node positions:";
+                qDebug() << "[Shared] Start point:" << startPoint;
+                qDebug() << "[Shared] End point:" << endPoint;
+            } else {
+                qDebug() << "[Shared] WARNING: Could not calculate node locations";
+            }
+        } else {
+            qDebug() << "[Shared] WARNING: Could not find root node";
+        }
+    } else {
+        qDebug() << "[Shared] WARNING: Not enough connection points found";
+    }
+    
+    return std::make_pair(startPoint, endPoint);
+}
+
+// SHARED: Get connection point positions from direct node references (for preview)
+// This ensures both preview and simulation use identical position calculation
+std::pair<QVector3D, QVector3D> getConnectionPointPositionsFromNodes(
+    CadNode* point1,
+    CadNode* point2,
+    CadNode* rootNode,
+    const std::function<bool()>& hasNodeUpdates,
+    const std::function<const std::unordered_map<CadNode*, TopLoc_Location>&()>& getLatestNodeLocations)
+{
+    QVector3D startPoint(0, 0, 0);
+    QVector3D endPoint(0, 0, 0);
+    
+    // Helper function to get node location (same as in preview)
+    auto getNodeLocation = [&](const CadNode* node) -> TopLoc_Location {
+        if (!node) return TopLoc_Location();
+        
+        // If we have node updates, check for updated locations
+        if (hasNodeUpdates()) {
+            const auto& nodeLocations = getLatestNodeLocations();
+            auto it = nodeLocations.find(const_cast<CadNode*>(node));
+            if (it != nodeLocations.end()) {
+                return it->second;
+            }
+        }
+        
+        // Fall back to the node's original location
+        return node->loc;
+    };
+    
+    // Helper function to find accumulated location for a node (same logic as preview)
+    std::function<TopLoc_Location(CadNode*, CadNode*, TopLoc_Location)> findAccumulatedLocation = 
+        [&](CadNode* target, CadNode* current, TopLoc_Location parentAccum) -> TopLoc_Location {
+            if (!current) return TopLoc_Location();
+            
+            // Get the node location
+            TopLoc_Location nodeLoc = getNodeLocation(current);
+            
+            // Always accumulate the transform for this node
+            TopLoc_Location newAccumulatedLoc = parentAccum * nodeLoc;
+            
+            // If this is our target, return the accumulated location
+            if (current == target) {
+                return newAccumulatedLoc;
+            }
+            
+            // Recursively search children
+            for (const auto& child : current->children) {
+                if (child) {
+                    TopLoc_Location childLoc = findAccumulatedLocation(target, child.get(), newAccumulatedLoc);
+                    if (!childLoc.IsIdentity()) {
+                        // Found the target in this child branch
+                        return childLoc;
+                    }
+                }
+            }
+            
+            return TopLoc_Location();
+        };
+    
+    if (point1 && point2 && rootNode) {
+        // Calculate actual positions using the same logic as preview
+        TopLoc_Location startLoc = findAccumulatedLocation(point1, rootNode, TopLoc_Location());
+        TopLoc_Location endLoc = findAccumulatedLocation(point2, rootNode, TopLoc_Location());
+        
+        if (!startLoc.IsIdentity() && !endLoc.IsIdentity()) {
+            gp_Trsf startTrsf = startLoc.Transformation();
+            gp_Trsf endTrsf = endLoc.Transformation();
+            gp_Pnt startPos = startTrsf.TranslationPart();
+            gp_Pnt endPos = endTrsf.TranslationPart();
+            
+            startPoint = QVector3D(startPos.X(), startPos.Y(), startPos.Z());
+            endPoint = QVector3D(endPos.X(), endPos.Y(), endPos.Z());
+            
+            qDebug() << "[Shared] Calculated actual node positions from direct references:";
+            qDebug() << "[Shared] Start point:" << startPoint;
+            qDebug() << "[Shared] End point:" << endPoint;
+        } else {
+            qDebug() << "[Shared] WARNING: Could not calculate node locations from direct references";
+        }
+    } else {
+        qDebug() << "[Shared] WARNING: Invalid point or root node references";
+    }
+    
+    return std::make_pair(startPoint, endPoint);
+}
+
+// SHARED: Auto-calculate control point using the same logic as preview
+QVector3D calculateAutoControlPoint(const QVector3D& startPoint, const QVector3D& endPoint)
+{
+    QVector3D midPoint = (startPoint + endPoint) * 0.5f;
+    QVector3D direction = (endPoint - startPoint).normalized();
+    
+    // Calculate perpendicular axis in the 2D plane
+    QVector3D perpendicular;
+    if (std::abs(direction.x()) < 0.9f) {
+        perpendicular = QVector3D::crossProduct(QVector3D(1, 0, 0), direction);
+    } else {
+        perpendicular = QVector3D::crossProduct(QVector3D(0, 1, 0), direction);
+    }
+    perpendicular.normalize();
+    
+    double distance = (endPoint - startPoint).length();
+    double controlDistance = distance * 0.3; // 30% of total distance
+    
+    QVector3D autoControlPoint = midPoint + perpendicular * controlDistance;
+    return autoControlPoint;
+}
+
+// SHARED: Generate waypoint-based segments for both preview and simulation
+std::vector<QVector3D> generateWaypointSegments(
+    const QVector3D& startPoint, 
+    const QVector3D& endPoint, 
+    const std::vector<QVector3D>& controlPoints,
+    double pitchLength)
+{
+    std::vector<QVector3D> waypoints;
+    waypoints.push_back(startPoint);
+    
+    if (controlPoints.empty()) {
+        // Auto-calculate control point using shared function
+        QVector3D autoControlPoint = calculateAutoControlPoint(startPoint, endPoint);
+        waypoints.push_back(autoControlPoint);
+    } else {
+        // Project all control points to the plane defined by start and end points
+        for (const auto& controlPoint : controlPoints) {
+            // Project control point to plane
+            QVector3D direction = (endPoint - startPoint).normalized();
+            QVector3D toControl = controlPoint - startPoint;
+            double projection = QVector3D::dotProduct(toControl, direction);
+            QVector3D projectedControlPoint = startPoint + projection * direction;
+            
+            // Ensure Z coordinate is consistent
+            double targetZ = (startPoint.z() + endPoint.z()) * 0.5;
+            projectedControlPoint.setZ(targetZ);
+            
+            waypoints.push_back(projectedControlPoint);
+        }
+    }
+    
+    waypoints.push_back(endPoint);
+    return waypoints;
+}
+
+// SHARED: Unified connection point position calculation (used by both preview and simulation)
+std::pair<QVector3D, QVector3D> getConnectionPointPositionsShared(
+    CadNode* point1, 
+    CadNode* point2, 
+    CadNode* rootNode,
+    std::function<bool()> hasNodeUpdates,
+    std::function<const std::unordered_map<CadNode*, TopLoc_Location>&()> getLatestNodeLocations) {
+    
+    // Use the same logic as getConnectionPointPositionsFromNodes
+    return getConnectionPointPositionsFromNodes(point1, point2, rootNode, hasNodeUpdates, getLatestNodeLocations);
+}
+
+// SHARED: Generate drag chain segments using the same logic for both preview and simulation
+std::vector<QVector3D> generateDragChainSegments(
+    const QVector3D& startPoint,
+    const QVector3D& endPoint,
+    const std::vector<QVector3D>& controlPoints,
+    double pitchLength,
+    double bendRadius)
+{
+    qDebug() << "[Shared] generateDragChainSegments called with:";
+    qDebug() << "[Shared] Start point:" << startPoint;
+    qDebug() << "[Shared] End point:" << endPoint;
+    qDebug() << "[Shared] Control points count:" << controlPoints.size();
+    qDebug() << "[Shared] Pitch length:" << pitchLength;
+    qDebug() << "[Shared] Bend radius:" << bendRadius;
+    
+    // Generate waypoints using shared function
+    std::vector<QVector3D> waypoints = generateWaypointSegments(startPoint, endPoint, controlPoints, pitchLength);
+    
+    qDebug() << "[Shared] Generated" << waypoints.size() << "waypoints";
+    for (size_t i = 0; i < waypoints.size(); ++i) {
+        qDebug() << "[Shared] Waypoint" << i << ":" << waypoints[i];
+    }
+    
+    // Generate segments between waypoints
+    std::vector<QVector3D> segments;
+    
+    for (size_t i = 0; i < waypoints.size() - 1; ++i) {
+        QVector3D segmentStart = waypoints[i];
+        QVector3D segmentEnd = waypoints[i + 1];
+        
+        // Calculate distance between waypoints
+        double distance = (segmentEnd - segmentStart).length();
+        int segmentCount = static_cast<int>(std::ceil(distance / pitchLength));
+        
+        if (segmentCount < 1) segmentCount = 1;
+        
+        qDebug() << "[Shared] Waypoint segment" << i << ":" << segmentStart << "->" << segmentEnd;
+        qDebug() << "[Shared] Distance:" << distance << "mm, generating" << segmentCount << "segments";
+        
+        // Generate segments along the straight line
+        for (int j = 0; j < segmentCount; ++j) {
+            double t = static_cast<double>(j) / segmentCount;
+            QVector3D segmentStartPos = segmentStart + t * (segmentEnd - segmentStart);
+            
+            double nextT = static_cast<double>(j + 1) / segmentCount;
+            if (j == segmentCount - 1) nextT = 1.0;
+            QVector3D segmentEndPos = segmentStart + nextT * (segmentEnd - segmentStart);
+            
+            // Add segment start and end points
+            segments.push_back(segmentStartPos);
+            segments.push_back(segmentEndPos);
+            
+            qDebug() << "[Shared] Created segment" << segments.size()/2 - 1 << ":" << segmentStartPos << "->" << segmentEndPos;
+        }
+    }
+    
+    qDebug() << "[Shared] Generated" << segments.size()/2 << "segments total";
+    qDebug() << "[Shared] Segment points:";
+    for (size_t i = 0; i < segments.size(); i += 2) {
+        if (i + 1 < segments.size()) {
+            qDebug() << "[Shared] Segment" << i/2 << ":" << segments[i] << "->" << segments[i+1];
+        }
+    }
+    return segments;
+}
+
+// Helper function to find accumulated location for a target node in a tree
+TopLoc_Location findAccumulatedLocation(CadNode* target, CadNode* current, TopLoc_Location parentAccum) {
+    if (!current) return TopLoc_Location();
+    
+    // Get the node location
+    TopLoc_Location nodeLoc = current->loc;
+    
+    // Always accumulate the transform for this node
+    TopLoc_Location newAccumulatedLoc = parentAccum * nodeLoc;
+    
+    // If this is our target, return the accumulated location
+    if (current == target) {
+        return newAccumulatedLoc;
+    }
+    
+    // Recursively search children
+    for (const auto& child : current->children) {
+        if (child) {
+            TopLoc_Location childLoc = findAccumulatedLocation(target, child.get(), newAccumulatedLoc);
+            if (!childLoc.IsIdentity()) {
+                // Found the target in this child branch
+                return childLoc;
+            }
+        }
+    }
+    
+    return TopLoc_Location();
 }

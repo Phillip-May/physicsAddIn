@@ -98,6 +98,16 @@ struct FaceEdgeKeyHash;
 std::shared_ptr<CadNode> build_tree_xcaf(const TDF_Label& label, const Handle(XCAFDoc_ShapeTool)& shapeTool, const Handle(XCAFDoc_ColorTool)& colorTool, const CADNodeColor& parentColor, const TopLoc_Location& parentLoc, const Handle(TDocStd_Document)& doc);
 bool saveXCAFToSTEP(const Handle(TDocStd_Document)& doc, const QString& filename);
 bool saveXCAFToBinary(const Handle(TDocStd_Document)& doc, const QString& filename);
+
+// SHARED: Auto-calculate control point using the same logic as preview
+QVector3D calculateAutoControlPoint(const QVector3D& startPoint, const QVector3D& endPoint);
+
+// SHARED: Generate waypoint-based segments for both preview and simulation
+std::vector<QVector3D> generateWaypointSegments(
+    const QVector3D& startPoint, 
+    const QVector3D& endPoint, 
+    const std::vector<QVector3D>& controlPoints,
+    double pitchLength);
 void compareFileSizes(const QString& baseName);
 template <typename ModelType>
 void connectTreeAndViewer(QTreeView* tree, CadOpenGLWidget* viewer, ModelType* model);
@@ -134,7 +144,8 @@ void setupContextMenu(QTreeView* treeView, CustomModelTreeModel* model, const Ha
 void setupComprehensiveContextMenu(QTreeView* treeView, 
                                    QAbstractItemModel* model, 
                                    const Handle(TDocStd_Document)& doc,
-                                   CadOpenGLWidget* openGLViewer = nullptr);
+                                   CadOpenGLWidget* openGLViewer = nullptr,
+                                   SimulationManager* simManager = nullptr);
 
 void initTreeAndOpenGLWidget(std::shared_ptr<CadNode>& inputRoot,
                              QTabWidget* treeTabWidget,
@@ -170,5 +181,40 @@ CadNode* findCommonAncestor(CadNode* node1, CadNode* node2);
 
 // Helper function to find the best placement location for a connection
 CadNode* findBestConnectionPlacement(CadNode* point1, CadNode* point2);
+
+// SHARED: Get connection point positions using the same logic as preview
+// This ensures both preview and simulation use identical position calculation
+std::pair<QVector3D, QVector3D> getConnectionPointPositions(
+    CadNode* connectionNode,
+    const std::function<bool()>& hasNodeUpdates,
+    const std::function<const std::unordered_map<CadNode*, TopLoc_Location>&()>& getLatestNodeLocations);
+
+// SHARED: Get connection point positions from direct node references (for preview)
+// This ensures both preview and simulation use identical position calculation
+std::pair<QVector3D, QVector3D> getConnectionPointPositionsFromNodes(
+    CadNode* point1,
+    CadNode* point2,
+    CadNode* rootNode,
+    const std::function<bool()>& hasNodeUpdates,
+    const std::function<const std::unordered_map<CadNode*, TopLoc_Location>&()>& getLatestNodeLocations);
+
+// SHARED: Unified connection point position calculation (used by both preview and simulation)
+std::pair<QVector3D, QVector3D> getConnectionPointPositionsShared(
+    CadNode* point1, 
+    CadNode* point2, 
+    CadNode* rootNode,
+    std::function<bool()> hasNodeUpdates,
+    std::function<const std::unordered_map<CadNode*, TopLoc_Location>&()> getLatestNodeLocations);
+
+// SHARED: Generate drag chain segments using the same logic for both preview and simulation
+std::vector<QVector3D> generateDragChainSegments(
+    const QVector3D& startPoint,
+    const QVector3D& endPoint,
+    const std::vector<QVector3D>& controlPoints,
+    double pitchLength,
+    double bendRadius);
+
+// Helper function to find accumulated location for a target node in a tree
+TopLoc_Location findAccumulatedLocation(CadNode* target, CadNode* current, TopLoc_Location parentAccum);
 
 #endif // QTCADVIEWER_HELPERFUNCTIONS_H 

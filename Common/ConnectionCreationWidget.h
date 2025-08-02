@@ -19,6 +19,9 @@
 #include <QMouseEvent>
 #include <QFrame>
 #include <set>
+#include <QJsonObject>
+#include <QJsonDocument>
+#include <QJsonArray>
 #include "CadNode.h"
 #include "CustomModelTreeModel.h"
 #include "CadOpenGLWidget.h"
@@ -131,7 +134,22 @@ class ConnectionCreationWidget : public QWidget {
     Q_OBJECT
 public:
     explicit ConnectionCreationWidget(CustomModelTreeModel* model, QWidget* parent = nullptr);
+    ~ConnectionCreationWidget();
+
+    // JSON serialization methods
+    QJsonObject saveSettingsToJson() const;
+    bool loadSettingsFromJson(const QJsonObject& settings);
+    void saveSettingsToFile(const QString& filename) const;
+    bool loadSettingsFromFile(const QString& filename);
     
+    // Convenience methods
+    void saveSettingsToDefaultFile() const;
+    bool loadSettingsFromDefaultFile();
+    QString getSettingsAsString() const;
+    
+    // Load settings from a connection node
+    bool loadSettingsFromConnectionNode(const std::shared_ptr<CadNode>& connectionNode);
+
     // Get the created connection node
     std::shared_ptr<CadNode> getConnectionNode() const { return m_connectionNode; }
     
@@ -150,6 +168,7 @@ public:
         qDebug() << "[ConnectionWidget] clearSolverStatistics called - clearing all statistics and segments";
         m_lastSolverStatistics = StoredSolverStatistics(); 
         m_solverSegments.clear(); // Also clear stored segments to force re-run
+        updateSolverStatisticsDisplay();
     }
     
     // Clear user modifications to control points
@@ -253,11 +272,7 @@ private:
     // 2D Visualization
     DragChain2DVisualization* m_2dVisualization;
     
-    QLabel* m_distanceLabel;
-    QLabel* m_calculatedLengthLabel;
-    QLabel* m_effectiveLengthLabel;
     QLabel* m_compatibilityLabel;
-    QLabel* m_placementLabel;
     QLabel* m_segmentLengthsLabel;
     QLabel* m_solverIterationsLabel;
     QLabel* m_cableLengthLabel;

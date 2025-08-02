@@ -15,8 +15,9 @@
 class PhysXEngine {
     friend class SimulationManager;
 public:
-    PhysXEngine()
+    PhysXEngine(SimulationManager* parent = nullptr)
         : m_globalCookingParams(PxTolerancesScale())
+        , m_parent(parent)
     {
     }
     ~PhysXEngine();
@@ -57,6 +58,9 @@ private:
     
     // Reference to root CadNode for ground plane configuration
     std::shared_ptr<CadNode> m_rootNode;
+    
+    // Reference to parent SimulationManager
+    SimulationManager* m_parent;
 private:
     static PxFilterFlags simulationFilterShader(PxFilterObjectAttributes attributes0, PxFilterData filterData0, PxFilterObjectAttributes attributes1, PxFilterData filterData1, PxPairFlags &pairFlags, const void *constantBlock, PxU32 constantBlockSize);
 
@@ -67,7 +71,13 @@ private:
     void stepSimulation(float deltaTime);
     void buildSceneFromNodes(const std::vector<CadNode*>& physicsNodes, 
                            std::unordered_map<CadNode*, PxRigidDynamic*>& nodeToActor,
-                           std::unordered_map<PxRigidDynamic*, CadNode*>& actorToNode);
+                           std::unordered_map<PxRigidDynamic*, CadNode*>& actorToNode,
+                           std::unordered_map<PxRigidDynamic*, std::shared_ptr<CadNode>>& actorToSegmentNode);
+    void createDragChainFromConnection(CadNode* connectionNode,
+                                     std::unordered_map<CadNode*, PxRigidDynamic*>& nodeToActor,
+                                     std::unordered_map<PxRigidDynamic*, CadNode*>& actorToNode,
+                                     std::unordered_map<PxRigidDynamic*, std::shared_ptr<CadNode>>& actorToSegmentNode,
+                                     SimulationManager* simManager = nullptr);
 };
 
 class SimulationManager
@@ -91,6 +101,15 @@ public:
     
     // Manually trigger PVD connection
     void connectPvd();
+
+    // Test drag chain creation (for debugging)
+    void testDragChainCreation();
+
+    // Force drag chain creation for all connection nodes
+    void forceDragChainCreation();
+
+    // Create a test connection node for debugging
+    void createTestConnectionNode();
 
     void startSimulation();
     void pauseSimulation();
@@ -193,6 +212,13 @@ private:
     // Mappings
     std::unordered_map<CadNode*, physx::PxRigidDynamic*> m_nodeToActor;
     std::unordered_map<physx::PxRigidDynamic*, CadNode*> m_actorToNode;
+    
+    // Mapping for drag chain segments
+    std::unordered_map<PxRigidDynamic*, std::shared_ptr<CadNode>> m_actorToSegmentNode;
+    // Track segments per connection node to prevent duplicates
+    std::unordered_map<CadNode*, std::vector<std::shared_ptr<CadNode>>> m_connectionSegments;
+    // Track which connection nodes have already been processed to prevent duplicate calls
+    std::unordered_set<CadNode*> m_processedConnections;
     // Timing
     std::chrono::steady_clock::time_point m_lastStepTime;
 private:

@@ -355,7 +355,7 @@ int main(int argc, char *argv[])
     labelTreeView->setSelectionMode(QAbstractItemView::ExtendedSelection);
     
     // Setup comprehensive context menu for XCAF tree using shared function
-    setupComprehensiveContextMenu(labelTreeView, labelModel, doc, nullptr);
+    setupComprehensiveContextMenu(labelTreeView, labelModel, doc, nullptr, nullptr);
     
     tabWidget->addTab(labelTreeView, "XCAF Tree");
 
