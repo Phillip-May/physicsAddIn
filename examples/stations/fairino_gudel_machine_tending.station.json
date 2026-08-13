@@ -1,0 +1,187 @@
+{
+  "station_schema": 12,
+  "name": "FAIRINO FR20 + Gudel TMF-1 Machine Tending",
+  "conveyor_simulation_mode": "logical",
+  "_comment": [
+    "Port of FAIRINO-and-Gudel Machine tending.rdk focused on the FAIRINO FR20 and Gudel TMF-1 6 m.",
+    "The source side uses a PhysX spawner capped at 10 active products feeding a four-corner parametric pick accumulator banked toward the robot.",
+    "The FAIRINO carries the built-in Robotiq Hand-E Dual Gripper. The redesigned pick feeder uses a sub-two-box-width single-file intake, a compact centre platform, deck-following side walls and a full-height terminal wall. Machine Tending Demo selects the left TCP for its logical pick and the right TCP for its PhysX pick, services the same repeatable end-stop nest from directly above on elbow-up analytic IK branches, carries both boxes to the far end, deposits both onto the output conveyor, and returns to a safe pose before looping.",
+    "The robot and TMF-1 share the station-only fr20-tmf1 motion link. Program MoveJ/MoveL lines may append J7 in millimetres; the demo carries both boxes to J7=6400 and unloads them onto the PhysX output conveyor before looping.",
+    "The rail starts at external-axis position 0.",
+    "Robot and conveyor placements are mapped from RoboDK Z-up to RobotSimulator Y-up coordinates, then translated so the rail is centered around the station origin."
+  ],
+  "mechanisms": [
+    {
+      "id": "tmf1",
+      "name": "Gudel TMF-1 6m",
+      "package": "builtin:gudel_tmf1_6m_gantry",
+      "position_mm": [-3200.0, 0.0, 0.0],
+      "rotation_deg": [0.0, 0.0, 0.0],
+      "joint_position_mm": 0.0,
+      "motion_link": "fr20-tmf1"
+    }
+  ],
+  "robots": [
+    {
+      "id": "fr20",
+      "name": "FAIRINO FR20",
+      "package": "builtin:fairino_fr20_robot",
+      "parent_mechanism": "tmf1",
+      "motion_link": "fr20-tmf1",
+      "active_tool": "fr20-hand-e-dual",
+      "programs": [
+        {
+          "name": "Machine Tending Demo — logical + PhysX",
+          "text": "RobotSimulatorProgram 1\nSetSpeed 12 180\nSetTool fr20-hand-e-dual 0\nActuate fr20-hand-e-dual left-grip 0\nActuate fr20-hand-e-dual right-grip 0\nMoveJ 0 -161.205 90 -108.795 90 0 0\nMoveJ -49.0404 -184.542 54.0323 -106.245 57.7248 129.166\nSetSpeed 5 80\nMoveL -49.0404 -199.23 62.918 -100.442 57.7248 129.166\nActuate fr20-hand-e-dual left-grip 1\nMoveL -49.0404 -184.542 54.0323 -106.245 57.7248 129.166\nSetTool fr20-hand-e-dual 1\nSetSpeed 10 150\nMoveJ -49.0404 -184.541 54.0322 -106.245 57.7248 -50.834\nSetSpeed 5 80\nMoveL -49.0404 -199.23 62.9181 -100.442 57.7248 -50.834\nActuate fr20-hand-e-dual right-grip 1\nMoveL -49.0404 -165.785 32.3177 -103.286 57.7248 -50.834\nSetSpeed 5 300\nMoveJ 0 -161.205 90 -108.795 90 0 6400\nSetSpeed 10 180\nMoveJ -118.767 -188.83 66.2597 -106.193 70.105 -68.7833 6400\nActuate fr20-hand-e-dual right-grip 0\nSetTool fr20-hand-e-dual 0\nMoveJ -118.767 -188.83 66.2598 -106.193 70.105 111.217 6400\nActuate fr20-hand-e-dual left-grip 0\nSetSpeed 12 240\nMoveJ 0 -161.205 90 -108.795 90 0 6400\n"
+        }
+      ],
+      "position_mm": [382.5, 618.0, 0.0],
+      "rotation_deg": [0.0, 0.0, 0.0]
+    }
+  ],
+  "accessories": [
+    {
+      "id": "spawn-box",
+      "name": "Box workpiece",
+      "package": "builtin:hand_e_box_workpiece",
+      "hidden": true,
+      "folder": "Hidden items",
+      "position_mm": [0.0, 0.0, 0.0],
+      "rotation_deg": [0.0, 0.0, 0.0]
+    },
+    {
+      "id": "fr20-pedestal",
+      "name": "Pedestal H12in (Type 1)",
+      "package": "builtin:pedestal_h12in_type1",
+      "parent_mechanism": "tmf1",
+      "loc": [
+        0.0, 0.0, 1.0, 382.5,
+        0.0, 1.0, 0.0, 308.0,
+        -1.0, 0.0, 0.0, 0.0
+      ]
+    },
+    {
+      "id": "fr20-hand-e-dual",
+      "name": "Robotiq Hand-E Dual Gripper",
+      "package": "builtin:robotiq_hand_e_dual_tool",
+      "parent_robot": "fr20",
+      "active_tcp": 0,
+      "loc": [
+        0.0, -1.0, 0.0, 836.0,
+        0.0, 0.0, -1.0, 1353.0,
+        1.0, 0.0, 0.0, 166.0
+      ]
+    },
+    {
+      "id": "input-conveyor",
+      "name": "Input Spawner 700 x 300",
+      "package": "builtin:roller_conveyor",
+      "position_mm": [-2850.0, 0.0, 1300.0],
+      "rotation_deg": [0.0, 0.0, 0.0],
+      "parameters": {
+        "generator": "roller_conveyor",
+        "widthMm": 300.0,
+        "lengthMm": 700.0,
+        "heightMm": 800.0,
+        "rollerPitchMm": 100.0,
+        "startHeightMm": 800.0,
+        "endHeightMm": 800.0,
+        "startLeftHeightMm": 800.0,
+        "startRightHeightMm": 800.0,
+        "endLeftHeightMm": 800.0,
+        "endRightHeightMm": 800.0,
+        "turnAngleDeg": 0.0,
+        "curveRadiusMm": 900.0,
+        "supportBracesEnabled": true,
+        "rollerCoverEnabled": true,
+        "endStopEnabled": false,
+        "simulationMode": "physx",
+        "role": "spawner",
+        "spawnObjectId": "spawn-box",
+        "speedMmS": 180.0,
+        "spawnIntervalSeconds": 5.0,
+        "maxActiveSpawns": 10
+      }
+    },
+    {
+      "id": "input-pick-feeder",
+      "name": "Robot Pick Feeder",
+      "package": "builtin:robot_pick_feeder",
+      "position_mm": [-2150.0, 0.0, 1300.0],
+      "rotation_deg": [0.0, 0.0, 0.0],
+      "parameters": {
+        "generator": "roller_conveyor",
+        "widthMm": 300.0,
+        "lengthMm": 700.0,
+        "heightMm": 775.0,
+        "rollerPitchMm": 100.0,
+        "startHeightMm": 800.0,
+        "endHeightMm": 750.0,
+        "startLeftHeightMm": 800.0,
+        "startRightHeightMm": 800.0,
+        "endLeftHeightMm": 750.0,
+        "endRightHeightMm": 750.0,
+        "turnAngleDeg": 0.0,
+        "curveRadiusMm": 900.0,
+        "supportBracesEnabled": true,
+        "rollerCoverEnabled": true,
+        "endStopEnabled": true,
+        "simulationMode": "physx",
+        "role": "pick_feeder",
+        "spawnObjectId": "spawn-box",
+        "initialWorkpieceCount": 2,
+        "initialWorkpieceEndInsetMm": 75.0,
+        "initialWorkpieceSpacingMm": 70.0,
+        "speedMmS": 120.0,
+        "spawnIntervalSeconds": 5.0
+      }
+    },
+    {
+      "id": "output-conveyor",
+      "name": "Output Conveyor 1400 x 800",
+      "package": "builtin:roller_conveyor",
+      "position_mm": [3000.0, 0.0, 1300.0],
+      "rotation_deg": [0.0, 0.0, 0.0],
+      "parameters": {
+        "generator": "roller_conveyor",
+        "widthMm": 800.0,
+        "lengthMm": 1400.0,
+        "heightMm": 800.0,
+        "rollerPitchMm": 100.0,
+        "startHeightMm": 800.0,
+        "endHeightMm": 800.0,
+        "startLeftHeightMm": 800.0,
+        "startRightHeightMm": 800.0,
+        "endLeftHeightMm": 800.0,
+        "endRightHeightMm": 800.0,
+        "turnAngleDeg": 0.0,
+        "curveRadiusMm": 900.0,
+        "supportBracesEnabled": true,
+        "rollerCoverEnabled": true,
+        "endStopEnabled": false,
+        "simulationMode": "physx",
+        "role": "deleter",
+        "speedMmS": 250.0,
+        "spawnIntervalSeconds": 2.0
+      }
+    }
+  ],
+  "parameter_links": [
+    {
+      "id": "input-spawner-to-pick-height",
+      "channel": "deckHeight",
+      "a": {
+        "accessory_id": "input-conveyor",
+        "port": "end",
+        "parameter": "endHeightMm"
+      },
+      "b": {
+        "accessory_id": "input-pick-feeder",
+        "port": "start",
+        "parameter": "startHeightMm"
+      },
+      "scale": 1.0,
+      "offset": 0.0
+    }
+  ]
+}

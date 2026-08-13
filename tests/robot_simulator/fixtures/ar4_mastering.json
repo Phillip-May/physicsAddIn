@@ -1,0 +1,165 @@
+{
+    "backoff_steps": 700,
+    "dynamic_limit_scale": [
+        1.0,
+        1.0,
+        1.0,
+        0.7,
+        1.0,
+        0.8
+    ],
+    "joints": [
+        {
+            "current_steps": -7365,
+            "jog_dir_invert": 0,
+            "joint": 1,
+            "master_dir": 1,
+            "master_limit_steps": 0,
+            "mastered": true,
+            "offset_deg": 0.0,
+            "steps_per_deg": 44.96337,
+            "zero_steps": -7365
+        },
+        {
+            "current_steps": 2028,
+            "jog_dir_invert": 1,
+            "joint": 2,
+            "master_dir": -1,
+            "master_limit_steps": 0,
+            "mastered": true,
+            "offset_deg": 0.0,
+            "steps_per_deg": 53.0890052,
+            "zero_steps": 2028
+        },
+        {
+            "current_steps": -2802,
+            "jog_dir_invert": 1,
+            "joint": 3,
+            "master_dir": 1,
+            "master_limit_steps": 0,
+            "mastered": true,
+            "offset_deg": 0.0,
+            "steps_per_deg": 52.4719101,
+            "zero_steps": -2802
+        },
+        {
+            "current_steps": 7190,
+            "jog_dir_invert": 0,
+            "joint": 4,
+            "master_dir": -1,
+            "master_limit_steps": 0,
+            "mastered": true,
+            "offset_deg": 0.0,
+            "steps_per_deg": 39.7676991,
+            "zero_steps": 7190
+        },
+        {
+            "current_steps": 2100,
+            "jog_dir_invert": 1,
+            "joint": 5,
+            "master_dir": -1,
+            "master_limit_steps": 0,
+            "mastered": true,
+            "offset_deg": 0.0,
+            "steps_per_deg": 21.1267606,
+            "zero_steps": 2100
+        },
+        {
+            "current_steps": -3588,
+            "jog_dir_invert": 1,
+            "joint": 6,
+            "master_dir": 1,
+            "master_limit_steps": 0,
+            "mastered": true,
+            "offset_deg": 0.0,
+            "steps_per_deg": 19.8781163,
+            "zero_steps": -3588
+        }
+    ],
+    "motion_settings": {
+        "control_period_s": 0.005,
+        "default_joint_speed_deg_s": 10.0,
+        "default_linear_accel_mm_s2": 1000.0,
+        "default_linear_jerk_mm_s3": 10000.0,
+        "default_linear_speed_mm_s": 25.0,
+        "default_tool_angular_accel_rad_s2": 12.5663706144,
+        "default_tool_angular_jerk_rad_s3": 125.663706144,
+        "default_tool_angular_speed_rad_s": 3.14159265359,
+        "motion_settings_schema": 1,
+        "singularity_threshold_rad": 0.0872664625997
+    },
+    "robot_model": {
+        "dhm": [
+            0.0,
+            -1.5707963267948966,
+            0.0,
+            0.0,
+            0.0,
+            3.141592653589793,
+            0.0,
+            64.2,
+            305.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.5707963267948966,
+            0.0,
+            -1.5707963267948966,
+            1.5707963267948966,
+            -1.5707963267948966,
+            169.77,
+            0.0,
+            0.0,
+            222.63,
+            0.0,
+            41.0
+        ],
+        "dhm_signs": [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+        ],
+        "q_home": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+        ],
+        "q_max": [
+            2.792526803190927,
+            1.5707963267948966,
+            0.9075712110370514,
+            3.141592653589793,
+            1.8325957145940461,
+            3.141592653589793
+        ],
+        "q_min": [
+            -2.792526803190927,
+            -0.7330382858376184,
+            -1.5533430342749532,
+            -3.141592653589793,
+            -1.8325957145940461,
+            -3.141592653589793
+        ],
+        "tool_bind": [
+            0.0,
+            0.0,
+            1.0,
+            327.83,
+            -1.0,
+            0.0,
+            0.0,
+            474.77,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+        ]
+    }
+}

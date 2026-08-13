@@ -34,21 +34,19 @@
 #include <QTimer>
 #include <QVector4D>
 #include <QElapsedTimer>
-#include <QDebug>
 #include <sstream>
-#include <cmath>
 
 #include "CadNode.h"
 #include "SimulationManager.h"
 #include <QWidget>
 #include <QObject>
-#include <functional> // For std::hash
+#include <functional>
 #include <mutex>
 
 namespace {
 
-// Helper to recursively set globalLoc for each node
-// (Defined here so it is available in this translation unit)
+constexpr float kPi = 3.14159265358979323846f;
+
 template<typename NodeType>
 void setGlobalLocRecursive(NodeType* node, const TopLoc_Location& parentGlobalLoc = TopLoc_Location()) {
     if (!node) return;
@@ -57,19 +55,16 @@ void setGlobalLocRecursive(NodeType* node, const TopLoc_Location& parentGlobalLo
         setGlobalLocRecursive(child.get(), node->globalLoc);
     }
 }
-// Helper: Find FaceInstance for a given node
 static CadOpenGLWidget::FaceInstance* findFaceInstance(std::vector<CadOpenGLWidget::FaceInstance>& faceCache, CadNode* node) {
     for (auto& inst : faceCache) {
         if (inst.node == node) return &inst;
     }
     return nullptr;
 }
-// Helper: Find reference node parent for a given geometry node, and return both the parent and its accumulatedLoc
 static std::pair<const CadNode*, TopLoc_Location> findReferenceParentWithLoc(const CadNode* root, const CadNode* target, const TopLoc_Location& targetLoc) {
     if (!root) return {nullptr, TopLoc_Location()};
     if (root->type == CadNodeType::XCAF && root->children.size() == 1 &&
         root->children[0].get() == target && root->children[0]->type == CadNodeType::XCAF) {
-        // The parent's accumulatedLoc is the transform up to this node
         return {root, targetLoc};
     }
     for (const auto& child : root->children) {
@@ -80,16 +75,11 @@ static std::pair<const CadNode*, TopLoc_Location> findReferenceParentWithLoc(con
 }
 } // end anonymous namespace
 
-// Forward declaration for screenToWorldRay
 static void screenToWorldRay(const QPoint& pos, int width, int height, const QVector3D& cameraPos, const QQuaternion& cameraRot, float cameraZoom, gp_Pnt& rayOrigin, gp_Dir& rayDir);
 QPoint CadOpenGLWidget_projectWorldToScreen(const QVector3D& world, int width, int height, const QVector3D& cameraPos, const QQuaternion& cameraRot, float cameraZoom);
 static QVector3D unprojectScreenToWorld(const QPoint& screenPos, float depth, int width, int height, const QVector3D& cameraPos, const QQuaternion& cameraRot, float cameraZoom);
 static void accumulateBoundingBox(const CadNode* node, const TopLoc_Location& accumulatedLoc, Bnd_Box& bbox);
 
-// Forward declaration for normalizeVector
-static QVector3D normalizeVector(const QVector3D& vector);
-
-// Function to clear geometry cache
 void CadOpenGLWidget::clearGeometryCache() {
     for (auto& [shapePtr, cache] : m_geometryCache) {
         if (cache.isValid()) {
@@ -102,13 +92,11 @@ void CadOpenGLWidget::clearGeometryCache() {
 }
 
 CadOpenGLWidget::CadOpenGLWidget(CadNode* root, QWidget *parent)
-    : QOpenGLWidget(parent), rootNode_(root), m_rotating(false), m_firstRotateMove(false) {
+    : QOpenGLWidget(parent), rootNode_(root) {
     
-    // Set up continuous rendering timer for 60fps
     m_renderTimer.setInterval(16); // ~60fps (1000ms / 60fps ≈ 16.67ms)
     connect(&m_renderTimer, &QTimer::timeout, this, [this]() {
         if (m_windowActive) {
-            // Update hover state continuously when in selection modes
             QPoint currentPos = mapFromGlobal(QCursor::pos());
             if (rect().contains(currentPos)) {
                 if (m_selectionMode == SelectionMode::Faces) {
@@ -124,15 +112,10 @@ CadOpenGLWidget::CadOpenGLWidget(CadNode* root, QWidget *parent)
 }
 
 CadOpenGLWidget::~CadOpenGLWidget() {
-    // Clean up color batches
     m_colorBatches.clear();
     
-    // Clear geometry cache
     clearGeometryCache();
 }
-
-// Camera state
-static QPoint g_lastMousePos;
 
 void CadOpenGLWidget::setupOpenGLState() {
     initializeOpenGLFunctions();
@@ -164,7 +147,6 @@ void CadOpenGLWidget::resizeGL(int w, int h) {
     glMatrixMode(GL_MODELVIEW);
 }
 
-// Optimized geometry caching function with balanced settings
 CachedGeometry& CadOpenGLWidget::getOrCreateCachedGeometry(const TopoDS_Face& face) {
     m_totalFaces++;
     const void* shapePtr = face.TShape().get();
@@ -178,40 +160,33 @@ CachedGeometry& CadOpenGLWidget::getOrCreateCachedGeometry(const TopoDS_Face& fa
         return cache;
     }
     
-    // Create mesh for the face with adaptive precision based on face size
     Bnd_Box bbox;
     BRepBndLib::Add(face, bbox);
     Standard_Real xmin, ymin, zmin, xmax, ymax, zmax;
     bbox.Get(xmin, ymin, zmin, xmax, ymax, zmax);
     double faceSize = std::max(std::max(xmax-xmin, ymax-ymin), zmax-zmin);
     
-    // Balanced LOD settings
     double basePrecision = std::max<double>(0.05, std::min<double>(1.0, faceSize * 0.2));
     
-    // Adjust precision based on camera distance
     QVector3D faceCenter((xmin + xmax) * 0.5, (ymin + ymax) * 0.5, (zmin + zmax) * 0.5);
     QVector3D toCamera = faceCenter - camera_.pos;
     float distanceSquared = toCamera.x() * toCamera.x() + toCamera.y() * toCamera.y() + toCamera.z() * toCamera.z();
-    float distanceFactor = std::min<float>(4.0, std::max<float>(0.2, distanceSquared / (camera_.zoom * camera_.zoom)));
+    float distanceFactor = std::min(4.0f, std::max(0.2f, distanceSquared / (camera_.zoom * camera_.zoom)));
     
     double precision = basePrecision * distanceFactor;
     
-    // Skip only extremely small faces (be more permissive)
     if (faceSize < 0.0001) {
         m_skippedFaces++;
-        qDebug() << "Skipping face due to extremely small size:" << faceSize << "at center" << faceCenter;
         cache.markInvalid();
         return cache;
     }
 
-    // Use moderate precision reduction (less aggressive)
     precision *= 1.2; // 1.2x coarser for performance (was 1.5)
     
     BRepMesh_IncrementalMesh mesher(face, precision);
     TopLoc_Location locCopy;
     Handle(Poly_Triangulation) triangulation = BRep_Tool::Triangulation(face, locCopy);
     
-    // Validate that we have a valid OpenGL context before creating display lists
     if (!QOpenGLContext::currentContext()) {
         qDebug() << "No OpenGL context available for face at center" << faceCenter;
         cache.markInvalid();
@@ -221,14 +196,11 @@ CachedGeometry& CadOpenGLWidget::getOrCreateCachedGeometry(const TopoDS_Face& fa
     if (!triangulation.IsNull() && !triangulation->Triangles().IsEmpty()) {
         const Poly_Array1OfTriangle& triangles = triangulation->Triangles();
         
-        // Get the number of nodes
         int nbNodes = triangulation->NbNodes();
         
-        // Prepare vertex data
         std::vector<float> vertices;
         vertices.reserve(triangles.Size() * 9); // 3 vertices per triangle, 3 floats per vertex
         
-        // Reasonable triangle limit
         int maxTriangles = 8000; // Balanced limit
         int triangleCount = 0;
         
@@ -244,7 +216,6 @@ CachedGeometry& CadOpenGLWidget::getOrCreateCachedGeometry(const TopoDS_Face& fa
                 gp_Pnt p2 = triangulation->Node(n2);
                 gp_Pnt p3 = triangulation->Node(n3);
                 
-                // Add vertices
                 vertices.push_back(static_cast<float>(p1.X()));
                 vertices.push_back(static_cast<float>(p1.Y()));
                 vertices.push_back(static_cast<float>(p1.Z()));
@@ -262,10 +233,6 @@ CachedGeometry& CadOpenGLWidget::getOrCreateCachedGeometry(const TopoDS_Face& fa
         }
         
         if (!vertices.empty()) {
-            if (m_frameCount % 60 == 0) {
-                qDebug() << "[Cache] Created geometry for face, vertices:" << vertices.size() << "triangles:" << triangleCount << "at center" << faceCenter;
-            }
-            // Create display list for legacy OpenGL
             cache.displayList = glGenLists(1);
             if (cache.displayList != 0) { // Check if display list creation succeeded
                 glNewList(cache.displayList, GL_COMPILE);
@@ -279,29 +246,64 @@ CachedGeometry& CadOpenGLWidget::getOrCreateCachedGeometry(const TopoDS_Face& fa
                 glEnd();
                 
                 glEndList();
-                cache.triangleCount = vertices.size() / 9;
+                cache.triangleCount = static_cast<int>(vertices.size() / 9);
                 cache.initialized = true;
             } else {
-                // Display list creation failed
                 qDebug() << "Failed to create display list for face at center" << faceCenter;
                 cache.markInvalid();
             }
         } else {
-            // No vertices generated
-            qDebug() << "No vertices generated for face at center" << faceCenter;
             cache.markInvalid();
         }
     } else {
-        // Tessellation failed
         m_skippedFaces++;
-        qDebug() << "Skipping face due to tessellation failure - triangulation null or empty at center" << faceCenter;
         cache.markInvalid();
     }
     
     return cache;
 }
 
-// Optimized batch rendering function
+CachedGeometry& CadOpenGLWidget::getOrCreateCachedMeshGeometry(const MeshGeometryData* meshData) {
+    const void* meshPtr = meshData;
+    auto it = m_geometryCache.find(meshPtr);
+    if (it != m_geometryCache.end() && it->second.initialized) {
+        return it->second;
+    }
+
+    CachedGeometry& cache = m_geometryCache[meshPtr];
+    if (cache.initialized) return cache;
+
+    if (!meshData || !meshData->loaded || meshData->vertices.empty() || meshData->indices.empty()) {
+        cache.markInvalid();
+        return cache;
+    }
+
+    cache.displayList = glGenLists(1);
+    if (cache.displayList == 0) {
+        cache.markInvalid();
+        return cache;
+    }
+
+    glNewList(cache.displayList, GL_COMPILE);
+    glBegin(GL_TRIANGLES);
+    for (size_t i = 0; i + 2 < meshData->indices.size(); i += 3) {
+        for (int j = 0; j < 3; ++j) {
+            const uint32_t index = meshData->indices[i + static_cast<size_t>(j)];
+            const size_t vertexOffset = static_cast<size_t>(index) * 3;
+            if (vertexOffset + 2 >= meshData->vertices.size()) continue;
+            glVertex3f(meshData->vertices[vertexOffset],
+                       meshData->vertices[vertexOffset + 1],
+                       meshData->vertices[vertexOffset + 2]);
+        }
+    }
+    glEnd();
+    glEndList();
+
+    cache.triangleCount = static_cast<int>(meshData->indices.size() / 3);
+    cache.initialized = true;
+    return cache;
+}
+
 void CadOpenGLWidget::renderBatchedGeometry() {
     if (!rootNode_) {
         if (m_frameCount % 120 == 0) {
@@ -310,21 +312,17 @@ void CadOpenGLWidget::renderBatchedGeometry() {
         return;
     }
     if (m_frameCount % 120 == 0) {
-        //qDebug() << "[Render] Rendering geometry, root children:" << rootNode_->children.size();
     }
     // Traverse from the root node itself, not just its children
     traverseAndRender(rootNode_, CADNodeColor(1.0f, 1.0f, 1.0f, 1.0f), TopLoc_Location(), true, nullptr);
 }
 
-// Build color batches for efficient rendering
 void CadOpenGLWidget::buildColorBatches() {
     m_colorBatches.clear();
     
-    // With display lists, we don't need complex batching
-    // Each face is cached individually and rendered efficiently
 }
 
-// Shared helper: treat Transform, Physics, and reference nodes as transform-like for accumulation
+// Transform, Physics, and reference nodes are all transform-like for accumulation.
 static inline bool isTransformLikeNode(const CadNode* node) {
     if (!node) return false;
     if (node->type == CadNodeType::Transform || node->type == CadNodeType::Physics) return true;
@@ -337,11 +335,9 @@ static inline bool isTransformLikeNode(const CadNode* node) {
     return false;
 }
 
-// Shared transform accumulation function
 static TopLoc_Location getNodeLocation(const CadNode* node, const SimulationManager* simManager) {
     if (!node) return TopLoc_Location();
     
-    // If we have a simulation manager, check for updated locations
     if (simManager && simManager->hasNodeUpdates()) {
         const auto& nodeLocations = simManager->getLatestNodeLocations();
         auto it = nodeLocations.find(const_cast<CadNode*>(node));
@@ -350,7 +346,6 @@ static TopLoc_Location getNodeLocation(const CadNode* node, const SimulationMana
         }
     }
     
-    // Fall back to the node's original location
     return node->loc;
 }
 
@@ -366,19 +361,15 @@ static TopLoc_Location accumulateNodeTransform(const CadNode* node, const TopLoc
     return parentAccum;
 }
 
-// Update traverseAndRender to use extremely optimized rendering
 void CadOpenGLWidget::traverseAndRender(const CadNode* node, CADNodeColor inheritedColor, const TopLoc_Location& accumulatedLoc, bool /*ancestorsVisible*/, const CadNode* parentReferenceNode) {
     if (!node) return;
     
-    // Get the node location (potentially from simulation manager)
     TopLoc_Location nodeLoc = getNodeLocation(node, m_simulationManager);
     
-    // Always accumulate the transform for this node
     TopLoc_Location newAccumulatedLoc = accumulatedLoc * nodeLoc;
     bool needsTransform = !nodeLoc.IsIdentity();
     if (needsTransform) {
         glPushMatrix();
-        // Apply this node's transform
         const gp_Trsf& trsf = nodeLoc.Transformation();
         double mat[16] = {
             trsf.Value(1,1), trsf.Value(2,1), trsf.Value(3,1), 0.0,
@@ -390,7 +381,6 @@ void CadOpenGLWidget::traverseAndRender(const CadNode* node, CADNodeColor inheri
     }
     if (node->visible) {
         CADNodeColor nodeColor = (node->color.a >= 0.0f) ? node->color : inheritedColor;
-        // Only render XCAF nodes as geometry
         if (node->type == CadNodeType::XCAF) {
             const XCAFNodeData* xData = node->asXCAF();
             if (xData) {
@@ -399,11 +389,7 @@ void CadOpenGLWidget::traverseAndRender(const CadNode* node, CADNodeColor inheri
                         if (!xData->shape.IsNull() && xData->type == TopAbs_FACE) {
                             if (isInFrustum(TopoDS::Face(xData->shape), newAccumulatedLoc)) {
                                 renderFaceOptimized(node, newAccumulatedLoc, parentReferenceNode);
-                            } else if (m_frameCount % 120 == 0) {
-                                qDebug() << "[Render] Face culled by frustum:" << node;
                             }
-                        } else if (m_frameCount % 120 == 0) {
-                            qDebug() << "[Render] Face node has no face data:" << node;
                         }
                         break;
                     case TopAbs_EDGE:
@@ -414,7 +400,9 @@ void CadOpenGLWidget::traverseAndRender(const CadNode* node, CADNodeColor inheri
                 }
             }
         }
-        // Render ConnectionPoint nodes
+        if (node->type == CadNodeType::MeshGeometry) {
+            renderMeshGeometry(node->asMeshGeometry(), nodeColor);
+        }
         if (node->type == CadNodeType::ConnectionPoint) {
             renderConnectionPoint(node, nodeColor);
         }
@@ -424,7 +412,19 @@ void CadOpenGLWidget::traverseAndRender(const CadNode* node, CADNodeColor inheri
         if (physData && physData->convexHullGenerated && !physData->hulls.empty()) {
             renderConvexHulls(physData);
         }
-    }    
+    }
+    if (node->type == CadNodeType::RobotLink) {
+        const RobotLinkData* linkData = node->asRobotLink();
+        if (linkData && linkData->collisionHullsVisible && !linkData->collisionHulls.empty()) {
+            renderConvexHullList(linkData->collisionHulls);
+        }
+    }
+    if (node->type == CadNodeType::RobotTool) {
+        const RobotToolData* toolData = node->asRobotTool();
+        if (toolData && toolData->collisionHullsVisible && !toolData->collisionHulls.empty()) {
+            renderConvexHullList(toolData->collisionHulls);
+        }
+    }
     for (const auto& child : node->children) {
         if (child) {
             traverseAndRender(child.get(), node->color, newAccumulatedLoc, true, parentReferenceNode);
@@ -435,9 +435,7 @@ void CadOpenGLWidget::traverseAndRender(const CadNode* node, CADNodeColor inheri
     }
 }
 
-// Helper: Render a connection point as a small sphere or axis marker
-void CadOpenGLWidget::renderConnectionPoint(const CadNode* node, const CADNodeColor& color) {
-    // Draw a small sphere at the origin (transformed by node->loc)
+void CadOpenGLWidget::renderConnectionPoint(const CadNode*, const CADNodeColor& color) {
     glPushAttrib(GL_ENABLE_BIT | GL_POINT_BIT | GL_COLOR_BUFFER_BIT);
     glDisable(GL_LIGHTING);
     glEnable(GL_BLEND);
@@ -445,17 +443,16 @@ void CadOpenGLWidget::renderConnectionPoint(const CadNode* node, const CADNodeCo
     glColor4f(color.r, color.g, color.b, color.a > 0.0f ? color.a : 1.0f);
     float radius = 10.0f; // Adjust as needed for visibility
     int slices = 16, stacks = 8;
-    // Simple sphere (parametric)
     for (int i = 0; i < stacks; ++i) {
-        float lat0 = M_PI * (-0.5f + float(i) / stacks);
+        float lat0 = kPi * (-0.5f + float(i) / stacks);
         float z0  = sin(lat0);
         float zr0 = cos(lat0);
-        float lat1 = M_PI * (-0.5f + float(i+1) / stacks);
+        float lat1 = kPi * (-0.5f + float(i+1) / stacks);
         float z1 = sin(lat1);
         float zr1 = cos(lat1);
         glBegin(GL_QUAD_STRIP);
         for (int j = 0; j <= slices; ++j) {
-            float lng = 2 * M_PI * float(j) / slices;
+            float lng = 2.0f * kPi * float(j) / slices;
             float x = cos(lng);
             float y = sin(lng);
             glVertex3f(radius * x * zr0, radius * y * zr0, radius * z0);
@@ -466,16 +463,12 @@ void CadOpenGLWidget::renderConnectionPoint(const CadNode* node, const CADNodeCo
     glPopAttrib();
 }
 
-// Highlight state and color helpers
 HighlightState CadOpenGLWidget::getFaceHighlightState(const CadNode* node, const TopLoc_Location& accumulatedLoc, const CadNode* parentReferenceNode, const std::vector<SelectedInstance>& selectedFaceInstances_, const SelectedInstance& hoveredFaceInstance_) {
     if (!node) return HighlightState::Normal;
-    // Excluded
     if (node->excludedFromDecomposition) return HighlightState::Excluded;
-    // Selected
     for (const auto& inst : selectedFaceInstances_) {
         if (inst.node == node && inst.accumulatedLoc == accumulatedLoc) return HighlightState::Selected;
     }
-    // Hovered (direct or via parent reference node)
     if (hoveredFaceInstance_.node == node && hoveredFaceInstance_.accumulatedLoc == accumulatedLoc) return HighlightState::Hovered;
     if (parentReferenceNode && hoveredFaceInstance_.node == parentReferenceNode) return HighlightState::Hovered;
     return HighlightState::Normal;
@@ -483,11 +476,9 @@ HighlightState CadOpenGLWidget::getFaceHighlightState(const CadNode* node, const
 
 HighlightState CadOpenGLWidget::getEdgeHighlightState(const CadNode* node, const TopLoc_Location& accumulatedLoc, const std::vector<SelectedInstance>& selectedEdgeInstances_, const SelectedInstance& hoveredEdgeInstance_) {
     if (!node) return HighlightState::Normal;
-    // Selected
     for (const auto& inst : selectedEdgeInstances_) {
         if (inst.node == node && inst.accumulatedLoc == accumulatedLoc) return HighlightState::Selected;
     }
-    // Hovered
     if (hoveredEdgeInstance_.node == node && hoveredEdgeInstance_.accumulatedLoc == accumulatedLoc) return HighlightState::Hovered;
     return HighlightState::Normal;
 }
@@ -510,7 +501,6 @@ void CadOpenGLWidget::getHighlightColorAndLineWidth(HighlightState state, CADNod
     }
 }
 
-// Refactored face rendering using highlight state
 void CadOpenGLWidget::renderFaceOptimized(const CadNode* node, const TopLoc_Location& accumulatedLoc, const CadNode* parentReferenceNode) {
     if (!node) return;
     const XCAFNodeData* xData = node->asXCAF();
@@ -519,14 +509,11 @@ void CadOpenGLWidget::renderFaceOptimized(const CadNode* node, const TopLoc_Loca
     if (face.IsNull()) return;
     CachedGeometry& cache = getOrCreateCachedGeometry(face);
     if (!cache.isValid()) return;
-    // Determine highlight state
     HighlightState state = getFaceHighlightState(node, accumulatedLoc, parentReferenceNode, selectedFaceInstances_, hoveredFaceInstance_);
     float r, g, b, a, lineWidth;
     getHighlightColorAndLineWidth(state, node->color, r, g, b, a, lineWidth);
-    // Render using display list
     glColor4f(r, g, b, a);
     glCallList(cache.displayList);
-    // Wireframe overlay
     if (state == HighlightState::Selected || state == HighlightState::Hovered) {
         glColor4f(0.0f, 0.0f, 0.0f, 0.8f);
         glLineWidth(lineWidth + 1.0f);
@@ -540,13 +527,20 @@ void CadOpenGLWidget::renderFaceOptimized(const CadNode* node, const TopLoc_Loca
     glLineWidth(1.0f);
 }
 
-// Refactored edge rendering using highlight state
+void CadOpenGLWidget::renderMeshGeometry(const MeshGeometryData* meshData, const CADNodeColor& color) {
+    if (!meshData || !meshData->loaded) return;
+    CachedGeometry& cache = getOrCreateCachedMeshGeometry(meshData);
+    if (!cache.isValid()) return;
+
+    glColor4f(color.r, color.g, color.b, color.a > 0.0f ? color.a : 1.0f);
+    glCallList(cache.displayList);
+}
+
 void CadOpenGLWidget::renderEdgeOptimized(const CadNode* node, const TopLoc_Location& accumulatedLoc) {
     const XCAFNodeData* xData = node->asXCAF();
     if (!xData || !xData->hasEdge()) return;
     const TopoDS_Edge& edge = TopoDS::Edge(xData->shape);
     if (edge.IsNull()) return;
-    // Apply node transformation if needed
     bool needsTransform = !node->loc.IsIdentity();
     if (needsTransform) {
         const gp_Trsf& trsf = node->loc.Transformation();
@@ -562,13 +556,11 @@ void CadOpenGLWidget::renderEdgeOptimized(const CadNode* node, const TopLoc_Loca
         };
         glMultMatrixd(matrix);
     }
-    // Determine highlight state
     HighlightState state = getEdgeHighlightState(node, accumulatedLoc, selectedEdgeInstances_, hoveredEdgeInstance_);
     float r, g, b, a, lineWidth;
     getHighlightColorAndLineWidth(state, node->color, r, g, b, a, lineWidth);
     glColor4f(r, g, b, a);
     glLineWidth(lineWidth + 1.0f);
-    // Render the edge
     Standard_Real first, last;
     TopLoc_Location locCopy;
     Handle(Geom_Curve) curve = BRep_Tool::Curve(edge, locCopy, first, last);
@@ -599,29 +591,15 @@ void CadOpenGLWidget::renderEdgeOptimized(const CadNode* node, const TopLoc_Loca
 }
 
 void CadOpenGLWidget::paintGL() {
-    // Print start of paintGL
-    std::ostringstream startOss;
-    startOss << std::this_thread::get_id();
-    qDebug() << "[CadOpenGLWidget] paintGL START, thread:" << QString::fromStdString(startOss.str());
-    
-    // Check if scene building is in progress - if so, skip rendering to prevent race conditions
     if (m_simulationManager && m_simulationManager->isSceneBuilding()) {
-        qDebug() << "[CadOpenGLWidget] Skipping paintGL - scene building in progress";
         return;
     }
     
-    // No mutex locking needed with double buffering - we read from the read buffer atomically
-    QElapsedTimer paintTimer;
-    paintTimer.start();
-
-    // Frame skipping for very slow rendering
     m_frameCount++;
     if (m_skipFrames > 0) {
         m_skipFrames--;
-        //return; // Skip this frame entirely
     }
 
-    // Check if we need to skip frames due to slow performance
     static QElapsedTimer lastFrameTimer;
     static int consecutiveSlowFrames = 0;
 
@@ -639,8 +617,6 @@ void CadOpenGLWidget::paintGL() {
     }
     lastFrameTimer.start();
 
-    //Used for selection, should probably be moved to some kind of scene
-    //Related tracking for things moving eventually
 
     QOpenGLFunctions* f = QOpenGLContext::currentContext()->functions();
     f->glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -648,14 +624,13 @@ void CadOpenGLWidget::paintGL() {
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
 
-    // New camera transform: apply zoom, then rotation, then translation
+    // Camera transform order: zoom, then rotation, then translation.
     QMatrix4x4 view;
     view.translate(0, 0, -camera_.zoom);
     view.rotate(camera_.rot.conjugated());
     view.translate(-camera_.pos);
     glMultMatrixf(view.constData());
 
-    // Render ground plane if available (now in world space after camera transform)
     if (rootNode_ && rootNode_->type == CadNodeType::MutexRoot) {
         const MutexRootNodeData* mutexData = rootNode_->asMutexRoot();
         if (mutexData && mutexData->groundPlaneVisible) {
@@ -663,58 +638,31 @@ void CadOpenGLWidget::paintGL() {
         }
     }
 
-    // Skip frustum updates for maximum performance
     static bool frustumInitialized = false;
     if (!frustumInitialized) {
         updateFrustumPlanes();
         frustumInitialized = true;
     }
 
-    // Use optimized batch rendering
-    QElapsedTimer renderTimer;
-    renderTimer.start();
-
-    // Only rebuild cache if dirty
     if (m_cacheDirty) {
         buildColorBatches();
         m_cacheDirty = false;
     }
 
-    // Render the main CAD geometry
     renderBatchedGeometry();
 
-    // Render highlighted edges only (performance optimized)
     if (m_selectionMode == SelectionMode::Edges && (hoveredEdgeInstance_.node != nullptr || !selectedEdgeInstances_.empty())) {
         renderHighlightedEdges();
     }
     
-    // Mark that we've processed any simulation updates
     if (m_simulationManager && m_simulationManager->hasNodeUpdates()) {
-        // Rebuild face and edge caches when simulation updates occur
-        // This ensures picking works correctly with physics updates
-        buildFaceCache();
-        buildEdgeCache();
         m_simulationManager->markUpdatesProcessed();
     }
 
-    qint64 renderTime = renderTimer.nsecsElapsed();
-
-    // Print render time every frame for real-time monitoring
-    //qDebug() << "[Profile] Optimized geometry rendering took:" << renderTime / 1000000.0 << "ms";
-
-    // Log cache statistics (very infrequently to minimize overhead)
-    if (m_frameCount % 1200 == 0) { // Log every 20 seconds
-        qDebug() << "[Cache] Geometry cache size:" << m_geometryCache.size() << "entries";
-        qDebug() << "[Camera] Pos:" << camera_.pos << "Zoom:" << camera_.zoom << "Rot:" << camera_.rot;
-    }
-
-    // Keep camera controls working by not disabling pivot sphere
-    // Draw pivot sphere if enabled
     if (camera_.showPivotSphere) {
         drawPivotSphere();
     }
 
-    // Draw zoom contact sphere if enabled
     if (m_showZoomContactSphere) {
         glPushMatrix();
         glTranslatef(m_zoomContactPoint.x(), m_zoomContactPoint.y(), m_zoomContactPoint.z());
@@ -725,10 +673,6 @@ void CadOpenGLWidget::paintGL() {
         glPopMatrix();
     }
 
-    qint64 totalPaintTime = paintTimer.nsecsElapsed();
-    //qDebug() << "[Profile] Total optimized paintGL time:" << totalPaintTime / 1000000.0 << "ms";
-
-    // Draw the scene bounding box
     Bnd_Box bbox;
     accumulateBoundingBox(rootNode_, TopLoc_Location(), bbox);
     if (!bbox.IsVoid()) {
@@ -737,7 +681,6 @@ void CadOpenGLWidget::paintGL() {
         drawBoundingBox(QVector3D(xmin, ymin, zmin), QVector3D(xmax, ymax, zmax), QVector4D(1.0f, 0.2f, 0.2f, 0.4f));
     }
 
-    // Draw a single bounding box around the entire selection (faces and edges)
     Bnd_Box selectionBox;
     for (const auto& sel : selectedFaceInstances_) {
         if (!sel.node) continue;
@@ -756,58 +699,29 @@ void CadOpenGLWidget::paintGL() {
     if (!selectionBox.IsVoid()) {
         Standard_Real sxmin, symin, szmin, sxmax, symax, szmax;
         selectionBox.Get(sxmin, symin, szmin, sxmax, symax, szmax);
-        // Bright yellow for selection
         drawBoundingBox(QVector3D(sxmin, symin, szmin), QVector3D(sxmax, symax, szmax), QVector4D(1.0f, 1.0f, 0.0f, 0.8f));
     }
 
-    // In paintGL, when drawing the reference frame for the selected frame node:
     if (selectedFrameNode_) {
         drawReferenceFrame(selectedFrameNodeAccumulatedLoc_, 5000.0f);
     }
     
-    // Render custom drawing callbacks
-    for (const auto& callback : m_customDrawCallbacks) {
-        callback();
-    }
-    
-    // Render connection path segments
-    renderConnectionPathSegments();
-    
-    // Render control point markers
-    renderControlPointMarkers();
-    
-    // Print end of paintGL
-    std::ostringstream endOss;
-    endOss << std::this_thread::get_id();
-    qDebug() << "[CadOpenGLWidget] paintGL END, thread:" << QString::fromStdString(endOss.str());
 }
 
 void CadOpenGLWidget::mousePressEvent(QMouseEvent* event) {
-    g_lastMousePos = event->pos();
+    m_lastMousePos = event->pos();
     
     if (event->button() == Qt::LeftButton) {
-        // Store press position for click detection
         camera_.mousePressPos = event->pos();
         camera_.mousePressed = true;
         camera_.mouseDragged = false;
     } else if (event->button() == Qt::MiddleButton) {
-        // Middle mouse button for selection based on current mode
         QVector3D hitPoint;
         if (m_selectionMode == SelectionMode::Faces) {
             pickHoveredFaceAt(event->pos());
-            qDebug() << "Post face click";
             if (hoveredFaceInstance_.node) {
-                qDebug() << hoveredFaceInstance_.node->name.c_str();
-                // Output TopLoc_Location as string
-                std::ostringstream oss;
-                hoveredFaceInstance_.accumulatedLoc.ShallowDump(oss);
-                qDebug() << QString::fromStdString(oss.str());
-                qDebug() << "Ptr: " << hoveredFaceInstance_.node;
-
-
                 if (event->modifiers() & Qt::ControlModifier) {
                     addToSelection(hoveredFaceInstance_.node, hoveredFaceInstance_.accumulatedLoc);
-                    qDebug() << "[Debug] Picked face node ptr:" << static_cast<const void*>(hoveredFaceInstance_.node);
                     emit facePicked(hoveredFaceInstance_.node, hoveredFaceInstance_.accumulatedLoc);
                 } else {
                     clearSelection();
@@ -817,8 +731,6 @@ void CadOpenGLWidget::mousePressEvent(QMouseEvent* event) {
                     if (pickedData) {
                         selectedFace_ = TopoDS::Face(pickedData->getFace().Located(hoveredFaceInstance_.accumulatedLoc));
                     }
-                    qDebug() << "[MultiSelect] Regular click selected face, total:" << selectedFaceInstances_.size();
-                    qDebug() << "[Debug] Picked face node ptr:" << static_cast<const void*>(hoveredFaceInstance_.node);
                     emit facePicked(hoveredFaceInstance_.node, hoveredFaceInstance_.accumulatedLoc);
                     update();
                 }
@@ -828,11 +740,9 @@ void CadOpenGLWidget::mousePressEvent(QMouseEvent* event) {
             if (pickEdgeAt(event->pos(), &hitPoint)) {
                 pickedNode = selectedEdgeNode_;
             }
-            // Handle multi-selection with Ctrl+click
             if (pickedNode) {
                 if (event->modifiers() & Qt::ControlModifier) {
                     addToSelection(pickedNode, TopLoc_Location());
-                    // Optionally emit edgePicked here if you want multi-selection for edges too
                 } else {
                     clearSelection();
                     XCAFNodeData* pickedData = pickedNode->asXCAF();
@@ -840,14 +750,12 @@ void CadOpenGLWidget::mousePressEvent(QMouseEvent* event) {
                         selectedEdgeInstances_.push_back(SelectedInstance{pickedNode, TopLoc_Location()});
                         selectedEdgeNode_ = pickedNode;
                         selectedEdge_ = TopoDS::Edge(pickedData->getEdge().Located(pickedNode->loc));
-                        qDebug() << "[MultiSelect] Regular click selected edge, total:" << selectedEdgeInstances_.size();
                         emit edgePicked(pickedNode); // Emit signal for tree view update
                     }
                     update();
                 }
             }
         }
-        // No selection for SelectionMode::None
     } else if (event->button() == Qt::RightButton) {
         QVector3D hitPoint;
         // Use a separate picking function that doesn't change selection
@@ -855,11 +763,7 @@ void CadOpenGLWidget::mousePressEvent(QMouseEvent* event) {
             // Only update the pivot position and show the sphere, do NOT move or recenter the camera
             camera_.pivotWorldPos = hitPoint;
             setPivotSphere(hitPoint);
-        } else {
-            qDebug() << "No hit for pivot point";
         }
-        // Start rotation state
-        m_rotating = true;
         m_firstRotateMove = true;
         m_cameraPosOnPress = camera_.pos;
         m_cameraRotOnPress = camera_.rot;
@@ -871,14 +775,12 @@ void CadOpenGLWidget::mousePressEvent(QMouseEvent* event) {
 }
 
 void CadOpenGLWidget::mouseMoveEvent(QMouseEvent* event) {
-    int dx = event->x() - g_lastMousePos.x();
-    int dy = event->y() - g_lastMousePos.y();
+    int dx = event->x() - m_lastMousePos.x();
+    int dy = event->y() - m_lastMousePos.y();
     QVector3D newCameraPos = camera_.pos;
     QQuaternion newCameraRot = camera_.rot;
-    float newCameraZoom = camera_.zoom;
     bool cameraChanged = false;
     
-    // Check if mouse has moved enough to be considered a drag
     if (camera_.mousePressed && !camera_.mouseDragged) {
         int dragDistance = (event->pos() - camera_.mousePressPos).manhattanLength();
         if (dragDistance > 3) { // 3 pixel threshold for drag detection
@@ -887,7 +789,6 @@ void CadOpenGLWidget::mouseMoveEvent(QMouseEvent* event) {
     }
     
     if (event->buttons() & Qt::LeftButton) {
-        // Pan: move both camera and pivot in local X/Y
         float panSpeed = camera_.zoom * 0.002f;
         QVector3D right = camera_.rot.rotatedVector(QVector3D(1, 0, 0));
         QVector3D up = camera_.rot.rotatedVector(QVector3D(0, 1, 0));
@@ -896,13 +797,11 @@ void CadOpenGLWidget::mouseMoveEvent(QMouseEvent* event) {
         camera_.pivotWorldPos += pan;
         cameraChanged = true;
     } else if (event->buttons() & Qt::RightButton) {
-        // --- Precise fix: Keep pivot at same screen position during rotation using unprojection ---
         QPoint oldScreenPos;
         QVector3D cameraPosForOld;
         QQuaternion cameraRotForOld;
         float cameraZoomForOld;
         if (m_firstRotateMove) {
-            // Use the stored values from mouse press for the first move
             oldScreenPos = m_pivotScreenOnPress;
             cameraPosForOld = camera_.pos;
             cameraRotForOld = camera_.rot;
@@ -915,14 +814,12 @@ void CadOpenGLWidget::mouseMoveEvent(QMouseEvent* event) {
             cameraRotForOld = camera_.rot;
             cameraZoomForOld = camera_.zoom;
         }
-        // 2. Compute pivot depth in camera space (distance from camera to pivot)
         QMatrix4x4 view;
         view.translate(0, 0, -cameraZoomForOld);
         view.rotate(cameraRotForOld.conjugated());
         view.translate(-cameraPosForOld);
         QVector3D camSpace = view.map(camera_.pivotWorldPos);
         float pivotDepth = -camSpace.z();
-        // 3. Apply incremental rotation to camera position and orientation (orbit around pivot)
         float angleY = dx * 0.5f;
         float angleX = dy * 0.5f;
         QQuaternion rotY = QQuaternion::fromAxisAndAngle(0, 1, 0, angleY);
@@ -932,15 +829,11 @@ void CadOpenGLWidget::mouseMoveEvent(QMouseEvent* event) {
         QVector3D newCamToPivot = incrementalRot.rotatedVector(camToPivot);
         newCameraPos = camera_.pivotWorldPos + newCamToPivot;
         newCameraRot = incrementalRot * cameraRotForOld;
-        // 4. Project pivot to screen after rotation
         QPoint newScreenPos = CadOpenGLWidget_projectWorldToScreen(
             camera_.pivotWorldPos, width(), height(), newCameraPos, newCameraRot, camera_.zoom);
-        // 5. Unproject old and new screen positions at the pivot's depth
         QVector3D worldAtOldScreen = unprojectScreenToWorld(oldScreenPos, pivotDepth, width(), height(), newCameraPos, newCameraRot, camera_.zoom);
         QVector3D worldAtNewScreen = unprojectScreenToWorld(newScreenPos, pivotDepth, width(), height(), newCameraPos, newCameraRot, camera_.zoom);
-        // 6. Compute offset
         QVector3D offset = worldAtOldScreen - worldAtNewScreen;
-        // 7. Apply offset to camera position and pivot
         newCameraPos += offset;
         camera_.pivotWorldPos += offset;
         cameraChanged = true;
@@ -950,57 +843,44 @@ void CadOpenGLWidget::mouseMoveEvent(QMouseEvent* event) {
         setCamera(newCameraPos, newCameraRot, camera_.zoom);
     }
     
-    g_lastMousePos = event->pos();
+    m_lastMousePos = event->pos();
     
-    // Always do hover picking and update rendering on mouse movement
-    // This ensures smooth hover highlighting even when no buttons are pressed
     if (m_selectionMode == SelectionMode::Faces) {
         pickHoveredFaceAt(event->pos());
-        // Clear edge hover state
         hoveredEdge_.Nullify();
         hoveredEdgeInstance_ = SelectedInstance{nullptr, TopLoc_Location()};
     } else if (m_selectionMode == SelectionMode::Edges) {
         pickHoveredEdgeAt(event->pos());
-        // Clear face hover state
         hoveredFace_.Nullify();
         hoveredFaceInstance_ = SelectedInstance{nullptr, TopLoc_Location()};
     } else {
-        // Clear all hover states when not in selection mode
         hoveredFace_.Nullify();
         hoveredFaceInstance_ = SelectedInstance{nullptr, TopLoc_Location()};
         hoveredEdge_.Nullify();
         hoveredEdgeInstance_ = SelectedInstance{nullptr, TopLoc_Location()};
     }
     
-    // Always trigger a render update on mouse movement for smooth hover feedback
     update();
 }
 
-// On mouse release, hide the pivot sphere
 void CadOpenGLWidget::mouseReleaseEvent(QMouseEvent* event) {
     if (event->button() == Qt::LeftButton) {
-        // Check if this was a click (not a drag)
         if (camera_.mousePressed && !camera_.mouseDragged) {
-            // This was a click in place - handle selection
             if (m_selectionMode == SelectionMode::Faces) {
-                // Use the currently hovered face for selection
                 if (hoveredFaceInstance_.node) {
                     CadNode* pickedNode = hoveredFaceInstance_.node;
                     TopLoc_Location accLoc = hoveredFaceInstance_.accumulatedLoc;
                     XCAFNodeData* pickedData = pickedNode->asXCAF();
                     if (event->modifiers() & Qt::ControlModifier) {
-                        // Ctrl+click: add/remove from selection
                         addToSelection(pickedNode, accLoc);
                         emit facePicked(pickedNode, accLoc);
                     } else {
-                        // Regular click: clear selection and select single item
                         clearSelection();
                         selectedFaceInstances_.push_back(SelectedInstance{pickedNode, accLoc});
                         selectedFaceNode_ = pickedNode;
                         if (pickedData) {
                             selectedFace_ = TopoDS::Face(pickedData->getFace().Located(accLoc));
                         }
-                        qDebug() << "[MultiSelect] Left click selected face, total:" << selectedFaceInstances_.size();
                         emit facePicked(pickedNode, accLoc);
                     }
                     update();
@@ -1018,27 +898,22 @@ void CadOpenGLWidget::mouseReleaseEvent(QMouseEvent* event) {
                             selectedEdgeInstances_.push_back(SelectedInstance{pickedNode, TopLoc_Location()});
                             selectedEdgeNode_ = pickedNode;
                             selectedEdge_ = TopoDS::Edge(pickedData->getEdge().Located(pickedNode->loc));
-                            qDebug() << "[MultiSelect] Left click selected edge, total:" << selectedEdgeInstances_.size();
                             emit edgePicked(pickedNode); // Emit signal for tree view update
                         }
                         update();
                     }
                 }
             }
-            // No selection for SelectionMode::None
         }
-        // Reset mouse state
         camera_.mousePressed = false;
         camera_.mouseDragged = false;
     } else if (event->button() == Qt::RightButton) {
         camera_.showPivotSphere = false;
-        m_rotating = false;
         m_firstRotateMove = false;
         update();
     }
 }
 
-// Clear hover state when mouse leaves the widget
 void CadOpenGLWidget::leaveEvent(QEvent* event) {
     hoveredFace_.Nullify();
     hoveredFaceInstance_ = SelectedInstance{nullptr, TopLoc_Location()};
@@ -1048,7 +923,6 @@ void CadOpenGLWidget::leaveEvent(QEvent* event) {
     QOpenGLWidget::leaveEvent(event);
 }
 
-// Handle window focus events to control continuous rendering
 void CadOpenGLWidget::focusInEvent(QFocusEvent* event) {
     m_windowActive = true;
     QOpenGLWidget::focusInEvent(event);
@@ -1059,14 +933,13 @@ void CadOpenGLWidget::focusOutEvent(QFocusEvent* event) {
     QOpenGLWidget::focusOutEvent(event);
 }
 
-// Helper: Project a 3D point to screen coordinates using the current camera state
 QPoint CadOpenGLWidget_projectWorldToScreen(const QVector3D& world, int width, int height, const QVector3D& cameraPos, const QQuaternion& cameraRot, float cameraZoom) {
     QMatrix4x4 view;
     view.translate(0, 0, -cameraZoom);
     view.rotate(cameraRot.conjugated());
     view.translate(-cameraPos);
     QVector3D camSpace = view.map(world);
-    float fovY = 45.0f * M_PI / 180.0f;
+    float fovY = 45.0f * kPi / 180.0f;
     float aspect = float(width) / float(height ? height : 1);
     float nearPlane = 1.0f;
     float tanFovY = tan(fovY / 2.0f);
@@ -1077,21 +950,17 @@ QPoint CadOpenGLWidget_projectWorldToScreen(const QVector3D& world, int width, i
     return QPoint(sx, sy);
 }
 
-// Helper: Unproject a screen point at a given depth (in world coordinates)
 static QVector3D unprojectScreenToWorld(const QPoint& screenPos, float depth, int width, int height, const QVector3D& cameraPos, const QQuaternion& cameraRot, float cameraZoom) {
-    // Build view matrix (world to camera)
     QMatrix4x4 view;
     view.translate(0, 0, -cameraZoom);
     view.rotate(cameraRot.conjugated());
     view.translate(-cameraPos);
     QMatrix4x4 proj;
-    float fovY = 45.0f * M_PI / 180.0f;
     float aspect = float(width) / float(height ? height : 1);
     float nearPlane = 1.0f;
     float farPlane = 1e9f;
     proj.perspective(45.0f, aspect, nearPlane, farPlane);
     QMatrix4x4 inv = (proj * view).inverted();
-    // Normalized device coordinates
     float ndcX = (2.0f * screenPos.x()) / width - 1.0f;
     float ndcY = 1.0f - (2.0f * screenPos.y()) / height;
     float ndcZ = 2.0f * ((depth - nearPlane) / (farPlane - nearPlane)) - 1.0f; // Linear depth mapping
@@ -1111,18 +980,15 @@ void CadOpenGLWidget::wheelEvent(QWheelEvent* event) {
         QVector3D viewDir = camera_.rot.rotatedVector(QVector3D(0, 0, -1));
         float newCameraZoom = camera_.zoom - zoomDelta;
         
-        // Calculate how much the camera needs to move to keep the point under cursor
         QVector3D camToPoint = intersection - camera_.pos;
         float currentDist = camToPoint.length();
         float zoomRatio = newCameraZoom / camera_.zoom;
         float newDist = currentDist * zoomRatio;
         
-        // Move camera position to maintain the point under cursor
         QVector3D newCameraPos = intersection - (camToPoint.normalized() * newDist);
         
         setCamera(newCameraPos, camera_.rot, newCameraZoom);
         
-        // Show zoom contact sphere
         m_zoomContactPoint = intersection;
         m_showZoomContactSphere = true;
         m_zoomContactTimer.stop();
@@ -1150,24 +1016,18 @@ int CadOpenGLWidget::getCacheSize() const {
     return static_cast<int>(m_geometryCache.size());
 }
 
-// Simple frustum culling implementation with extremely aggressive culling
 void CadOpenGLWidget::updateFrustumPlanes() {
-    // Get current view matrix
     QMatrix4x4 view;
     view.translate(0, 0, -camera_.zoom);
     view.rotate(camera_.rot.conjugated());
     view.translate(-camera_.pos);
     
-    // Get projection matrix
     QMatrix4x4 proj;
-    float fovY = 45.0f * M_PI / 180.0f;
     float aspect = float(width()) / float(height() ? height() : 1);
     proj.perspective(45.0f, aspect, 1.0f, 1e9f);
     
-    // Combined matrix
     QMatrix4x4 combined = proj * view;
     
-    // Extract frustum planes
     for (int i = 0; i < 4; ++i) {
         m_frustumPlanes[0][i] = combined(i,3) + combined(i,0); // Left
         m_frustumPlanes[1][i] = combined(i,3) - combined(i,0); // Right
@@ -1177,7 +1037,6 @@ void CadOpenGLWidget::updateFrustumPlanes() {
         m_frustumPlanes[5][i] = combined(i,3) - combined(i,2); // Far
     }
     
-    // Normalize planes
     for (int i = 0; i < 6; ++i) {
         float length = QVector3D(m_frustumPlanes[i].x(), m_frustumPlanes[i].y(), m_frustumPlanes[i].z()).length();
         if (length > 0) {
@@ -1187,7 +1046,6 @@ void CadOpenGLWidget::updateFrustumPlanes() {
 }
 
 bool CadOpenGLWidget::isInFrustum(const TopoDS_Face& face, const TopLoc_Location&) {
-    // Balanced frustum culling - permissive but not overly so
     Bnd_Box bbox;
     BRepBndLib::Add(face, bbox);
     
@@ -1196,11 +1054,9 @@ bool CadOpenGLWidget::isInFrustum(const TopoDS_Face& face, const TopLoc_Location
     Standard_Real xmin, ymin, zmin, xmax, ymax, zmax;
     bbox.Get(xmin, ymin, zmin, xmax, ymax, zmax);
     
-    // Moderate size-based culling (more permissive)
     double faceSize = std::max(std::max(xmax-xmin, ymax-ymin), zmax-zmin);
     if (faceSize < 0.00001) return false; // Skip only extremely small faces (was 0.0001)
     
-    // Removed distance-based culling logic here
     
     return true;
 }
@@ -1270,7 +1126,6 @@ void CadOpenGLWidget::renderFace(const XCAFNodeData* node, const CADNodeColor& c
     glEnd();
 }
 
-// Improved renderEdge implementation
 void CadOpenGLWidget::renderEdge(const TopoDS_Edge& edge, const CADNodeColor& color) {
     if (edge.IsNull()) return;
     
@@ -1288,13 +1143,11 @@ void CadOpenGLWidget::renderEdge(const TopoDS_Edge& edge, const CADNodeColor& co
         return;
     }
     
-    // Check if parameter range is valid
     if (first >= last) {
         qDebug() << "Invalid parameter range for edge curve";
         return;
     }
     
-    // Determine number of segments based on curve length
     Standard_Real curveLength = last - first;
     int N = std::max<int>(20, static_cast<int>(curveLength * 10)); // At least 20 segments, more for longer curves
     
@@ -1306,10 +1159,8 @@ void CadOpenGLWidget::renderEdge(const TopoDS_Edge& edge, const CADNodeColor& co
         try {
             curve->D0(t, p);
             // Do NOT apply locCopy.Transformation() here
-            // p.Transform(locCopy.Transformation());
             glVertex3d(p.X(), p.Y(), p.Z());
         } catch (const Standard_Failure&) {
-            // Skip invalid parameter values
             continue;
         }
     }
@@ -1318,13 +1169,10 @@ void CadOpenGLWidget::renderEdge(const TopoDS_Edge& edge, const CADNodeColor& co
     glLineWidth(1.0f); // Reset line width
 } 
 
-// Render only highlighted edges for performance
 void CadOpenGLWidget::renderHighlightedEdges() {
-    // Render hovered edge
     if (hoveredEdgeInstance_.node) {
         renderEdgeOptimized(hoveredEdgeInstance_.node, hoveredEdgeInstance_.accumulatedLoc);
     }
-    // Render all selected edges
     for (const auto& sel : selectedEdgeInstances_) {
         if (sel.node != hoveredEdgeInstance_.node) { // Don't render twice if hovered and selected
             renderEdgeOptimized(sel.node, sel.accumulatedLoc);
@@ -1332,22 +1180,18 @@ void CadOpenGLWidget::renderHighlightedEdges() {
     }
 }
 
-// Helper: Unproject screen point to world ray, matching new camera system
 static void screenToWorldRay(const QPoint& pos, int width, int height, const QVector3D& cameraPos, const QQuaternion& cameraRot, float cameraZoom, gp_Pnt& rayOrigin, gp_Dir& rayDir)
 {
-    // 1. Build the view matrix (camera-to-world)
     QMatrix4x4 view;
     view.translate(0, 0, -cameraZoom); // Zoom (dolly)
     view.rotate(cameraRot.conjugated());
     view.translate(-cameraPos);
     QMatrix4x4 invView = view.inverted();
 
-    // 2. Compute normalized device coordinates (NDC)
     float ndcX = (2.0f * pos.x()) / width - 1.0f;
     float ndcY = 1.0f - (2.0f * pos.y()) / height;
 
-    // 3. Project to near plane in camera space
-    float fovY = 45.0f * M_PI / 180.0f;
+    float fovY = 45.0f * kPi / 180.0f;
     float aspect = float(width) / float(height ? height : 1);
     float nearPlane = 1.0f;
     float tanFovY = tan(fovY / 2.0f);
@@ -1356,7 +1200,6 @@ static void screenToWorldRay(const QPoint& pos, int width, int height, const QVe
     float vz = -nearPlane;
     QVector3D rayCam(vx, vy, vz);
 
-    // 4. Transform ray origin and direction to world space
     QVector3D camOriginWorld = invView.map(QVector3D(0, 0, 0));
     QVector3D rayWorld = invView.map(rayCam) - camOriginWorld;
     rayWorld.normalize();
@@ -1365,43 +1208,21 @@ static void screenToWorldRay(const QPoint& pos, int width, int height, const QVe
     rayDir = gp_Dir(rayWorld.x(), rayWorld.y(), rayWorld.z());
 }
 
-// Overload: pick and output intersection point (returns true if hit)
-bool CadOpenGLWidget::pickElementAt(const QPoint& pos, QVector3D* outIntersection) {
-    QElapsedTimer pickTimer;
-    pickTimer.start();
-    
-    selectedFace_.Nullify();
-    selectedEdge_.Nullify();
-    if (!rootNode_) return false;
-    
-    QElapsedTimer cacheTimer;
-    cacheTimer.start();
-    qint64 cacheTime = cacheTimer.nsecsElapsed();
-    if (m_frameCount % 60 == 0) {
-        qDebug() << "[Profile] Face cache build took:" << cacheTime / 1000000.0 << "ms";
-    }
-    
-    QElapsedTimer rayTimer;
-    rayTimer.start();
+// Shared face-cache ray pick: casts a ray through pos and returns the nearest intersected face
+// instance (null on miss), writing the hit point through hitPoint. buildFaceCache is a full tree
+// walk, so the hover path reuses the existing cache instead of rebuilding per mouse move.
+CadOpenGLWidget::FaceInstance* CadOpenGLWidget::rayPickFace(const QPoint& pos, gp_Pnt* hitPoint, bool rebuildCache) {
+    if (rebuildCache) buildFaceCache();
     gp_Pnt rayOrigin;
     gp_Dir rayDir;
     screenToWorldRay(pos, width(), height(), camera_.pos, camera_.rot, camera_.zoom, rayOrigin, rayDir);
     gp_Lin ray(rayOrigin, rayDir);
-    qint64 rayTime = rayTimer.nsecsElapsed();
-    if (m_frameCount % 60 == 0) {
-        qDebug() << "[Profile] Ray setup took:" << rayTime / 1000000.0 << "ms";
-    }
-    
-    QElapsedTimer intersectTimer;
-    intersectTimer.start();
     double minDist = 1e9;
-    FaceInstance* pickedFace = nullptr;
-    gp_Pnt pickedPoint;
-    bool found = false;
+    FaceInstance* picked = nullptr;
     for (auto& inst : faceCache_) {
-        XCAFNodeData* xData = inst.node->asXCAF();
         CadNode* node = inst.node;
-        if (!node || !xData->hasFace()) continue;
+        XCAFNodeData* xData = node ? node->asXCAF() : nullptr;
+        if (!xData || !xData->hasFace()) continue;
         TopoDS_Face face = TopoDS::Face(xData->getFace().Located(inst.accumulatedLoc));
         BRepIntCurveSurface_Inter intersector;
         intersector.Init(face, ray, 1e-6);
@@ -1410,79 +1231,46 @@ bool CadOpenGLWidget::pickElementAt(const QPoint& pos, QVector3D* outIntersectio
             double dist = rayOrigin.Distance(ipt);
             if (dist < minDist) {
                 minDist = dist;
-                pickedFace = &inst;
-                pickedPoint = ipt;
-                found = true;
+                picked = &inst;
+                if (hitPoint) *hitPoint = ipt;
             }
             intersector.Next();
         }
     }
-    qint64 intersectTime = intersectTimer.nsecsElapsed();
-    if (m_frameCount % 60 == 0) {
-        qDebug() << "[Profile] Intersection testing took:" << intersectTime / 1000000.0 << "ms (tested" << faceCache_.size() << "faces)";
-    }
+    return picked;
+}
+
+bool CadOpenGLWidget::pickElementAt(const QPoint& pos, QVector3D* outIntersection) {
+    selectedFace_.Nullify();
+    selectedEdge_.Nullify();
+    if (!rootNode_) return false;
+    gp_Pnt pickedPoint;
+    FaceInstance* pickedFace = rayPickFace(pos, &pickedPoint, true);
     if (pickedFace && pickedFace->node) {
-        CadNode* node = pickedFace->node;
         XCAFNodeData* xData = pickedFace->node->asXCAF();
         selectedFace_ = TopoDS::Face(xData->getFace().Located(pickedFace->accumulatedLoc));
-        selectedFaceNode_ = node;
-        if (m_frameCount % 60 == 0) {
-            qDebug() << "[Ray] Selected face at TShape address:" << (void*)selectedFace_.TShape().get();
-        }
+        selectedFaceNode_ = pickedFace->node;
         // Don't emit signal here - let the mouse press handler manage selection
-        if (outIntersection && found) {
+        if (outIntersection) {
             *outIntersection = QVector3D(pickedPoint.X(), pickedPoint.Y(), pickedPoint.Z());
         }
-    qint64 totalPickTime = pickTimer.nsecsElapsed();
-    if (m_frameCount % 60 == 0) {
-        qDebug() << "[Profile] Total pickElementAt time:" << totalPickTime / 1000000.0 << "ms";
-    }
-    update();
-    return true;
-    } else {
-        selectedFaceNode_ = nullptr;
-        if (m_frameCount % 60 == 0) {
-            qDebug() << "No face selected (ray)";
-        }
-        qint64 totalPickTime = pickTimer.nsecsElapsed();
-        if (m_frameCount % 60 == 0) {
-            qDebug() << "[Profile] Total pickElementAt time (no hit):" << totalPickTime / 1000000.0 << "ms";
-        }
         update();
-        return false;
+        return true;
     }
-} 
+    selectedFaceNode_ = nullptr;
+    update();
+    return false;
+}
 
-// Edge picking function
 bool CadOpenGLWidget::pickEdgeAt(const QPoint& pos, QVector3D* outIntersection) {
-    QElapsedTimer pickTimer;
-    pickTimer.start();
-    
     selectedEdge_.Nullify();
     selectedEdgeNode_ = nullptr;
     if (!rootNode_) return false;
-    
-    QElapsedTimer cacheTimer;
-    cacheTimer.start();
     buildEdgeCache();
-    qint64 cacheTime = cacheTimer.nsecsElapsed();
-    if (m_frameCount % 60 == 0) {
-        qDebug() << "[Profile] Edge cache build took:" << cacheTime / 1000000.0 << "ms";
-    }
-    
-    QElapsedTimer rayTimer;
-    rayTimer.start();
     gp_Pnt rayOrigin;
     gp_Dir rayDir;
     screenToWorldRay(pos, width(), height(), camera_.pos, camera_.rot, camera_.zoom, rayOrigin, rayDir);
     gp_Lin ray(rayOrigin, rayDir);
-    qint64 rayTime = rayTimer.nsecsElapsed();
-    if (m_frameCount % 60 == 0) {
-        qDebug() << "[Profile] Ray setup took:" << rayTime / 1000000.0 << "ms";
-    }
-    
-    QElapsedTimer intersectTimer;
-    intersectTimer.start();
     double minDist = 1e9;
     EdgeInstance* pickedEdge = nullptr;
     gp_Pnt pickedPoint;
@@ -1494,22 +1282,19 @@ bool CadOpenGLWidget::pickEdgeAt(const QPoint& pos, QVector3D* outIntersection) 
         if (!xData || !xData->hasEdge()) continue;
         TopoDS_Edge edge = TopoDS::Edge(xData->getEdge().Located(inst.accumulatedLoc));
         
-        // Find closest point on edge to ray
         Standard_Real first, last;
         TopLoc_Location locCopy;
         Handle(Geom_Curve) curve = BRep_Tool::Curve(edge, locCopy, first, last);
         if (curve.IsNull()) continue;
         
-        // Sample points along the curve and find closest to ray
         int numSamples = 50;
         for (int i = 0; i <= numSamples; ++i) {
             Standard_Real t = first + (last - first) * i / numSamples;
             gp_Pnt curvePoint;
             try {
                 curve->D0(t, curvePoint);
-                // Apply the accumulated transformation to the curve point
-                if (!inst.accumulatedLoc.IsIdentity()) {
-                    curvePoint.Transform(inst.accumulatedLoc.Transformation());
+                if (!node->loc.IsIdentity()) {
+                    curvePoint.Transform(node->loc.Transformation());
                 }
                 double dist = ray.Distance(curvePoint);
                 if (dist < minDist && dist < 10.0) { // Within 10 units of ray
@@ -1523,116 +1308,34 @@ bool CadOpenGLWidget::pickEdgeAt(const QPoint& pos, QVector3D* outIntersection) 
             }
         }
     }
-    qint64 intersectTime = intersectTimer.nsecsElapsed();
-    if (m_frameCount % 60 == 0) {
-        qDebug() << "[Profile] Edge intersection testing took:" << intersectTime / 1000000.0 << "ms (tested" << edgeCache_.size() << "edges)";
-    }
-    
-            if (pickedEdge && pickedEdge->node) {
-            CadNode* node = pickedEdge->node;
-            XCAFNodeData* xData = node->asXCAF();
-            selectedEdge_ = TopoDS::Edge(xData->getEdge().Located(pickedEdge->accumulatedLoc));
-            selectedEdgeNode_ = node;
-            if (m_frameCount % 60 == 0) {
-                qDebug() << "[Ray] Selected edge at TShape address:" << (void*)selectedEdge_.TShape().get();
-            }
-            // Don't emit signal here - let the mouse press handler manage selection
-            if (outIntersection && found) {
-                *outIntersection = QVector3D(pickedPoint.X(), pickedPoint.Y(), pickedPoint.Z());
-            }
-        qint64 totalPickTime = pickTimer.nsecsElapsed();
-        if (m_frameCount % 60 == 0) {
-            qDebug() << "[Profile] Total pickEdgeAt time:" << totalPickTime / 1000000.0 << "ms";
+    if (pickedEdge && pickedEdge->node) {
+        CadNode* node = pickedEdge->node;
+        XCAFNodeData* xData = node->asXCAF();
+        selectedEdge_ = TopoDS::Edge(xData->getEdge().Located(pickedEdge->accumulatedLoc));
+        selectedEdgeNode_ = node;
+        // Don't emit signal here - let the mouse press handler manage selection
+        if (outIntersection && found) {
+            *outIntersection = QVector3D(pickedPoint.X(), pickedPoint.Y(), pickedPoint.Z());
         }
         update();
         return true;
     } else {
         selectedEdgeNode_ = nullptr;
-        if (m_frameCount % 60 == 0) {
-            qDebug() << "No edge selected (ray)";
-        }
-        qint64 totalPickTime = pickTimer.nsecsElapsed();
-        if (m_frameCount % 60 == 0) {
-            qDebug() << "[Profile] Total pickEdgeAt time (no hit):" << totalPickTime / 1000000.0 << "ms";
-        }
         update();
         return false;
     }
 }
 
-// Picking function for pivot setting that doesn't change selection
 bool CadOpenGLWidget::pickElementAtForPivot(const QPoint& pos, QVector3D* outIntersection) {
-    QElapsedTimer pickTimer;
-    pickTimer.start();
-    
     if (!rootNode_) return false;
-    buildFaceCache();
-    
-    QElapsedTimer cacheTimer;
-    cacheTimer.start();
-    qint64 cacheTime = cacheTimer.nsecsElapsed();
-    if (m_frameCount % 60 == 0) {
-        qDebug() << "[Profile] Face cache build took:" << cacheTime / 1000000.0 << "ms";
-    }
-    
-    QElapsedTimer rayTimer;
-    rayTimer.start();
-    gp_Pnt rayOrigin;
-    gp_Dir rayDir;
-    screenToWorldRay(pos, width(), height(), camera_.pos, camera_.rot, camera_.zoom, rayOrigin, rayDir);
-    gp_Lin ray(rayOrigin, rayDir);
-    qint64 rayTime = rayTimer.nsecsElapsed();
-    if (m_frameCount % 60 == 0) {
-        qDebug() << "[Profile] Ray setup took:" << rayTime / 1000000.0 << "ms";
-    }
-    
-    QElapsedTimer intersectTimer;
-    intersectTimer.start();
-    double minDist = 1e9;
-    FaceInstance* pickedFace = nullptr;
     gp_Pnt pickedPoint;
-    bool found = false;
-    for (auto& inst : faceCache_) {
-        CadNode* node = inst.node;
-        XCAFNodeData* xData = node->asXCAF();
-        if (!xData || !xData->hasFace()) continue;
-        TopoDS_Face face = TopoDS::Face(xData->getFace().Located(inst.accumulatedLoc));
-        BRepIntCurveSurface_Inter intersector;
-        intersector.Init(face, ray, 1e-6);
-        while (intersector.More()) {
-            gp_Pnt ipt = intersector.Pnt();
-            double dist = rayOrigin.Distance(ipt);
-            if (dist < minDist) {
-                minDist = dist;
-                pickedFace = &inst;
-                pickedPoint = ipt;
-                found = true;
-            }
-            intersector.Next();
-        }
-    }
-    qint64 intersectTime = intersectTimer.nsecsElapsed();
-    if (m_frameCount % 60 == 0) {
-        qDebug() << "[Profile] Intersection testing took:" << intersectTime / 1000000.0 << "ms (tested" << faceCache_.size() << "faces)";
-    }
-    
-    if (found && outIntersection) {
+    if (!rayPickFace(pos, &pickedPoint, true)) return false;
+    if (outIntersection) {
         *outIntersection = QVector3D(pickedPoint.X(), pickedPoint.Y(), pickedPoint.Z());
-        qint64 totalPickTime = pickTimer.nsecsElapsed();
-        if (m_frameCount % 60 == 0) {
-            qDebug() << "[Profile] Total pickElementAtForPivot time:" << totalPickTime / 1000000.0 << "ms";
-        }
-        return true;
-    } else {
-        qint64 totalPickTime = pickTimer.nsecsElapsed();
-        if (m_frameCount % 60 == 0) {
-            qDebug() << "[Profile] Total pickElementAtForPivot time (no hit):" << totalPickTime / 1000000.0 << "ms";
-        }
-        return false;
     }
+    return true;
 }
 
-// Helper: Find reference node parent for a given geometry node
 static const CadNode* findReferenceParent(const CadNode* root, const CadNode* target) {
     if (!root) return nullptr;
     if (root->type == CadNodeType::XCAF && root->children.size() == 1 &&
@@ -1648,55 +1351,23 @@ static const CadNode* findReferenceParent(const CadNode* root, const CadNode* ta
 }
 
 void CadOpenGLWidget::pickHoveredFaceAt(const QPoint& pos) {
-    QElapsedTimer hoverTimer;
-    hoverTimer.start();
     hoveredFace_.Nullify();
     if (!rootNode_) return;
-    gp_Pnt rayOrigin;
-    gp_Dir rayDir;
-    screenToWorldRay(pos, width(), height(), camera_.pos, camera_.rot, camera_.zoom, rayOrigin, rayDir);
-    gp_Lin ray(rayOrigin, rayDir);
-    double minDist = 1e9;
-    FaceInstance* pickedFace = nullptr;
-    for (auto& inst : faceCache_) {
-        CadNode* node = inst.node;
-        XCAFNodeData* xData = node->asXCAF();
-        if (!node || !xData->hasFace()) continue;
-        TopoDS_Face face = TopoDS::Face(xData->getFace().Located(inst.accumulatedLoc));
-        BRepIntCurveSurface_Inter intersector;
-        intersector.Init(face, ray, 1e-6);
-        while (intersector.More()) {
-            gp_Pnt ipt = intersector.Pnt();
-            double dist = rayOrigin.Distance(ipt);
-            if (dist < minDist) {
-                minDist = dist;
-                pickedFace = &inst;
-            }
-            intersector.Next();
-        }
-    }
+    FaceInstance* pickedFace = rayPickFace(pos, nullptr, false);
     if (pickedFace && pickedFace->node) {
         CadNode* node = pickedFace->node;
         XCAFNodeData* xData = node->asXCAF();
         hoveredFace_ = TopoDS::Face(xData->getFace().Located(pickedFace->accumulatedLoc));
-        // Always set hoveredFaceInstance_ to the geometry node under the mouse
         hoveredFaceInstance_ = SelectedInstance{node, pickedFace->accumulatedLoc};
     } else {
         hoveredFaceInstance_ = SelectedInstance{nullptr, TopLoc_Location()};
     }
-    qint64 totalHoverTime = hoverTimer.nsecsElapsed();
-    if (m_frameCount % 60 == 0) {
-        qDebug() << "[Profile] pickHoveredFaceAt time:" << totalHoverTime / 1000000.0 << "ms";
-    }
 }
 
 void CadOpenGLWidget::pickHoveredEdgeAt(const QPoint& pos) {
-    QElapsedTimer hoverTimer;
-    hoverTimer.start();
     hoveredEdge_.Nullify();
     hoveredEdgeInstance_ = SelectedInstance{nullptr, TopLoc_Location()};
     if (!rootNode_) return;
-    // Only build edge cache if not already built (performance optimization)
     static int lastEdgeCacheFrame = -1;
     if (lastEdgeCacheFrame != m_frameCount) {
         buildEdgeCache();
@@ -1714,20 +1385,17 @@ void CadOpenGLWidget::pickHoveredEdgeAt(const QPoint& pos) {
         if (!xData || !xData->hasEdge()) continue;
         TopoDS_Edge edge = TopoDS::Edge(xData->getEdge().Located(inst.accumulatedLoc));
         
-        // Find closest point on edge to ray
         Standard_Real first, last;
         TopLoc_Location locCopy;
         Handle(Geom_Curve) curve = BRep_Tool::Curve(edge, locCopy, first, last);
         if (curve.IsNull()) continue;
         
-        // Sample points along the curve and find closest to ray (optimized for hover)
         int numSamples = 20; // Reduced samples for hover performance
         for (int i = 0; i <= numSamples; ++i) {
             Standard_Real t = first + (last - first) * i / numSamples;
             gp_Pnt curvePoint;
             try {
                 curve->D0(t, curvePoint);
-                // Apply the node's transformation to the curve point
                 if (!node->loc.IsIdentity()) {
                     curvePoint.Transform(node->loc.Transformation());
                 }
@@ -1750,12 +1418,7 @@ void CadOpenGLWidget::pickHoveredEdgeAt(const QPoint& pos) {
     } else {
         hoveredEdgeInstance_ = SelectedInstance{nullptr, TopLoc_Location()};
     }
-    
-    qint64 totalHoverTime = hoverTimer.nsecsElapsed();
-    if (m_frameCount % 60 == 0) {
-        qDebug() << "[Profile] pickHoveredEdgeAt time:" << totalHoverTime / 1000000.0 << "ms";
-    }
-} 
+}
 
 void CadOpenGLWidget::collectFaceNodes(CadNode* node, std::vector<CadNode*>& out) {
     if (!node) return;
@@ -1769,17 +1432,13 @@ void CadOpenGLWidget::collectFaceNodes(CadNode* node, std::vector<CadNode*>& out
 }
 
 void CadOpenGLWidget::buildFaceCache() {
-    QElapsedTimer cacheTimer;
-    cacheTimer.start();
     faceCache_.clear();
     if (!rootNode_) return;
     std::vector<std::pair<const CadNode*, TopLoc_Location>> faceNodes;
     std::function<void(const CadNode*, TopLoc_Location)> collect;
     collect = [&](const CadNode* node, TopLoc_Location accumulatedLoc) {
         if (!node) return;
-        // Use getNodeLocation to get the current location (including physics updates)
-        TopLoc_Location nodeLoc = getNodeLocation(node, m_simulationManager);
-        TopLoc_Location newAccumulatedLoc = accumulatedLoc * nodeLoc;
+        TopLoc_Location newAccumulatedLoc = accumulatedLoc * node->loc;
         const XCAFNodeData* xData = node->asXCAF();
         if (xData && xData->type == TopAbs_FACE && xData->hasFace()) {
             faceNodes.emplace_back(node, newAccumulatedLoc);
@@ -1791,66 +1450,46 @@ void CadOpenGLWidget::buildFaceCache() {
     // Traverse from the root node itself, not just its children
     collect(rootNode_, TopLoc_Location());
     for (const auto& pair : faceNodes) faceCache_.push_back(FaceInstance{const_cast<CadNode*>(pair.first), pair.second});
-    qint64 cacheTime = cacheTimer.nsecsElapsed();
-    if (m_frameCount % 60 == 0) {
-        qDebug() << "[Profile] buildFaceCache took:" << cacheTime / 1000000.0 << "ms (cached" << faceCache_.size() << "faces)";
-    }
 }
 
 void CadOpenGLWidget::buildEdgeCache() {
-    QElapsedTimer cacheTimer;
-    cacheTimer.start();
-    
     edgeCache_.clear();
     if (!rootNode_) return;
     
-    // Build edge cache with proper accumulated locations
-    std::vector<std::pair<const CadNode*, TopLoc_Location>> edgeNodes;
-    std::function<void(const CadNode*, TopLoc_Location)> collect;
-    collect = [&](const CadNode* node, TopLoc_Location accumulatedLoc) {
-        if (!node) return;
-        // Use getNodeLocation to get the current location (including physics updates)
-        TopLoc_Location nodeLoc = getNodeLocation(node, m_simulationManager);
-        TopLoc_Location newAccumulatedLoc = accumulatedLoc * nodeLoc;
-        
-        const XCAFNodeData* xData = node->asXCAF();
-        if (xData && xData->type == TopAbs_EDGE && xData->hasEdge()) {
-            edgeNodes.emplace_back(node, newAccumulatedLoc);
-        } else if (xData && (xData->type == TopAbs_SOLID || xData->type == TopAbs_SHELL || xData->type == TopAbs_COMPOUND)) {
+    std::function<void(CadNode*)> traverse;
+    traverse = [&](CadNode* node) {
+        if (!node || !node->visible) return;
+        XCAFNodeData* xData = node->asXCAF();
+        if (!xData) {
+            for (auto& child : node->children) traverse(child.get());
+            return;
+        }
+        if (xData->type == TopAbs_EDGE && xData->hasEdge()) {
+            edgeCache_.push_back(EdgeInstance{node});
+        } else if (xData->type == TopAbs_SOLID || xData->type == TopAbs_SHELL || xData->type == TopAbs_COMPOUND) {
             // Only add parent nodes for picking if they have significant geometry
             TopoDS_Shape shape = xData->shape;
             if (!shape.IsNull()) {
-                // Count edges to determine if this node is worth caching
                 int edgeCount = 0;
                 for (TopExp_Explorer exp(shape, TopAbs_EDGE); exp.More(); exp.Next()) {
                     edgeCount++;
                     if (edgeCount > 10) break; // Limit edge counting for performance
                 }
                 if (edgeCount > 0) {
-                    edgeNodes.emplace_back(node, newAccumulatedLoc);
+                    edgeCache_.push_back(EdgeInstance{node});
                 }
             }
         }
-        for (const auto& child : node->children) {
-            collect(child.get(), newAccumulatedLoc);
+        for (auto& child : node->children) {
+            traverse(child.get());
         }
     };
-    // Traverse from the root node itself, not just its children
-    collect(rootNode_, TopLoc_Location());
-    for (const auto& pair : edgeNodes) edgeCache_.push_back(EdgeInstance{const_cast<CadNode*>(pair.first), pair.second});
-    
-    qint64 cacheTime = cacheTimer.nsecsElapsed();
-    if (m_frameCount % 60 == 0) {
-        qDebug() << "[Profile] buildEdgeCache took:" << cacheTime / 1000000.0 << "ms (cached" << edgeCache_.size() << "edges)";
-    }
-} 
+    for (auto& child : rootNode_->children) traverse(child.get());
+}
 
-// Add this slot for tree selection
 void CadOpenGLWidget::setSelectionMode(SelectionMode mode) {
     m_selectionMode = mode;
-    // Clear current selection when changing modes
     clearSelection();
-    // Clear hover states when changing modes
     hoveredFace_.Nullify();
     hoveredFaceInstance_ = SelectedInstance{nullptr, TopLoc_Location()};
     hoveredEdge_.Nullify();
@@ -1919,7 +1558,6 @@ void CadOpenGLWidget::removeFromSelection(CadNode* node) {
     update();
 } 
 
-// Helper: Project a 3D point to screen coordinates
 static QPoint worldToScreen(const QVector3D& world, int width, int height, float camDist, float camRotX, float camRotY, const QVector3D& panOffset, const QVector3D& center) {
     QMatrix4x4 mv;
     mv.translate(0, 0, -camDist);
@@ -1928,7 +1566,7 @@ static QPoint worldToScreen(const QVector3D& world, int width, int height, float
     mv.translate(panOffset);
     mv.translate(-center);
     QVector3D camSpace = mv.map(world);
-    float fovY = 45.0f * M_PI / 180.0f;
+    float fovY = 45.0f * kPi / 180.0f;
     float aspect = float(width) / float(height ? height : 1);
     float nearPlane = 1.0f;
     float tanFovY = tan(fovY / 2.0f);
@@ -1963,7 +1601,6 @@ void CadOpenGLWidget::setPivotSphere(const QVector3D& worldPos) {
     update();
 } 
 
-// Helper to recursively accumulate bounding box for a node and its children, using transform accumulation
 static void accumulateBoundingBox(const CadNode* node, const TopLoc_Location& accumulatedLoc, Bnd_Box& bbox) {
     if (!node) return;
     TopLoc_Location newAccumulatedLoc = accumulatedLoc * node->loc;
@@ -1974,6 +1611,15 @@ static void accumulateBoundingBox(const CadNode* node, const TopLoc_Location& ac
             BRepBndLib::Add(locatedFace, bbox);
         }
     }
+    const MeshGeometryData* meshData = node->asMeshGeometry();
+    if (meshData && meshData->loaded && !meshData->vertices.empty()) {
+        const gp_Trsf& trsf = newAccumulatedLoc.Transformation();
+        for (size_t i = 0; i + 2 < meshData->vertices.size(); i += 3) {
+            gp_Pnt p(meshData->vertices[i], meshData->vertices[i + 1], meshData->vertices[i + 2]);
+            p.Transform(trsf);
+            bbox.Add(p);
+        }
+    }
     for (const auto& child : node->children) {
         if (child) accumulateBoundingBox(child.get(), newAccumulatedLoc, bbox);
     }
@@ -1981,7 +1627,6 @@ static void accumulateBoundingBox(const CadNode* node, const TopLoc_Location& ac
 
 void CadOpenGLWidget::reframeCamera() {
     if (!rootNode_) return;
-    // 1. Compute bounding box
     Bnd_Box bbox;
     accumulateBoundingBox(rootNode_, TopLoc_Location(), bbox);
     if (bbox.IsVoid()) return;
@@ -1990,7 +1635,6 @@ void CadOpenGLWidget::reframeCamera() {
     bbox.Get(xmin, ymin, zmin, xmax, ymax, zmax);
     QVector3D center((xmin + xmax) * 0.5, (ymin + ymax) * 0.5, (zmin + zmax) * 0.5);
 
-    // 2. Get all 8 corners of the bounding box
     QVector<QVector3D> corners = {
         {float(xmin), float(ymin), float(zmin)},
         {float(xmin), float(ymin), float(zmax)},
@@ -2002,7 +1646,6 @@ void CadOpenGLWidget::reframeCamera() {
         {float(xmax), float(ymax), float(zmax)}
     };
 
-    // 3. Transform corners to camera local space (view space)
     QMatrix4x4 view;
     view.rotate(camera_.rot.conjugated());
     view.translate(-center); // Center the model
@@ -2014,8 +1657,7 @@ void CadOpenGLWidget::reframeCamera() {
         maxY = std::max(maxY, std::abs(v.y()));
     }
 
-    // 4. Compute required distance to fit the bounding box in view
-    float fovY = 45.0f * M_PI / 180.0f;
+    float fovY = 45.0f * kPi / 180.0f;
     float aspect = float(width()) / float(height() ? height() : 1);
     float halfFovY = fovY / 2.0f;
     float halfFovX = atan(tan(halfFovY) * aspect);
@@ -2025,7 +1667,6 @@ void CadOpenGLWidget::reframeCamera() {
     float requiredDist = std::max(distX, distY);
     requiredDist *= 1.1f; // Add a margin
 
-    // 5. Set camera position along current view direction
     QVector3D viewDir = camera_.rot.rotatedVector(QVector3D(0, 0, -1));
     QVector3D newCamPos = center - viewDir * requiredDist;
 
@@ -2045,7 +1686,6 @@ void CadOpenGLWidget::setCameraState(const CameraState& state) {
 }
 
 void CadOpenGLWidget::markCacheDirty() {
-    // Walk the tree and update globalLoc for any node needing it
     if (rootNode_) {
         std::function<void(CadNode*, CadNode*)> updateIfNeeded = [&](CadNode* node, CadNode* parent) {
             if (!node) return;
@@ -2065,7 +1705,6 @@ void CadOpenGLWidget::markCacheDirty() {
     update();
 }
 
-// Helper: Draw a wireframe bounding box given min/max coordinates
 void CadOpenGLWidget::drawBoundingBox(const QVector3D& min, const QVector3D& max, const QVector4D& color) {
     glPushAttrib(GL_ENABLE_BIT | GL_LINE_BIT | GL_COLOR_BUFFER_BIT);
     glDisable(GL_LIGHTING);
@@ -2076,7 +1715,6 @@ void CadOpenGLWidget::drawBoundingBox(const QVector3D& min, const QVector3D& max
     glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
     glBegin(GL_LINES);
-    // 8 corners
     QVector3D c[8] = {
         {min.x(), min.y(), min.z()},
         {min.x(), min.y(), max.z()},
@@ -2087,7 +1725,6 @@ void CadOpenGLWidget::drawBoundingBox(const QVector3D& min, const QVector3D& max
         {max.x(), max.y(), min.z()},
         {max.x(), max.y(), max.z()}
     };
-    // 12 edges
     int edges[12][2] = {
         {0,1},{0,2},{0,4},
         {1,3},{1,5},
@@ -2107,7 +1744,6 @@ void CadOpenGLWidget::drawBoundingBox(const QVector3D& min, const QVector3D& max
     glPopAttrib();
 }
 
-// Helper: Draw a reference frame (axes) at a given transformation
 void CadOpenGLWidget::drawReferenceFrame(const TopLoc_Location& loc, float axisLength) {
     const gp_Trsf& trsf = loc.Transformation();
     const gp_Mat& mat = trsf.VectorialPart();
@@ -2122,15 +1758,12 @@ void CadOpenGLWidget::drawReferenceFrame(const TopLoc_Location& loc, float axisL
     glMultMatrixd(matrix);
     glLineWidth(20.0f); // Thicker than bounding box
     glBegin(GL_LINES);
-    // X axis (red)
     glColor3f(1.0f, 0.0f, 0.0f);
     glVertex3f(0.0f, 0.0f, 0.0f);
     glVertex3f(axisLength, 0.0f, 0.0f);
-    // Y axis (green)
     glColor3f(0.0f, 1.0f, 0.0f);
     glVertex3f(0.0f, 0.0f, 0.0f);
     glVertex3f(0.0f, axisLength, 0.0f);
-    // Z axis (blue)
     glColor3f(0.0f, 0.0f, 1.0f);
     glVertex3f(0.0f, 0.0f, 0.0f);
     glVertex3f(0.0f, 0.0f, axisLength);
@@ -2139,14 +1772,9 @@ void CadOpenGLWidget::drawReferenceFrame(const TopLoc_Location& loc, float axisL
     glPopMatrix();
 }
 
-// Add this function near other rendering helpers
-void CadOpenGLWidget::renderConvexHulls(const PhysicsNodeData* physData) {
-    if (!physData) return;
-    // Only render if collision mesh is visible
-    if (!physData->collisionMeshVisible) return;
+void CadOpenGLWidget::renderConvexHullList(const std::vector<ConvexHullData>& hulls) {
     // No transform application here; rely on OpenGL stack
-    for (const auto& hull : physData->hulls) {
-        // Draw filled hull
+    for (const auto& hull : hulls) {
         glColor4f(1.0f, 0.5f, 0.1f, 0.3f); // Orange, semi-transparent
         glBegin(GL_TRIANGLES);
         for (const auto& tri : hull.indices) {
@@ -2156,7 +1784,6 @@ void CadOpenGLWidget::renderConvexHulls(const PhysicsNodeData* physData) {
             }
         }
         glEnd();
-        // Draw wireframe
         glColor4f(0.0f, 0.0f, 0.0f, 0.7f);
         glLineWidth(2.0f);
         glBegin(GL_LINES);
@@ -2172,7 +1799,12 @@ void CadOpenGLWidget::renderConvexHulls(const PhysicsNodeData* physData) {
     }
 }
 
-// Helper: Find accumulated transform for a node from the root
+void CadOpenGLWidget::renderConvexHulls(const PhysicsNodeData* physData) {
+    if (!physData) return;
+    if (!physData->collisionMeshVisible) return;
+    renderConvexHullList(physData->hulls);
+}
+
 static bool findNodeAccumulatedLoc(const CadNode* root, const CadNode* target, TopLoc_Location currentLoc, TopLoc_Location& outLoc) {
     if (!root) return false;
     if (root == target) {
@@ -2187,7 +1819,6 @@ static bool findNodeAccumulatedLoc(const CadNode* root, const CadNode* target, T
     return false;
 }
 
-// Public slot: set selection from tree (by node pointer)
 void CadOpenGLWidget::setSelectedFaceNode(CadNode* node, const TopLoc_Location& accLoc) {
     if (!node) return;
     clearSelection();
@@ -2200,25 +1831,20 @@ void CadOpenGLWidget::setSelectedFaceNode(CadNode* node, const TopLoc_Location& 
     update();
 }
 
-// Render ground plane
 void CadOpenGLWidget::renderGroundPlane(const MutexRootNodeData& mutexData) {
     if (!mutexData.groundPlaneVisible) return;
-    // Enable blending for transparency
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     
-    // Set the ground plane color
     glColor4f(mutexData.groundPlaneColor.r, 
               mutexData.groundPlaneColor.g, 
               mutexData.groundPlaneColor.b, 
               mutexData.groundPlaneColor.a);
     
-    // Draw the ground plane as a large quad
     double size = mutexData.groundPlaneSize;
     double y = mutexData.groundPlaneY;
     double thickness = mutexData.groundPlaneThickness;
     
-    // Draw the top face of the ground plane
     glBegin(GL_QUADS);
     glVertex3d(-size, y + thickness/2, -size);
     glVertex3d( size, y + thickness/2, -size);
@@ -2226,12 +1852,10 @@ void CadOpenGLWidget::renderGroundPlane(const MutexRootNodeData& mutexData) {
     glVertex3d(-size, y + thickness/2,  size);
     glEnd();
     
-    // Draw a grid pattern on the ground plane
     glColor4f(0.5f, 0.5f, 0.5f, 0.3f); // Darker grid lines
     glLineWidth(1.0f);
     glBegin(GL_LINES);
     
-    // Draw grid lines every 100 units
     double gridSpacing = 100.0;
     for (double x = -size; x <= size; x += gridSpacing) {
         glVertex3d(x, y + thickness/2 + 0.01, -size); // Slightly above surface to avoid z-fighting
@@ -2243,284 +1867,10 @@ void CadOpenGLWidget::renderGroundPlane(const MutexRootNodeData& mutexData) {
     }
     glEnd();
     
-    // Disable blending
     glDisable(GL_BLEND);
 }
 
-// Custom drawing callback system implementation
-void CadOpenGLWidget::addCustomDrawCallback(const std::function<void()>& callback) {
-    m_customDrawCallbacks.push_back(callback);
-    update();
-}
 
 
 
-void CadOpenGLWidget::clearCustomDrawCallbacks() {
-    m_customDrawCallbacks.clear();
-    update();
-}
-
-void CadOpenGLWidget::setConnectionPathSegments(const std::vector<ConnectionPathSegment>& segments) {
-    qDebug() << "[OpenGL] setConnectionPathSegments called with" << segments.size() << "segments";
-    qDebug() << "[OpenGL] Before assignment, m_connectionPathSegments.size() =" << m_connectionPathSegments.size();
-    m_connectionPathSegments = segments;
-    qDebug() << "[OpenGL] After assignment, m_connectionPathSegments.size() =" << m_connectionPathSegments.size();
-    update();
-}
-
-void CadOpenGLWidget::clearConnectionPathSegments() {
-    qDebug() << "[OpenGL] clearConnectionPathSegments called, clearing" << m_connectionPathSegments.size() << "segments";
-    m_connectionPathSegments.clear();
-    update();
-}
-
-void CadOpenGLWidget::renderConnectionPathSegments() {
-    qDebug() << "[OpenGL] renderConnectionPathSegments called with" << m_connectionPathSegments.size() << "segments";
-    if (m_connectionPathSegments.empty()) {
-        qDebug() << "[OpenGL] No segments to render";
-        return;
-    }
-    
-    qDebug() << "[OpenGL] Starting to render segments...";
-    qDebug() << "[OpenGL] Camera pos:" << camera_.pos << "zoom:" << camera_.zoom;
-    
-    // Save current OpenGL state
-    glPushAttrib(GL_ALL_ATTRIB_BITS);
-    
-    // Enable line smoothing for better visual quality
-    glEnable(GL_LINE_SMOOTH);
-    glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
-    
-    // Enable blending for transparency
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    
-    // Disable depth writing for overlay lines
-    glDepthMask(GL_FALSE);
-    
-    // Disable lighting for consistent colors
-    glDisable(GL_LIGHTING);
-    
-    for (size_t i = 0; i < m_connectionPathSegments.size(); ++i) {
-        const auto& segment = m_connectionPathSegments[i];
-        qDebug() << "[OpenGL] Rendering segment" << i << "from" << segment.start << "to" << segment.end 
-                 << "color:" << segment.color << "width:" << segment.width << "height:" << segment.height;
-        
-        // Check if segment dimensions are reasonable
-        if (segment.width < 1.0 || segment.height < 1.0) {
-            qDebug() << "[OpenGL] WARNING: Segment" << i << "has very small dimensions! Width:" << segment.width << "Height:" << segment.height;
-        }
-        
-        // Check if segment length is reasonable
-        float segmentLength = (segment.end - segment.start).length();
-        if (segmentLength < 0.1) {
-            qDebug() << "[OpenGL] WARNING: Segment" << i << "has very small length:" << segmentLength;
-        }
-        
-        // Check for NaN or infinite values
-        if (std::isnan(segment.start.x()) || std::isnan(segment.start.y()) || std::isnan(segment.start.z()) ||
-            std::isnan(segment.end.x()) || std::isnan(segment.end.y()) || std::isnan(segment.end.z()) ||
-            std::isinf(segment.start.x()) || std::isinf(segment.start.y()) || std::isinf(segment.start.z()) ||
-            std::isinf(segment.end.x()) || std::isinf(segment.end.y()) || std::isinf(segment.end.z())) {
-            qDebug() << "[OpenGL] WARNING: Segment" << i << "has invalid coordinates, skipping";
-            continue;
-        }
-        
-        // Calculate segment direction and length
-        QVector3D segmentDirection = normalizeVector(segment.end - segment.start);
-        
-        // Calculate perpendicular vectors for the cross-section
-        QVector3D up(0, 0, 1);
-        QVector3D right = normalizeVector(QVector3D::crossProduct(segmentDirection, up));
-        if (right.length() < 0.1f) {
-            // If segment is vertical, use a different up vector
-            up = QVector3D(1, 0, 0);
-            right = normalizeVector(QVector3D::crossProduct(segmentDirection, up));
-        }
-        up = normalizeVector(QVector3D::crossProduct(right, segmentDirection));
-        
-        // Calculate the four corners of the rectangular cross-section
-        float halfWidth = segment.width * 0.5f;
-        float halfHeight = segment.height * 0.5f;
-        
-        QVector3D corner1 = segment.start + right * halfWidth + up * halfHeight;
-        QVector3D corner2 = segment.start + right * halfWidth - up * halfHeight;
-        QVector3D corner3 = segment.start - right * halfWidth - up * halfHeight;
-        QVector3D corner4 = segment.start - right * halfWidth + up * halfHeight;
-        
-        QVector3D corner5 = segment.end + right * halfWidth + up * halfHeight;
-        QVector3D corner6 = segment.end + right * halfWidth - up * halfHeight;
-        QVector3D corner7 = segment.end - right * halfWidth - up * halfHeight;
-        QVector3D corner8 = segment.end - right * halfWidth + up * halfHeight;
-        
-        // Set color
-        glColor4f(segment.color.x(), segment.color.y(), segment.color.z(), segment.color.w());
-        
-        // Enable lighting for 3D appearance
-        glEnable(GL_LIGHTING);
-        glEnable(GL_LIGHT0);
-        
-        // Draw the 3D rectangular prism
-        glBegin(GL_QUADS);
-        
-        // Front face
-        glNormal3f(segmentDirection.x(), segmentDirection.y(), segmentDirection.z());
-        glVertex3f(corner1.x(), corner1.y(), corner1.z());
-        glVertex3f(corner2.x(), corner2.y(), corner2.z());
-        glVertex3f(corner6.x(), corner6.y(), corner6.z());
-        glVertex3f(corner5.x(), corner5.y(), corner5.z());
-        
-        // Back face
-        glNormal3f(-segmentDirection.x(), -segmentDirection.y(), -segmentDirection.z());
-        glVertex3f(corner4.x(), corner4.y(), corner4.z());
-        glVertex3f(corner8.x(), corner8.y(), corner8.z());
-        glVertex3f(corner7.x(), corner7.y(), corner7.z());
-        glVertex3f(corner3.x(), corner3.y(), corner3.z());
-        
-        // Right face
-        glNormal3f(right.x(), right.y(), right.z());
-        glVertex3f(corner1.x(), corner1.y(), corner1.z());
-        glVertex3f(corner5.x(), corner5.y(), corner5.z());
-        glVertex3f(corner8.x(), corner8.y(), corner8.z());
-        glVertex3f(corner4.x(), corner4.y(), corner4.z());
-        
-        // Left face
-        glNormal3f(-right.x(), -right.y(), -right.z());
-        glVertex3f(corner2.x(), corner2.y(), corner2.z());
-        glVertex3f(corner3.x(), corner3.y(), corner3.z());
-        glVertex3f(corner7.x(), corner7.y(), corner7.z());
-        glVertex3f(corner6.x(), corner6.y(), corner6.z());
-        
-        // Top face
-        glNormal3f(up.x(), up.y(), up.z());
-        glVertex3f(corner1.x(), corner1.y(), corner1.z());
-        glVertex3f(corner4.x(), corner4.y(), corner4.z());
-        glVertex3f(corner3.x(), corner3.y(), corner3.z());
-        glVertex3f(corner2.x(), corner2.y(), corner2.z());
-        
-        // Bottom face
-        glNormal3f(-up.x(), -up.y(), -up.z());
-        glVertex3f(corner5.x(), corner5.y(), corner5.z());
-        glVertex3f(corner6.x(), corner6.y(), corner6.z());
-        glVertex3f(corner7.x(), corner7.y(), corner7.z());
-        glVertex3f(corner8.x(), corner8.y(), corner8.z());
-        
-        glEnd();
-        
-        // If this is a bend segment, draw additional visual indicators
-        if (segment.isBend) {
-            qDebug() << "[OpenGL] Drawing bend indicator for segment" << i;
-            // Draw a small sphere at the bend point
-            glPushMatrix();
-            glTranslatef(segment.start.x(), segment.start.y(), segment.start.z());
-            glColor4f(segment.color.x(), segment.color.y(), segment.color.z(), segment.color.w());
-            GLUquadric* quad = gluNewQuadric();
-            gluSphere(quad, std::max(segment.width, segment.height) * 1.5f, 8, 4);
-            gluDeleteQuadric(quad);
-            glPopMatrix();
-        }
-    }
-    
-    qDebug() << "[OpenGL] Finished rendering all segments";
-    
-    // Restore OpenGL state
-    glPopAttrib();
-}
-
-void CadOpenGLWidget::setControlPointMarkers(const std::vector<ControlPointMarker>& markers) {
-    qDebug() << "[OpenGL] setControlPointMarkers called with" << markers.size() << "markers";
-    m_controlPointMarkers = markers;
-    update();
-}
-
-void CadOpenGLWidget::clearControlPointMarkers() {
-    qDebug() << "[OpenGL] clearControlPointMarkers called, clearing" << m_controlPointMarkers.size() << "markers";
-    m_controlPointMarkers.clear();
-    update();
-}
-
-void CadOpenGLWidget::renderControlPointMarkers() {
-    qDebug() << "[OpenGL] renderControlPointMarkers called with" << m_controlPointMarkers.size() << "markers";
-    if (m_controlPointMarkers.empty()) {
-        qDebug() << "[OpenGL] No control point markers to render";
-        return;
-    }
-    
-    // Save current OpenGL state
-    glPushAttrib(GL_ALL_ATTRIB_BITS);
-    
-    // Enable blending for transparency
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    
-    // Disable depth writing for overlay markers
-    glDepthMask(GL_FALSE);
-    
-    // Disable lighting for consistent colors
-    glDisable(GL_LIGHTING);
-    
-    for (size_t i = 0; i < m_controlPointMarkers.size(); ++i) {
-        const auto& marker = m_controlPointMarkers[i];
-        qDebug() << "[OpenGL] Rendering control point marker" << i << "at" << marker.position 
-                 << "color:" << marker.color << "size:" << marker.size << "label:" << marker.label;
-        
-        // Check for NaN or infinite values
-        if (std::isnan(marker.position.x()) || std::isnan(marker.position.y()) || std::isnan(marker.position.z()) ||
-            std::isinf(marker.position.x()) || std::isinf(marker.position.y()) || std::isinf(marker.position.z())) {
-            qDebug() << "[OpenGL] WARNING: Control point marker" << i << "has invalid coordinates, skipping";
-            continue;
-        }
-        
-        // Set color
-        glColor4f(marker.color.x(), marker.color.y(), marker.color.z(), marker.color.w());
-        
-        // Draw a sphere at the control point position
-        glPushMatrix();
-        glTranslatef(marker.position.x(), marker.position.y(), marker.position.z());
-        
-        GLUquadric* quad = gluNewQuadric();
-        gluSphere(quad, marker.size, 12, 8);
-        gluDeleteQuadric(quad);
-        
-        glPopMatrix();
-        
-        // Draw coordinate axes at the control point to show orientation
-        float axisLength = marker.size * 2.0f;
-        
-        // X-axis (red)
-        glColor4f(1.0f, 0.0f, 0.0f, 1.0f);
-        glLineWidth(2.0f);
-        glBegin(GL_LINES);
-        glVertex3f(marker.position.x(), marker.position.y(), marker.position.z());
-        glVertex3f(marker.position.x() + axisLength, marker.position.y(), marker.position.z());
-        glEnd();
-        
-        // Y-axis (green)
-        glColor4f(0.0f, 1.0f, 0.0f, 1.0f);
-        glBegin(GL_LINES);
-        glVertex3f(marker.position.x(), marker.position.y(), marker.position.z());
-        glVertex3f(marker.position.x(), marker.position.y() + axisLength, marker.position.z());
-        glEnd();
-        
-        // Z-axis (blue)
-        glColor4f(0.0f, 0.0f, 1.0f, 1.0f);
-        glBegin(GL_LINES);
-        glVertex3f(marker.position.x(), marker.position.y(), marker.position.z());
-        glVertex3f(marker.position.x(), marker.position.y(), marker.position.z() + axisLength);
-        glEnd();
-    }
-    
-    qDebug() << "[OpenGL] Finished rendering all control point markers";
-    
-    // Restore OpenGL state
-    glPopAttrib();
-}
-
-// Helper function to normalize a vector
-static QVector3D normalizeVector(const QVector3D& vector)
-{
-    double length = vector.length();
-    if (length < 0.001) return QVector3D(0, 0, 0);
-    return vector / length;
-}
 

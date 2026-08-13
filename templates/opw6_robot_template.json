@@ -1,0 +1,136 @@
+{
+  "name": "OPW 6DOF Robot",
+  "color": [0.8, 0.8, 0.8, 1.0],
+  "loc": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0],
+  "visible": true,
+  "excludedFromDecomposition": false,
+  "type": 9,
+  "data": {
+    "dhm": [
+      0.0, -1.5707963, 0.0, -1.5707963, 1.5707963, -1.5707963,
+      0.0, 64.2, 305.0, 0.0, 0.0, 0.0,
+      0.0, -1.5707963, 0.0, 0.0, 0.0, 3.1415927,
+      169.77, 0.0, 0.0, 222.63, 0.0, 36.25
+    ],
+    "q": [0, 0, 0, 0, 0, 0],
+    "qHome": [0, 0, 0, 0, 0, 0],
+    "qMin": [-3.14, -3.14, -3.14, -3.14, -3.14, -3.14],
+    "qMax": [3.14, 3.14, 3.14, 3.14, 3.14, 3.14],
+    "activeToolPath": [7],
+    "collisionIgnores": [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6]]
+  },
+  "children": [
+    {
+      "name": "Link 0 Base",
+      "color": [0.8, 0.8, 0.8, 1.0],
+      "loc": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0],
+      "visible": true,
+      "excludedFromDecomposition": false,
+      "type": 10,
+      "data": {
+        "geometryPaths": [],
+        "visualEnabled": true
+      },
+      "children": []
+    },
+    {
+      "name": "Link 1",
+      "color": [0.8, 0.8, 0.8, 1.0],
+      "loc": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0],
+      "visible": true,
+      "excludedFromDecomposition": false,
+      "type": 10,
+      "data": {
+        "geometryPaths": [],
+        "visualEnabled": true
+      },
+      "children": []
+    },
+    {
+      "name": "Link 2",
+      "color": [0.8, 0.8, 0.8, 1.0],
+      "loc": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0],
+      "visible": true,
+      "excludedFromDecomposition": false,
+      "type": 10,
+      "data": {
+        "geometryPaths": [],
+        "visualEnabled": true
+      },
+      "children": []
+    },
+    {
+      "name": "Link 3",
+      "color": [0.8, 0.8, 0.8, 1.0],
+      "loc": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0],
+      "visible": true,
+      "excludedFromDecomposition": false,
+      "type": 10,
+      "data": {
+        "geometryPaths": [],
+        "visualEnabled": true
+      },
+      "children": []
+    },
+    {
+      "name": "Link 4",
+      "color": [0.8, 0.8, 0.8, 1.0],
+      "loc": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0],
+      "visible": true,
+      "excludedFromDecomposition": false,
+      "type": 10,
+      "data": {
+        "geometryPaths": [],
+        "visualEnabled": true
+      },
+      "children": []
+    },
+    {
+      "name": "Link 5",
+      "color": [0.8, 0.8, 0.8, 1.0],
+      "loc": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0],
+      "visible": true,
+      "excludedFromDecomposition": false,
+      "type": 10,
+      "data": {
+        "geometryPaths": [],
+        "visualEnabled": true
+      },
+      "children": []
+    },
+    {
+      "name": "Link 6",
+      "color": [0.8, 0.8, 0.8, 1.0],
+      "loc": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0],
+      "visible": true,
+      "excludedFromDecomposition": false,
+      "type": 10,
+      "data": {
+        "geometryPaths": [],
+        "visualEnabled": true
+      },
+      "children": []
+    },
+    {
+      "name": "Tool",
+      "color": [0.8, 0.8, 0.8, 1.0],
+      "loc": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0],
+      "visible": true,
+      "excludedFromDecomposition": false,
+      "type": 11,
+      "data": {
+        "geometryPaths": [],
+        "activeTcpIndex": 0,
+        "tcps": [
+          {
+            "name": "TCP",
+            "loc": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0],
+            "visible": true
+          }
+        ],
+        "visualEnabled": true
+      },
+      "children": []
+    }
+  ]
+}

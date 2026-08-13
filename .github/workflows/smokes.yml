@@ -1,0 +1,44 @@
+name: smokes
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # Every tools/ smoke and equivalence check. Each is a single translation unit over Common/ headers
+  # needing nothing but MSVC, except the four equivalence checkers, which link real Qt because their
+  # job is to prove the Qt-free replacements reproduce Qt's behaviour.
+  #
+  # This deliberately does not build RobotSimulator, the plugin or QtCadViewer: those need
+  # OpenCascade, PhysX and CoACD, which are restored per workstation rather than fetched here. The
+  # golden conveyor traces run inside the RobotSimulator build and so are not covered either.
+  # See docs/testing.md for the gates a release still runs by hand.
+  smokes:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: 5.15.2
+          arch: win64_msvc2019_64
+          cache: true
+
+      - name: Point the build at this runner's Qt
+        shell: pwsh
+        run: |
+          $qt = $env:QT_ROOT_DIR -replace '\\', '/'
+          New-Item -ItemType Directory -Force build | Out-Null
+          "QT_ROOT = $qt" | Out-File -Encoding utf8 build/local-env.pri
+          Get-Content build/local-env.pri
+
+      - name: Build and run the smokes
+        shell: pwsh
+        run: .\scripts\build_motion_smokes.ps1

@@ -1,0 +1,118 @@
+{
+  "station_schema": 12,
+  "name": "Conveyor rule fixture",
+  "conveyor_simulation_mode": "logical",
+  "_comment": "Not a showcase. Two independent lines that between them reach the transport rules the shipped stations do not. The dead-end line proves rule 12 - a conveyor whose downstream interface touches nothing stops its products at progress 1 instead of deleting them - and its spawner carries maxActiveSpawns, so the three stopped products must also hold the cap closed for the rest of the run; a port that deletes at a disconnected end frees the cap and spawns forever, which is a divergence of hundreds of lines rather than a rounding difference. The sink line is the control: the same cadence with a deleter downstream, which must keep retiring products and keep spawning. Deliberately no robot, so nothing but the conveyor rules moves anything.",
+  "accessories": [
+    {
+      "id": "spawn-box",
+      "name": "Box workpiece",
+      "package": "builtin:box_workpiece",
+      "hidden": true,
+      "folder": "Hidden items",
+      "position_mm": [0.0, 0.0, 0.0],
+      "rotation_deg": [0.0, 0.0, 0.0]
+    },
+    {
+      "id": "dead-end-feed",
+      "name": "Dead end feed (capped spawner)",
+      "package": "builtin:roller_conveyor",
+      "position_mm": [0.0, 0.0, 0.0],
+      "rotation_deg": [0.0, 0.0, 0.0],
+      "parameters": {
+        "generator": "roller_conveyor",
+        "widthMm": 600.0,
+        "lengthMm": 900.0,
+        "heightMm": 890.0,
+        "rollerPitchMm": 100.0,
+        "startHeightMm": 890.0,
+        "endHeightMm": 890.0,
+        "turnAngleDeg": 0.0,
+        "curveRadiusMm": 900.0,
+        "supportBracesEnabled": true,
+        "rollerCoverEnabled": false,
+        "simulationMode": "logical",
+        "role": "spawner",
+        "spawnObjectId": "spawn-box",
+        "speedMmS": 900.0,
+        "spawnIntervalSeconds": 0.6,
+        "maxActiveSpawns": 3
+      }
+    },
+    {
+      "id": "dead-end-run",
+      "name": "Dead end run (downstream interface connects to nothing)",
+      "package": "builtin:roller_conveyor",
+      "position_mm": [900.0, 0.0, 0.0],
+      "rotation_deg": [0.0, 0.0, 0.0],
+      "parameters": {
+        "generator": "roller_conveyor",
+        "widthMm": 600.0,
+        "lengthMm": 900.0,
+        "heightMm": 890.0,
+        "rollerPitchMm": 100.0,
+        "startHeightMm": 890.0,
+        "endHeightMm": 890.0,
+        "turnAngleDeg": 0.0,
+        "curveRadiusMm": 900.0,
+        "supportBracesEnabled": true,
+        "rollerCoverEnabled": false,
+        "simulationMode": "logical",
+        "role": "normal",
+        "speedMmS": 900.0,
+        "spawnIntervalSeconds": 0.6
+      }
+    },
+    {
+      "id": "sink-feed",
+      "name": "Sink feed (uncapped spawner)",
+      "package": "builtin:roller_conveyor",
+      "position_mm": [0.0, 0.0, 3000.0],
+      "rotation_deg": [0.0, 0.0, 0.0],
+      "parameters": {
+        "generator": "roller_conveyor",
+        "widthMm": 600.0,
+        "lengthMm": 900.0,
+        "heightMm": 890.0,
+        "rollerPitchMm": 100.0,
+        "startHeightMm": 890.0,
+        "endHeightMm": 890.0,
+        "turnAngleDeg": 0.0,
+        "curveRadiusMm": 900.0,
+        "supportBracesEnabled": true,
+        "rollerCoverEnabled": false,
+        "simulationMode": "logical",
+        "role": "spawner",
+        "spawnObjectId": "spawn-box",
+        "speedMmS": 900.0,
+        "spawnIntervalSeconds": 0.6
+      }
+    },
+    {
+      "id": "sink",
+      "name": "Sink (deleter)",
+      "package": "builtin:roller_conveyor",
+      "position_mm": [900.0, 0.0, 3000.0],
+      "rotation_deg": [0.0, 0.0, 0.0],
+      "parameters": {
+        "generator": "roller_conveyor",
+        "widthMm": 600.0,
+        "lengthMm": 900.0,
+        "heightMm": 890.0,
+        "rollerPitchMm": 100.0,
+        "startHeightMm": 890.0,
+        "endHeightMm": 890.0,
+        "turnAngleDeg": 0.0,
+        "curveRadiusMm": 900.0,
+        "supportBracesEnabled": true,
+        "rollerCoverEnabled": false,
+        "simulationMode": "logical",
+        "role": "deleter",
+        "speedMmS": 900.0,
+        "spawnIntervalSeconds": 0.6
+      }
+    }
+  ],
+  "parameter_links": [],
+  "robots": []
+}

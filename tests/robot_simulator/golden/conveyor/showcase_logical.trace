@@ -1,0 +1,1549 @@
+conveyor_trace mode=logical hz=60 ticks=720 sample_every=6
+c physx-covered-100-source role=spawner mode=logical speed_mm_s=500.000 length_mm=1800.000 interval_s=0.800 max_active=0 initial=0
+c physx-covered-100-run role=normal mode=logical speed_mm_s=500.000 length_mm=1800.000 interval_s=0.800 max_active=0 initial=0
+c physx-covered-100-sink role=deleter mode=logical speed_mm_s=500.000 length_mm=1800.000 interval_s=0.800 max_active=0 initial=0
+c physx-spiral-up-source role=spawner mode=logical speed_mm_s=350.000 length_mm=1800.000 interval_s=1.250 max_active=0 initial=0
+c physx-spiral-up role=normal mode=logical speed_mm_s=350.000 length_mm=11309.734 interval_s=1.250 max_active=0 initial=0
+c physx-spiral-up-sink role=deleter mode=logical speed_mm_s=350.000 length_mm=1800.000 interval_s=1.250 max_active=0 initial=0
+c physx-source role=spawner mode=logical speed_mm_s=350.000 length_mm=1800.000 interval_s=1.250 max_active=0 initial=0
+c physx-incline role=normal mode=logical speed_mm_s=350.000 length_mm=1800.000 interval_s=1.250 max_active=0 initial=0
+c physx-sink role=deleter mode=logical speed_mm_s=350.000 length_mm=1800.000 interval_s=1.250 max_active=0 initial=0
+c logical-down-source role=spawner mode=logical speed_mm_s=350.000 length_mm=1800.000 interval_s=1.250 max_active=0 initial=0
+c logical-down-spiral role=normal mode=logical speed_mm_s=350.000 length_mm=11309.734 interval_s=1.250 max_active=0 initial=0
+c logical-down-sink role=deleter mode=logical speed_mm_s=350.000 length_mm=1800.000 interval_s=1.250 max_active=0 initial=0
+c physx-coarse-120-source role=spawner mode=logical speed_mm_s=260.000 length_mm=1800.000 interval_s=2.000 max_active=0 initial=0
+c physx-coarse-120-run role=normal mode=logical speed_mm_s=260.000 length_mm=1800.000 interval_s=2.000 max_active=0 initial=0
+c physx-coarse-120-sink role=deleter mode=logical speed_mm_s=260.000 length_mm=1800.000 interval_s=2.000 max_active=0 initial=0
+tick 1 products=5 dirty=5
+  + p1 conv=physx-covered-100-source prog=0.004629630 fwd=1 phys=0 grasp=0 world=-2691.6666,948.0000,-6500.0000
+  + p2 conv=physx-spiral-up-source prog=0.003240741 fwd=1 phys=0 grasp=0 world=-2694.1667,948.0000,-3200.0000
+  + p3 conv=physx-source prog=0.003240741 fwd=1 phys=0 grasp=0 world=-2694.1667,948.0000,0.0000
+  + p4 conv=logical-down-source prog=0.003240741 fwd=1 phys=0 grasp=0 world=-2694.1667,2740.0000,3200.0000
+  + p5 conv=physx-coarse-120-source prog=0.002407407 fwd=1 phys=0 grasp=0 world=-2695.6667,948.0000,6500.0000
+tick 6 products=5 dirty=0
+  = p1 conv=physx-covered-100-source prog=0.027777778 fwd=1 phys=0 grasp=0 world=-2650.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.019444444 fwd=1 phys=0 grasp=0 world=-2665.0000,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.019444444 fwd=1 phys=0 grasp=0 world=-2665.0000,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.019444444 fwd=1 phys=0 grasp=0 world=-2665.0000,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.014444444 fwd=1 phys=0 grasp=0 world=-2674.0000,948.0000,6500.0000
+tick 12 products=5 dirty=0
+  = p1 conv=physx-covered-100-source prog=0.055555556 fwd=1 phys=0 grasp=0 world=-2600.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.038888889 fwd=1 phys=0 grasp=0 world=-2630.0000,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.038888889 fwd=1 phys=0 grasp=0 world=-2630.0000,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.038888889 fwd=1 phys=0 grasp=0 world=-2630.0000,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.028888889 fwd=1 phys=0 grasp=0 world=-2648.0000,948.0000,6500.0000
+tick 18 products=5 dirty=0
+  = p1 conv=physx-covered-100-source prog=0.083333333 fwd=1 phys=0 grasp=0 world=-2550.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.058333333 fwd=1 phys=0 grasp=0 world=-2595.0000,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.058333333 fwd=1 phys=0 grasp=0 world=-2595.0000,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.058333333 fwd=1 phys=0 grasp=0 world=-2595.0000,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.043333333 fwd=1 phys=0 grasp=0 world=-2622.0000,948.0000,6500.0000
+tick 24 products=5 dirty=0
+  = p1 conv=physx-covered-100-source prog=0.111111111 fwd=1 phys=0 grasp=0 world=-2500.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.077777778 fwd=1 phys=0 grasp=0 world=-2560.0000,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.077777778 fwd=1 phys=0 grasp=0 world=-2560.0000,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.077777778 fwd=1 phys=0 grasp=0 world=-2560.0000,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.057777778 fwd=1 phys=0 grasp=0 world=-2596.0000,948.0000,6500.0000
+tick 30 products=5 dirty=0
+  = p1 conv=physx-covered-100-source prog=0.138888889 fwd=1 phys=0 grasp=0 world=-2450.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.097222222 fwd=1 phys=0 grasp=0 world=-2525.0000,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.097222222 fwd=1 phys=0 grasp=0 world=-2525.0000,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.097222222 fwd=1 phys=0 grasp=0 world=-2525.0000,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.072222222 fwd=1 phys=0 grasp=0 world=-2570.0000,948.0000,6500.0000
+tick 36 products=5 dirty=0
+  = p1 conv=physx-covered-100-source prog=0.166666667 fwd=1 phys=0 grasp=0 world=-2399.9999,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.116666667 fwd=1 phys=0 grasp=0 world=-2490.0000,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.116666667 fwd=1 phys=0 grasp=0 world=-2490.0000,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.116666667 fwd=1 phys=0 grasp=0 world=-2490.0000,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.086666667 fwd=1 phys=0 grasp=0 world=-2544.0000,948.0000,6500.0000
+tick 42 products=5 dirty=0
+  = p1 conv=physx-covered-100-source prog=0.194444444 fwd=1 phys=0 grasp=0 world=-2350.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.136111111 fwd=1 phys=0 grasp=0 world=-2455.0000,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.136111111 fwd=1 phys=0 grasp=0 world=-2455.0000,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.136111111 fwd=1 phys=0 grasp=0 world=-2455.0000,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.101111111 fwd=1 phys=0 grasp=0 world=-2518.0000,948.0000,6500.0000
+tick 48 products=5 dirty=0
+  = p1 conv=physx-covered-100-source prog=0.222222222 fwd=1 phys=0 grasp=0 world=-2300.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.155555556 fwd=1 phys=0 grasp=0 world=-2420.0000,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.155555556 fwd=1 phys=0 grasp=0 world=-2420.0000,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.155555556 fwd=1 phys=0 grasp=0 world=-2420.0000,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.115555556 fwd=1 phys=0 grasp=0 world=-2492.0000,948.0000,6500.0000
+tick 54 products=5 dirty=0
+  = p1 conv=physx-covered-100-source prog=0.250000000 fwd=1 phys=0 grasp=0 world=-2250.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.175000000 fwd=1 phys=0 grasp=0 world=-2385.0000,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.175000000 fwd=1 phys=0 grasp=0 world=-2385.0000,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.175000000 fwd=1 phys=0 grasp=0 world=-2385.0000,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.130000000 fwd=1 phys=0 grasp=0 world=-2466.0000,948.0000,6500.0000
+tick 60 products=5 dirty=0
+  = p1 conv=physx-covered-100-source prog=0.277777778 fwd=1 phys=0 grasp=0 world=-2200.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.194444444 fwd=1 phys=0 grasp=0 world=-2350.0000,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.194444444 fwd=1 phys=0 grasp=0 world=-2350.0000,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.194444444 fwd=1 phys=0 grasp=0 world=-2350.0000,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.144444444 fwd=1 phys=0 grasp=0 world=-2439.9999,948.0000,6500.0000
+tick 66 products=5 dirty=0
+  = p1 conv=physx-covered-100-source prog=0.305555556 fwd=1 phys=0 grasp=0 world=-2150.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.213888889 fwd=1 phys=0 grasp=0 world=-2315.0000,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.213888889 fwd=1 phys=0 grasp=0 world=-2315.0000,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.213888889 fwd=1 phys=0 grasp=0 world=-2315.0000,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.158888889 fwd=1 phys=0 grasp=0 world=-2414.0000,948.0000,6500.0000
+tick 72 products=5 dirty=0
+  = p1 conv=physx-covered-100-source prog=0.333333333 fwd=1 phys=0 grasp=0 world=-2100.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.233333333 fwd=1 phys=0 grasp=0 world=-2280.0000,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.233333333 fwd=1 phys=0 grasp=0 world=-2280.0000,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.233333333 fwd=1 phys=0 grasp=0 world=-2280.0000,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.173333333 fwd=1 phys=0 grasp=0 world=-2388.0000,948.0000,6500.0000
+tick 78 products=5 dirty=0
+  = p1 conv=physx-covered-100-source prog=0.361111111 fwd=1 phys=0 grasp=0 world=-2050.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.252777778 fwd=1 phys=0 grasp=0 world=-2245.0000,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.252777778 fwd=1 phys=0 grasp=0 world=-2245.0000,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.252777778 fwd=1 phys=0 grasp=0 world=-2245.0000,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.187777778 fwd=1 phys=0 grasp=0 world=-2362.0001,948.0000,6500.0000
+tick 84 products=5 dirty=0
+  = p1 conv=physx-covered-100-source prog=0.388888889 fwd=1 phys=0 grasp=0 world=-2000.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.272222222 fwd=1 phys=0 grasp=0 world=-2210.0000,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.272222222 fwd=1 phys=0 grasp=0 world=-2210.0000,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.272222222 fwd=1 phys=0 grasp=0 world=-2210.0000,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.202222222 fwd=1 phys=0 grasp=0 world=-2336.0000,948.0000,6500.0000
+tick 90 products=5 dirty=0
+  = p1 conv=physx-covered-100-source prog=0.416666667 fwd=1 phys=0 grasp=0 world=-1950.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.291666667 fwd=1 phys=0 grasp=0 world=-2175.0000,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.291666667 fwd=1 phys=0 grasp=0 world=-2175.0000,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.291666667 fwd=1 phys=0 grasp=0 world=-2175.0000,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.216666667 fwd=1 phys=0 grasp=0 world=-2310.0000,948.0000,6500.0000
+tick 96 products=5 dirty=0
+  = p1 conv=physx-covered-100-source prog=0.444444444 fwd=1 phys=0 grasp=0 world=-1900.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.311111111 fwd=1 phys=0 grasp=0 world=-2140.0000,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.311111111 fwd=1 phys=0 grasp=0 world=-2140.0000,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.311111111 fwd=1 phys=0 grasp=0 world=-2140.0000,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.231111111 fwd=1 phys=0 grasp=0 world=-2284.0000,948.0000,6500.0000
+tick 102 products=5 dirty=0
+  = p1 conv=physx-covered-100-source prog=0.472222222 fwd=1 phys=0 grasp=0 world=-1850.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.330555556 fwd=1 phys=0 grasp=0 world=-2105.0000,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.330555556 fwd=1 phys=0 grasp=0 world=-2105.0000,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.330555556 fwd=1 phys=0 grasp=0 world=-2105.0000,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.245555556 fwd=1 phys=0 grasp=0 world=-2258.0000,948.0000,6500.0000
+tick 108 products=5 dirty=0
+  = p1 conv=physx-covered-100-source prog=0.500000000 fwd=1 phys=0 grasp=0 world=-1800.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.350000000 fwd=1 phys=0 grasp=0 world=-2070.0000,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.350000000 fwd=1 phys=0 grasp=0 world=-2070.0000,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.350000000 fwd=1 phys=0 grasp=0 world=-2070.0000,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.260000000 fwd=1 phys=0 grasp=0 world=-2232.0000,948.0000,6500.0000
+tick 114 products=5 dirty=0
+  = p1 conv=physx-covered-100-source prog=0.527777778 fwd=1 phys=0 grasp=0 world=-1750.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.369444444 fwd=1 phys=0 grasp=0 world=-2035.0000,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.369444444 fwd=1 phys=0 grasp=0 world=-2035.0000,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.369444444 fwd=1 phys=0 grasp=0 world=-2035.0000,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.274444444 fwd=1 phys=0 grasp=0 world=-2206.0000,948.0000,6500.0000
+tick 120 products=5 dirty=0
+  = p1 conv=physx-covered-100-source prog=0.555555556 fwd=1 phys=0 grasp=0 world=-1700.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.388888889 fwd=1 phys=0 grasp=0 world=-2000.0000,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.388888889 fwd=1 phys=0 grasp=0 world=-2000.0000,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.388888889 fwd=1 phys=0 grasp=0 world=-2000.0000,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.288888889 fwd=1 phys=0 grasp=0 world=-2180.0000,948.0000,6500.0000
+tick 126 products=5 dirty=0
+  = p1 conv=physx-covered-100-source prog=0.583333333 fwd=1 phys=0 grasp=0 world=-1650.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.408333333 fwd=1 phys=0 grasp=0 world=-1965.0000,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.408333333 fwd=1 phys=0 grasp=0 world=-1965.0000,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.408333333 fwd=1 phys=0 grasp=0 world=-1965.0000,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.303333333 fwd=1 phys=0 grasp=0 world=-2154.0000,948.0000,6500.0000
+tick 132 products=5 dirty=0
+  = p1 conv=physx-covered-100-source prog=0.611111111 fwd=1 phys=0 grasp=0 world=-1600.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.427777778 fwd=1 phys=0 grasp=0 world=-1930.0000,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.427777778 fwd=1 phys=0 grasp=0 world=-1930.0000,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.427777778 fwd=1 phys=0 grasp=0 world=-1930.0000,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.317777778 fwd=1 phys=0 grasp=0 world=-2128.0000,948.0000,6500.0000
+tick 138 products=5 dirty=0
+  = p1 conv=physx-covered-100-source prog=0.638888889 fwd=1 phys=0 grasp=0 world=-1550.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.447222222 fwd=1 phys=0 grasp=0 world=-1895.0000,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.447222222 fwd=1 phys=0 grasp=0 world=-1895.0000,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.447222222 fwd=1 phys=0 grasp=0 world=-1895.0000,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.332222222 fwd=1 phys=0 grasp=0 world=-2102.0000,948.0000,6500.0000
+tick 144 products=6 dirty=1
+  + p6 conv=physx-covered-100-source prog=0.004629630 fwd=1 phys=0 grasp=0 world=-2691.6666,948.0000,-6500.0000
+  = p1 conv=physx-covered-100-source prog=0.666666667 fwd=1 phys=0 grasp=0 world=-1500.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.466666667 fwd=1 phys=0 grasp=0 world=-1860.0000,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.466666667 fwd=1 phys=0 grasp=0 world=-1860.0000,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.466666667 fwd=1 phys=0 grasp=0 world=-1860.0000,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.346666667 fwd=1 phys=0 grasp=0 world=-2076.0000,948.0000,6500.0000
+  = p6 conv=physx-covered-100-source prog=0.004629630 fwd=1 phys=0 grasp=0 world=-2691.6666,948.0000,-6500.0000
+tick 150 products=6 dirty=0
+  = p1 conv=physx-covered-100-source prog=0.694444444 fwd=1 phys=0 grasp=0 world=-1450.0001,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.486111111 fwd=1 phys=0 grasp=0 world=-1825.0000,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.486111111 fwd=1 phys=0 grasp=0 world=-1825.0000,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.486111111 fwd=1 phys=0 grasp=0 world=-1825.0000,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.361111111 fwd=1 phys=0 grasp=0 world=-2050.0000,948.0000,6500.0000
+  = p6 conv=physx-covered-100-source prog=0.032407407 fwd=1 phys=0 grasp=0 world=-2641.6667,948.0000,-6500.0000
+tick 156 products=6 dirty=0
+  = p1 conv=physx-covered-100-source prog=0.722222222 fwd=1 phys=0 grasp=0 world=-1400.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.505555556 fwd=1 phys=0 grasp=0 world=-1790.0000,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.505555556 fwd=1 phys=0 grasp=0 world=-1790.0000,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.505555556 fwd=1 phys=0 grasp=0 world=-1790.0000,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.375555556 fwd=1 phys=0 grasp=0 world=-2024.0000,948.0000,6500.0000
+  = p6 conv=physx-covered-100-source prog=0.060185185 fwd=1 phys=0 grasp=0 world=-2591.6666,948.0000,-6500.0000
+tick 162 products=6 dirty=0
+  = p1 conv=physx-covered-100-source prog=0.750000000 fwd=1 phys=0 grasp=0 world=-1350.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.525000000 fwd=1 phys=0 grasp=0 world=-1755.0000,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.525000000 fwd=1 phys=0 grasp=0 world=-1755.0000,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.525000000 fwd=1 phys=0 grasp=0 world=-1755.0000,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.390000000 fwd=1 phys=0 grasp=0 world=-1998.0000,948.0000,6500.0000
+  = p6 conv=physx-covered-100-source prog=0.087962963 fwd=1 phys=0 grasp=0 world=-2541.6667,948.0000,-6500.0000
+tick 168 products=6 dirty=0
+  = p1 conv=physx-covered-100-source prog=0.777777778 fwd=1 phys=0 grasp=0 world=-1300.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.544444444 fwd=1 phys=0 grasp=0 world=-1720.0000,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.544444444 fwd=1 phys=0 grasp=0 world=-1720.0000,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.544444444 fwd=1 phys=0 grasp=0 world=-1720.0000,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.404444444 fwd=1 phys=0 grasp=0 world=-1972.0000,948.0000,6500.0000
+  = p6 conv=physx-covered-100-source prog=0.115740741 fwd=1 phys=0 grasp=0 world=-2491.6667,948.0000,-6500.0000
+tick 174 products=6 dirty=0
+  = p1 conv=physx-covered-100-source prog=0.805555556 fwd=1 phys=0 grasp=0 world=-1249.9999,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.563888889 fwd=1 phys=0 grasp=0 world=-1685.0000,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.563888889 fwd=1 phys=0 grasp=0 world=-1685.0000,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.563888889 fwd=1 phys=0 grasp=0 world=-1685.0000,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.418888889 fwd=1 phys=0 grasp=0 world=-1946.0000,948.0000,6500.0000
+  = p6 conv=physx-covered-100-source prog=0.143518519 fwd=1 phys=0 grasp=0 world=-2441.6667,948.0000,-6500.0000
+tick 180 products=6 dirty=0
+  = p1 conv=physx-covered-100-source prog=0.833333333 fwd=1 phys=0 grasp=0 world=-1200.0001,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.583333333 fwd=1 phys=0 grasp=0 world=-1650.0000,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.583333333 fwd=1 phys=0 grasp=0 world=-1650.0000,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.583333333 fwd=1 phys=0 grasp=0 world=-1650.0000,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.433333333 fwd=1 phys=0 grasp=0 world=-1920.0000,948.0000,6500.0000
+  = p6 conv=physx-covered-100-source prog=0.171296296 fwd=1 phys=0 grasp=0 world=-2391.6667,948.0000,-6500.0000
+tick 186 products=6 dirty=0
+  = p1 conv=physx-covered-100-source prog=0.861111111 fwd=1 phys=0 grasp=0 world=-1150.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.602777778 fwd=1 phys=0 grasp=0 world=-1615.0000,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.602777778 fwd=1 phys=0 grasp=0 world=-1615.0000,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.602777778 fwd=1 phys=0 grasp=0 world=-1615.0000,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.447777778 fwd=1 phys=0 grasp=0 world=-1894.0000,948.0000,6500.0000
+  = p6 conv=physx-covered-100-source prog=0.199074074 fwd=1 phys=0 grasp=0 world=-2341.6666,948.0000,-6500.0000
+tick 192 products=6 dirty=0
+  = p1 conv=physx-covered-100-source prog=0.888888889 fwd=1 phys=0 grasp=0 world=-1100.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.622222222 fwd=1 phys=0 grasp=0 world=-1580.0000,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.622222222 fwd=1 phys=0 grasp=0 world=-1580.0000,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.622222222 fwd=1 phys=0 grasp=0 world=-1580.0000,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.462222222 fwd=1 phys=0 grasp=0 world=-1868.0000,948.0000,6500.0000
+  = p6 conv=physx-covered-100-source prog=0.226851852 fwd=1 phys=0 grasp=0 world=-2291.6667,948.0000,-6500.0000
+tick 198 products=6 dirty=0
+  = p1 conv=physx-covered-100-source prog=0.916666667 fwd=1 phys=0 grasp=0 world=-1049.9999,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.641666667 fwd=1 phys=0 grasp=0 world=-1545.0000,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.641666667 fwd=1 phys=0 grasp=0 world=-1545.0000,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.641666667 fwd=1 phys=0 grasp=0 world=-1545.0000,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.476666667 fwd=1 phys=0 grasp=0 world=-1842.0000,948.0000,6500.0000
+  = p6 conv=physx-covered-100-source prog=0.254629630 fwd=1 phys=0 grasp=0 world=-2241.6667,948.0000,-6500.0000
+tick 204 products=6 dirty=0
+  = p1 conv=physx-covered-100-source prog=0.944444444 fwd=1 phys=0 grasp=0 world=-1000.0001,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.661111111 fwd=1 phys=0 grasp=0 world=-1510.0000,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.661111111 fwd=1 phys=0 grasp=0 world=-1510.0000,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.661111111 fwd=1 phys=0 grasp=0 world=-1510.0000,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.491111111 fwd=1 phys=0 grasp=0 world=-1816.0000,948.0000,6500.0000
+  = p6 conv=physx-covered-100-source prog=0.282407407 fwd=1 phys=0 grasp=0 world=-2191.6667,948.0000,-6500.0000
+tick 210 products=6 dirty=0
+  = p1 conv=physx-covered-100-source prog=0.972222222 fwd=1 phys=0 grasp=0 world=-950.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.680555556 fwd=1 phys=0 grasp=0 world=-1474.9999,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.680555556 fwd=1 phys=0 grasp=0 world=-1474.9999,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.680555556 fwd=1 phys=0 grasp=0 world=-1474.9999,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.505555556 fwd=1 phys=0 grasp=0 world=-1790.0000,948.0000,6500.0000
+  = p6 conv=physx-covered-100-source prog=0.310185185 fwd=1 phys=0 grasp=0 world=-2141.6667,948.0000,-6500.0000
+tick 216 products=6 dirty=1
+  > p1 physx-covered-100-source->physx-covered-100-run fwd=1 prog=0.000000000
+  = p1 conv=physx-covered-100-run prog=0.000000000 fwd=1 phys=0 grasp=0 world=-900.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.700000000 fwd=1 phys=0 grasp=0 world=-1440.0000,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.700000000 fwd=1 phys=0 grasp=0 world=-1440.0000,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.700000000 fwd=1 phys=0 grasp=0 world=-1440.0000,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.520000000 fwd=1 phys=0 grasp=0 world=-1764.0000,948.0000,6500.0000
+  = p6 conv=physx-covered-100-source prog=0.337962963 fwd=1 phys=0 grasp=0 world=-2091.6667,948.0000,-6500.0000
+tick 222 products=6 dirty=0
+  = p1 conv=physx-covered-100-run prog=0.027777778 fwd=1 phys=0 grasp=0 world=-850.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.719444444 fwd=1 phys=0 grasp=0 world=-1405.0000,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.719444444 fwd=1 phys=0 grasp=0 world=-1405.0000,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.719444444 fwd=1 phys=0 grasp=0 world=-1405.0000,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.534444444 fwd=1 phys=0 grasp=0 world=-1738.0000,948.0000,6500.0000
+  = p6 conv=physx-covered-100-source prog=0.365740741 fwd=1 phys=0 grasp=0 world=-2041.6667,948.0000,-6500.0000
+tick 225 products=9 dirty=3
+  + p7 conv=physx-spiral-up-source prog=0.003240741 fwd=1 phys=0 grasp=0 world=-2694.1667,948.0000,-3200.0000
+  + p8 conv=physx-source prog=0.003240741 fwd=1 phys=0 grasp=0 world=-2694.1667,948.0000,0.0000
+  + p9 conv=logical-down-source prog=0.003240741 fwd=1 phys=0 grasp=0 world=-2694.1667,2740.0000,3200.0000
+tick 228 products=9 dirty=0
+  = p1 conv=physx-covered-100-run prog=0.055555556 fwd=1 phys=0 grasp=0 world=-800.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.738888889 fwd=1 phys=0 grasp=0 world=-1370.0001,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.738888889 fwd=1 phys=0 grasp=0 world=-1370.0001,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.738888889 fwd=1 phys=0 grasp=0 world=-1370.0001,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.548888889 fwd=1 phys=0 grasp=0 world=-1712.0000,948.0000,6500.0000
+  = p6 conv=physx-covered-100-source prog=0.393518519 fwd=1 phys=0 grasp=0 world=-1991.6667,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.012962963 fwd=1 phys=0 grasp=0 world=-2676.6667,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.012962963 fwd=1 phys=0 grasp=0 world=-2676.6667,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.012962963 fwd=1 phys=0 grasp=0 world=-2676.6667,2740.0000,3200.0000
+tick 234 products=9 dirty=0
+  = p1 conv=physx-covered-100-run prog=0.083333333 fwd=1 phys=0 grasp=0 world=-750.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.758333333 fwd=1 phys=0 grasp=0 world=-1335.0000,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.758333333 fwd=1 phys=0 grasp=0 world=-1335.0000,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.758333333 fwd=1 phys=0 grasp=0 world=-1335.0000,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.563333333 fwd=1 phys=0 grasp=0 world=-1686.0000,948.0000,6500.0000
+  = p6 conv=physx-covered-100-source prog=0.421296296 fwd=1 phys=0 grasp=0 world=-1941.6667,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.032407407 fwd=1 phys=0 grasp=0 world=-2641.6667,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.032407407 fwd=1 phys=0 grasp=0 world=-2641.6667,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.032407407 fwd=1 phys=0 grasp=0 world=-2641.6667,2740.0000,3200.0000
+tick 240 products=9 dirty=0
+  = p1 conv=physx-covered-100-run prog=0.111111111 fwd=1 phys=0 grasp=0 world=-700.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.777777778 fwd=1 phys=0 grasp=0 world=-1300.0000,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.777777778 fwd=1 phys=0 grasp=0 world=-1300.0000,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.777777778 fwd=1 phys=0 grasp=0 world=-1300.0000,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.577777778 fwd=1 phys=0 grasp=0 world=-1660.0000,948.0000,6500.0000
+  = p6 conv=physx-covered-100-source prog=0.449074074 fwd=1 phys=0 grasp=0 world=-1891.6667,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.051851852 fwd=1 phys=0 grasp=0 world=-2606.6667,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.051851852 fwd=1 phys=0 grasp=0 world=-2606.6667,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.051851852 fwd=1 phys=0 grasp=0 world=-2606.6667,2740.0000,3200.0000
+tick 241 products=10 dirty=1
+  + p10 conv=physx-coarse-120-source prog=0.002407407 fwd=1 phys=0 grasp=0 world=-2695.6667,948.0000,6500.0000
+tick 246 products=10 dirty=0
+  = p1 conv=physx-covered-100-run prog=0.138888889 fwd=1 phys=0 grasp=0 world=-650.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.797222222 fwd=1 phys=0 grasp=0 world=-1265.0001,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.797222222 fwd=1 phys=0 grasp=0 world=-1265.0001,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.797222222 fwd=1 phys=0 grasp=0 world=-1265.0001,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.592222222 fwd=1 phys=0 grasp=0 world=-1634.0000,948.0000,6500.0000
+  = p6 conv=physx-covered-100-source prog=0.476851852 fwd=1 phys=0 grasp=0 world=-1841.6667,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.071296296 fwd=1 phys=0 grasp=0 world=-2571.6666,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.071296296 fwd=1 phys=0 grasp=0 world=-2571.6666,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.071296296 fwd=1 phys=0 grasp=0 world=-2571.6666,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.014444444 fwd=1 phys=0 grasp=0 world=-2674.0000,948.0000,6500.0000
+tick 252 products=10 dirty=0
+  = p1 conv=physx-covered-100-run prog=0.166666667 fwd=1 phys=0 grasp=0 world=-599.9999,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.816666667 fwd=1 phys=0 grasp=0 world=-1230.0000,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.816666667 fwd=1 phys=0 grasp=0 world=-1230.0000,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.816666667 fwd=1 phys=0 grasp=0 world=-1230.0000,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.606666667 fwd=1 phys=0 grasp=0 world=-1608.0000,948.0000,6500.0000
+  = p6 conv=physx-covered-100-source prog=0.504629630 fwd=1 phys=0 grasp=0 world=-1791.6667,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.090740741 fwd=1 phys=0 grasp=0 world=-2536.6667,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.090740741 fwd=1 phys=0 grasp=0 world=-2536.6667,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.090740741 fwd=1 phys=0 grasp=0 world=-2536.6667,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.028888889 fwd=1 phys=0 grasp=0 world=-2648.0000,948.0000,6500.0000
+tick 258 products=10 dirty=0
+  = p1 conv=physx-covered-100-run prog=0.194444444 fwd=1 phys=0 grasp=0 world=-550.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.836111111 fwd=1 phys=0 grasp=0 world=-1194.9999,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.836111111 fwd=1 phys=0 grasp=0 world=-1194.9999,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.836111111 fwd=1 phys=0 grasp=0 world=-1194.9999,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.621111111 fwd=1 phys=0 grasp=0 world=-1582.0000,948.0000,6500.0000
+  = p6 conv=physx-covered-100-source prog=0.532407407 fwd=1 phys=0 grasp=0 world=-1741.6667,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.110185185 fwd=1 phys=0 grasp=0 world=-2501.6667,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.110185185 fwd=1 phys=0 grasp=0 world=-2501.6667,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.110185185 fwd=1 phys=0 grasp=0 world=-2501.6667,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.043333333 fwd=1 phys=0 grasp=0 world=-2622.0000,948.0000,6500.0000
+tick 264 products=10 dirty=0
+  = p1 conv=physx-covered-100-run prog=0.222222222 fwd=1 phys=0 grasp=0 world=-500.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.855555556 fwd=1 phys=0 grasp=0 world=-1160.0001,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.855555556 fwd=1 phys=0 grasp=0 world=-1160.0001,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.855555556 fwd=1 phys=0 grasp=0 world=-1160.0001,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.635555556 fwd=1 phys=0 grasp=0 world=-1556.0000,948.0000,6500.0000
+  = p6 conv=physx-covered-100-source prog=0.560185185 fwd=1 phys=0 grasp=0 world=-1691.6666,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.129629630 fwd=1 phys=0 grasp=0 world=-2466.6667,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.129629630 fwd=1 phys=0 grasp=0 world=-2466.6667,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.129629630 fwd=1 phys=0 grasp=0 world=-2466.6667,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.057777778 fwd=1 phys=0 grasp=0 world=-2596.0000,948.0000,6500.0000
+tick 270 products=10 dirty=0
+  = p1 conv=physx-covered-100-run prog=0.250000000 fwd=1 phys=0 grasp=0 world=-450.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.875000000 fwd=1 phys=0 grasp=0 world=-1125.0000,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.875000000 fwd=1 phys=0 grasp=0 world=-1125.0000,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.875000000 fwd=1 phys=0 grasp=0 world=-1125.0000,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.650000000 fwd=1 phys=0 grasp=0 world=-1530.0000,948.0000,6500.0000
+  = p6 conv=physx-covered-100-source prog=0.587962963 fwd=1 phys=0 grasp=0 world=-1641.6666,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.149074074 fwd=1 phys=0 grasp=0 world=-2431.6667,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.149074074 fwd=1 phys=0 grasp=0 world=-2431.6667,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.149074074 fwd=1 phys=0 grasp=0 world=-2431.6667,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.072222222 fwd=1 phys=0 grasp=0 world=-2570.0000,948.0000,6500.0000
+tick 276 products=10 dirty=0
+  = p1 conv=physx-covered-100-run prog=0.277777778 fwd=1 phys=0 grasp=0 world=-400.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.894444444 fwd=1 phys=0 grasp=0 world=-1089.9999,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.894444444 fwd=1 phys=0 grasp=0 world=-1089.9999,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.894444444 fwd=1 phys=0 grasp=0 world=-1089.9999,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.664444444 fwd=1 phys=0 grasp=0 world=-1504.0000,948.0000,6500.0000
+  = p6 conv=physx-covered-100-source prog=0.615740741 fwd=1 phys=0 grasp=0 world=-1591.6667,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.168518519 fwd=1 phys=0 grasp=0 world=-2396.6667,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.168518519 fwd=1 phys=0 grasp=0 world=-2396.6667,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.168518519 fwd=1 phys=0 grasp=0 world=-2396.6667,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.086666667 fwd=1 phys=0 grasp=0 world=-2544.0000,948.0000,6500.0000
+tick 282 products=10 dirty=0
+  = p1 conv=physx-covered-100-run prog=0.305555556 fwd=1 phys=0 grasp=0 world=-350.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.913888889 fwd=1 phys=0 grasp=0 world=-1055.0001,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.913888889 fwd=1 phys=0 grasp=0 world=-1055.0001,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.913888889 fwd=1 phys=0 grasp=0 world=-1055.0001,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.678888889 fwd=1 phys=0 grasp=0 world=-1477.9999,948.0000,6500.0000
+  = p6 conv=physx-covered-100-source prog=0.643518519 fwd=1 phys=0 grasp=0 world=-1541.6667,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.187962963 fwd=1 phys=0 grasp=0 world=-2361.6667,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.187962963 fwd=1 phys=0 grasp=0 world=-2361.6667,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.187962963 fwd=1 phys=0 grasp=0 world=-2361.6667,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.101111111 fwd=1 phys=0 grasp=0 world=-2518.0000,948.0000,6500.0000
+tick 288 products=11 dirty=1
+  + p11 conv=physx-covered-100-source prog=0.004629630 fwd=1 phys=0 grasp=0 world=-2691.6666,948.0000,-6500.0000
+  = p1 conv=physx-covered-100-run prog=0.333333333 fwd=1 phys=0 grasp=0 world=-300.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.933333333 fwd=1 phys=0 grasp=0 world=-1020.0000,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.933333333 fwd=1 phys=0 grasp=0 world=-1020.0000,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.933333333 fwd=1 phys=0 grasp=0 world=-1020.0000,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.693333333 fwd=1 phys=0 grasp=0 world=-1452.0000,948.0000,6500.0000
+  = p6 conv=physx-covered-100-source prog=0.671296296 fwd=1 phys=0 grasp=0 world=-1491.6667,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.207407407 fwd=1 phys=0 grasp=0 world=-2326.6666,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.207407407 fwd=1 phys=0 grasp=0 world=-2326.6666,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.207407407 fwd=1 phys=0 grasp=0 world=-2326.6666,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.115555556 fwd=1 phys=0 grasp=0 world=-2492.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-source prog=0.004629630 fwd=1 phys=0 grasp=0 world=-2691.6666,948.0000,-6500.0000
+tick 294 products=11 dirty=0
+  = p1 conv=physx-covered-100-run prog=0.361111111 fwd=1 phys=0 grasp=0 world=-250.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.952777778 fwd=1 phys=0 grasp=0 world=-984.9999,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.952777778 fwd=1 phys=0 grasp=0 world=-984.9999,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.952777778 fwd=1 phys=0 grasp=0 world=-984.9999,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.707777778 fwd=1 phys=0 grasp=0 world=-1426.0000,948.0000,6500.0000
+  = p6 conv=physx-covered-100-source prog=0.699074074 fwd=1 phys=0 grasp=0 world=-1441.6666,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.226851852 fwd=1 phys=0 grasp=0 world=-2291.6667,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.226851852 fwd=1 phys=0 grasp=0 world=-2291.6667,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.226851852 fwd=1 phys=0 grasp=0 world=-2291.6667,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.130000000 fwd=1 phys=0 grasp=0 world=-2466.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-source prog=0.032407407 fwd=1 phys=0 grasp=0 world=-2641.6667,948.0000,-6500.0000
+tick 300 products=11 dirty=0
+  = p1 conv=physx-covered-100-run prog=0.388888889 fwd=1 phys=0 grasp=0 world=-200.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.972222222 fwd=1 phys=0 grasp=0 world=-950.0000,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.972222222 fwd=1 phys=0 grasp=0 world=-950.0000,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.972222222 fwd=1 phys=0 grasp=0 world=-950.0000,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.722222222 fwd=1 phys=0 grasp=0 world=-1400.0000,948.0000,6500.0000
+  = p6 conv=physx-covered-100-source prog=0.726851852 fwd=1 phys=0 grasp=0 world=-1391.6666,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.246296296 fwd=1 phys=0 grasp=0 world=-2256.6667,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.246296296 fwd=1 phys=0 grasp=0 world=-2256.6667,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.246296296 fwd=1 phys=0 grasp=0 world=-2256.6667,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.144444444 fwd=1 phys=0 grasp=0 world=-2439.9999,948.0000,6500.0000
+  = p11 conv=physx-covered-100-source prog=0.060185185 fwd=1 phys=0 grasp=0 world=-2591.6666,948.0000,-6500.0000
+tick 306 products=11 dirty=0
+  = p1 conv=physx-covered-100-run prog=0.416666667 fwd=1 phys=0 grasp=0 world=-150.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up-source prog=0.991666667 fwd=1 phys=0 grasp=0 world=-915.0000,948.0000,-3200.0000
+  = p3 conv=physx-source prog=0.991666667 fwd=1 phys=0 grasp=0 world=-915.0000,948.0000,0.0000
+  = p4 conv=logical-down-source prog=0.991666667 fwd=1 phys=0 grasp=0 world=-915.0000,2740.0000,3200.0000
+  = p5 conv=physx-coarse-120-source prog=0.736666667 fwd=1 phys=0 grasp=0 world=-1374.0000,948.0000,6500.0000
+  = p6 conv=physx-covered-100-source prog=0.754629630 fwd=1 phys=0 grasp=0 world=-1341.6667,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.265740741 fwd=1 phys=0 grasp=0 world=-2221.6667,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.265740741 fwd=1 phys=0 grasp=0 world=-2221.6667,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.265740741 fwd=1 phys=0 grasp=0 world=-2221.6667,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.158888889 fwd=1 phys=0 grasp=0 world=-2414.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-source prog=0.087962963 fwd=1 phys=0 grasp=0 world=-2541.6667,948.0000,-6500.0000
+tick 309 products=11 dirty=1
+  > p2 physx-spiral-up-source->physx-spiral-up fwd=1 prog=0.000000000
+  > p3 physx-source->physx-incline fwd=1 prog=0.000000000
+  > p4 logical-down-source->logical-down-spiral fwd=1 prog=0.000000000
+tick 312 products=11 dirty=0
+  = p1 conv=physx-covered-100-run prog=0.444444444 fwd=1 phys=0 grasp=0 world=-100.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up prog=0.001547340 fwd=1 phys=0 grasp=0 world=-882.5013,950.7852,-3199.8298
+  = p3 conv=physx-incline prog=0.009722222 fwd=1 phys=0 grasp=0 world=-882.5000,952.3750,0.0000
+  = p4 conv=logical-down-spiral prog=0.001547340 fwd=1 phys=0 grasp=0 world=-882.5013,2737.2148,3199.8298
+  = p5 conv=physx-coarse-120-source prog=0.751111111 fwd=1 phys=0 grasp=0 world=-1348.0000,948.0000,6500.0000
+  = p6 conv=physx-covered-100-source prog=0.782407407 fwd=1 phys=0 grasp=0 world=-1291.6667,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.285185185 fwd=1 phys=0 grasp=0 world=-2186.6667,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.285185185 fwd=1 phys=0 grasp=0 world=-2186.6667,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.285185185 fwd=1 phys=0 grasp=0 world=-2186.6667,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.173333333 fwd=1 phys=0 grasp=0 world=-2388.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-source prog=0.115740741 fwd=1 phys=0 grasp=0 world=-2491.6667,948.0000,-6500.0000
+tick 318 products=11 dirty=0
+  = p1 conv=physx-covered-100-run prog=0.472222222 fwd=1 phys=0 grasp=0 world=-50.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up prog=0.004642019 fwd=1 phys=0 grasp=0 world=-847.5299,956.3557,-3198.4692
+  = p3 conv=physx-incline prog=0.029166667 fwd=1 phys=0 grasp=0 world=-847.5000,961.1250,0.0000
+  = p4 conv=logical-down-spiral prog=0.004642019 fwd=1 phys=0 grasp=0 world=-847.5299,2731.6443,3198.4692
+  = p5 conv=physx-coarse-120-source prog=0.765555556 fwd=1 phys=0 grasp=0 world=-1322.0000,948.0000,6500.0000
+  = p6 conv=physx-covered-100-source prog=0.810185185 fwd=1 phys=0 grasp=0 world=-1241.6666,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.304629630 fwd=1 phys=0 grasp=0 world=-2151.6667,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.304629630 fwd=1 phys=0 grasp=0 world=-2151.6667,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.304629630 fwd=1 phys=0 grasp=0 world=-2151.6667,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.187777778 fwd=1 phys=0 grasp=0 world=-2362.0001,948.0000,6500.0000
+  = p11 conv=physx-covered-100-source prog=0.143518519 fwd=1 phys=0 grasp=0 world=-2441.6667,948.0000,-6500.0000
+tick 324 products=11 dirty=0
+  = p1 conv=physx-covered-100-run prog=0.500000000 fwd=1 phys=0 grasp=0 world=0.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up prog=0.007736699 fwd=1 phys=0 grasp=0 world=-812.6379,961.9261,-3195.7499
+  = p3 conv=physx-incline prog=0.048611111 fwd=1 phys=0 grasp=0 world=-812.5000,969.8750,0.0000
+  = p4 conv=logical-down-spiral prog=0.007736699 fwd=1 phys=0 grasp=0 world=-812.6379,2726.0740,3195.7499
+  = p5 conv=physx-coarse-120-source prog=0.780000000 fwd=1 phys=0 grasp=0 world=-1296.0001,948.0000,6500.0000
+  = p6 conv=physx-covered-100-source prog=0.837962963 fwd=1 phys=0 grasp=0 world=-1191.6666,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.324074074 fwd=1 phys=0 grasp=0 world=-2116.6667,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.324074074 fwd=1 phys=0 grasp=0 world=-2116.6667,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.324074074 fwd=1 phys=0 grasp=0 world=-2116.6667,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.202222222 fwd=1 phys=0 grasp=0 world=-2336.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-source prog=0.171296296 fwd=1 phys=0 grasp=0 world=-2391.6667,948.0000,-6500.0000
+tick 330 products=11 dirty=0
+  = p1 conv=physx-covered-100-run prog=0.527777778 fwd=1 phys=0 grasp=0 world=50.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up prog=0.010831378 fwd=1 phys=0 grasp=0 world=-777.8780,967.4965,-3191.6760
+  = p3 conv=physx-incline prog=0.068055556 fwd=1 phys=0 grasp=0 world=-777.5000,978.6250,0.0000
+  = p4 conv=logical-down-spiral prog=0.010831378 fwd=1 phys=0 grasp=0 world=-777.8780,2720.5034,3191.6760
+  = p5 conv=physx-coarse-120-source prog=0.794444444 fwd=1 phys=0 grasp=0 world=-1270.0000,948.0000,6500.0000
+  = p6 conv=physx-covered-100-source prog=0.865740741 fwd=1 phys=0 grasp=0 world=-1141.6667,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.343518519 fwd=1 phys=0 grasp=0 world=-2081.6667,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.343518519 fwd=1 phys=0 grasp=0 world=-2081.6667,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.343518519 fwd=1 phys=0 grasp=0 world=-2081.6667,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.216666667 fwd=1 phys=0 grasp=0 world=-2310.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-source prog=0.199074074 fwd=1 phys=0 grasp=0 world=-2341.6666,948.0000,-6500.0000
+tick 336 products=11 dirty=0
+  = p1 conv=physx-covered-100-run prog=0.555555556 fwd=1 phys=0 grasp=0 world=100.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up prog=0.013926058 fwd=1 phys=0 grasp=0 world=-743.3028,973.0669,-3186.2539
+  = p3 conv=physx-incline prog=0.087500000 fwd=1 phys=0 grasp=0 world=-742.5000,987.3750,0.0000
+  = p4 conv=logical-down-spiral prog=0.013926058 fwd=1 phys=0 grasp=0 world=-743.3028,2714.9331,3186.2539
+  = p5 conv=physx-coarse-120-source prog=0.808888889 fwd=1 phys=0 grasp=0 world=-1243.9999,948.0000,6500.0000
+  = p6 conv=physx-covered-100-source prog=0.893518519 fwd=1 phys=0 grasp=0 world=-1091.6667,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.362962963 fwd=1 phys=0 grasp=0 world=-2046.6667,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.362962963 fwd=1 phys=0 grasp=0 world=-2046.6667,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.362962963 fwd=1 phys=0 grasp=0 world=-2046.6667,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.231111111 fwd=1 phys=0 grasp=0 world=-2284.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-source prog=0.226851852 fwd=1 phys=0 grasp=0 world=-2291.6667,948.0000,-6500.0000
+tick 342 products=11 dirty=0
+  = p1 conv=physx-covered-100-run prog=0.583333333 fwd=1 phys=0 grasp=0 world=150.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up prog=0.017020737 fwd=1 phys=0 grasp=0 world=-708.9646,978.6373,-3179.4916
+  = p3 conv=physx-incline prog=0.106944444 fwd=1 phys=0 grasp=0 world=-707.5000,996.1250,0.0000
+  = p4 conv=logical-down-spiral prog=0.017020737 fwd=1 phys=0 grasp=0 world=-708.9646,2709.3628,3179.4916
+  = p5 conv=physx-coarse-120-source prog=0.823333333 fwd=1 phys=0 grasp=0 world=-1218.0000,948.0000,6500.0000
+  = p6 conv=physx-covered-100-source prog=0.921296296 fwd=1 phys=0 grasp=0 world=-1041.6667,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.382407407 fwd=1 phys=0 grasp=0 world=-2011.6667,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.382407407 fwd=1 phys=0 grasp=0 world=-2011.6667,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.382407407 fwd=1 phys=0 grasp=0 world=-2011.6667,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.245555556 fwd=1 phys=0 grasp=0 world=-2258.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-source prog=0.254629630 fwd=1 phys=0 grasp=0 world=-2241.6667,948.0000,-6500.0000
+tick 348 products=11 dirty=0
+  = p1 conv=physx-covered-100-run prog=0.611111111 fwd=1 phys=0 grasp=0 world=200.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up prog=0.020115416 fwd=1 phys=0 grasp=0 world=-674.9151,984.2078,-3171.3993
+  = p3 conv=physx-incline prog=0.126388889 fwd=1 phys=0 grasp=0 world=-672.4999,1004.8750,0.0000
+  = p4 conv=logical-down-spiral prog=0.020115416 fwd=1 phys=0 grasp=0 world=-674.9151,2703.7922,3171.3993
+  = p5 conv=physx-coarse-120-source prog=0.837777778 fwd=1 phys=0 grasp=0 world=-1192.0000,948.0000,6500.0000
+  = p6 conv=physx-covered-100-source prog=0.949074074 fwd=1 phys=0 grasp=0 world=-991.6666,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.401851852 fwd=1 phys=0 grasp=0 world=-1976.6666,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.401851852 fwd=1 phys=0 grasp=0 world=-1976.6666,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.401851852 fwd=1 phys=0 grasp=0 world=-1976.6666,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.260000000 fwd=1 phys=0 grasp=0 world=-2232.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-source prog=0.282407407 fwd=1 phys=0 grasp=0 world=-2191.6667,948.0000,-6500.0000
+tick 354 products=11 dirty=0
+  = p1 conv=physx-covered-100-run prog=0.638888889 fwd=1 phys=0 grasp=0 world=250.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up prog=0.023210096 fwd=1 phys=0 grasp=0 world=-641.2061,989.7782,-3161.9893
+  = p3 conv=physx-incline prog=0.145833333 fwd=1 phys=0 grasp=0 world=-637.5001,1013.6250,0.0000
+  = p4 conv=logical-down-spiral prog=0.023210096 fwd=1 phys=0 grasp=0 world=-641.2061,2698.2219,3161.9893
+  = p5 conv=physx-coarse-120-source prog=0.852222222 fwd=1 phys=0 grasp=0 world=-1166.0001,948.0000,6500.0000
+  = p6 conv=physx-covered-100-source prog=0.976851852 fwd=1 phys=0 grasp=0 world=-941.6666,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.421296296 fwd=1 phys=0 grasp=0 world=-1941.6667,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.421296296 fwd=1 phys=0 grasp=0 world=-1941.6667,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.421296296 fwd=1 phys=0 grasp=0 world=-1941.6667,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.274444444 fwd=1 phys=0 grasp=0 world=-2206.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-source prog=0.310185185 fwd=1 phys=0 grasp=0 world=-2141.6667,948.0000,-6500.0000
+tick 359 products=11 dirty=1
+  > p6 physx-covered-100-source->physx-covered-100-run fwd=1 prog=0.000000000
+tick 360 products=11 dirty=0
+  = p1 conv=physx-covered-100-run prog=0.666666667 fwd=1 phys=0 grasp=0 world=300.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up prog=0.026304775 fwd=1 phys=0 grasp=0 world=-607.8884,995.3486,-3151.2760
+  = p3 conv=physx-incline prog=0.165277778 fwd=1 phys=0 grasp=0 world=-602.5000,1022.3750,0.0000
+  = p4 conv=logical-down-spiral prog=0.026304775 fwd=1 phys=0 grasp=0 world=-607.8884,2692.6514,3151.2760
+  = p5 conv=physx-coarse-120-source prog=0.866666667 fwd=1 phys=0 grasp=0 world=-1140.0000,948.0000,6500.0000
+  = p6 conv=physx-covered-100-run prog=0.004629630 fwd=1 phys=0 grasp=0 world=-891.6666,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.440740741 fwd=1 phys=0 grasp=0 world=-1906.6667,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.440740741 fwd=1 phys=0 grasp=0 world=-1906.6667,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.440740741 fwd=1 phys=0 grasp=0 world=-1906.6667,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.288888889 fwd=1 phys=0 grasp=0 world=-2180.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-source prog=0.337962963 fwd=1 phys=0 grasp=0 world=-2091.6667,948.0000,-6500.0000
+tick 366 products=11 dirty=0
+  = p1 conv=physx-covered-100-run prog=0.694444444 fwd=1 phys=0 grasp=0 world=349.9999,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up prog=0.029399455 fwd=1 phys=0 grasp=0 world=-575.0125,1000.9190,-3139.2753
+  = p3 conv=physx-incline prog=0.184722222 fwd=1 phys=0 grasp=0 world=-567.5000,1031.1250,0.0000
+  = p4 conv=logical-down-spiral prog=0.029399455 fwd=1 phys=0 grasp=0 world=-575.0125,2687.0811,3139.2753
+  = p5 conv=physx-coarse-120-source prog=0.881111111 fwd=1 phys=0 grasp=0 world=-1114.0001,948.0000,6500.0000
+  = p6 conv=physx-covered-100-run prog=0.032407407 fwd=1 phys=0 grasp=0 world=-841.6667,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.460185185 fwd=1 phys=0 grasp=0 world=-1871.6666,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.460185185 fwd=1 phys=0 grasp=0 world=-1871.6666,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.460185185 fwd=1 phys=0 grasp=0 world=-1871.6666,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.303333333 fwd=1 phys=0 grasp=0 world=-2154.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-source prog=0.365740741 fwd=1 phys=0 grasp=0 world=-2041.6667,948.0000,-6500.0000
+tick 372 products=11 dirty=0
+  = p1 conv=physx-covered-100-run prog=0.722222222 fwd=1 phys=0 grasp=0 world=400.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up prog=0.032494134 fwd=1 phys=0 grasp=0 world=-542.6279,1006.4894,-3126.0055
+  = p3 conv=physx-incline prog=0.204166667 fwd=1 phys=0 grasp=0 world=-532.5000,1039.8750,0.0000
+  = p4 conv=logical-down-spiral prog=0.032494134 fwd=1 phys=0 grasp=0 world=-542.6279,2681.5105,3126.0055
+  = p5 conv=physx-coarse-120-source prog=0.895555556 fwd=1 phys=0 grasp=0 world=-1088.0000,948.0000,6500.0000
+  = p6 conv=physx-covered-100-run prog=0.060185185 fwd=1 phys=0 grasp=0 world=-791.6666,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.479629630 fwd=1 phys=0 grasp=0 world=-1836.6667,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.479629630 fwd=1 phys=0 grasp=0 world=-1836.6667,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.479629630 fwd=1 phys=0 grasp=0 world=-1836.6667,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.317777778 fwd=1 phys=0 grasp=0 world=-2128.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-source prog=0.393518519 fwd=1 phys=0 grasp=0 world=-1991.6667,948.0000,-6500.0000
+tick 378 products=11 dirty=0
+  = p1 conv=physx-covered-100-run prog=0.750000000 fwd=1 phys=0 grasp=0 world=450.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up prog=0.035588814 fwd=1 phys=0 grasp=0 world=-510.7838,1012.0599,-3111.4867
+  = p3 conv=physx-incline prog=0.223611111 fwd=1 phys=0 grasp=0 world=-497.5000,1048.6250,0.0000
+  = p4 conv=logical-down-spiral prog=0.035588814 fwd=1 phys=0 grasp=0 world=-510.7838,2675.9402,3111.4867
+  = p5 conv=physx-coarse-120-source prog=0.910000000 fwd=1 phys=0 grasp=0 world=-1061.9999,948.0000,6500.0000
+  = p6 conv=physx-covered-100-run prog=0.087962963 fwd=1 phys=0 grasp=0 world=-741.6667,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.499074074 fwd=1 phys=0 grasp=0 world=-1801.6667,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.499074074 fwd=1 phys=0 grasp=0 world=-1801.6667,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.499074074 fwd=1 phys=0 grasp=0 world=-1801.6667,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.332222222 fwd=1 phys=0 grasp=0 world=-2102.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-source prog=0.421296296 fwd=1 phys=0 grasp=0 world=-1941.6667,948.0000,-6500.0000
+tick 384 products=11 dirty=0
+  = p1 conv=physx-covered-100-run prog=0.777777778 fwd=1 phys=0 grasp=0 world=500.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up prog=0.038683493 fwd=1 phys=0 grasp=0 world=-479.5282,1017.6303,-3095.7408
+  = p3 conv=physx-incline prog=0.243055556 fwd=1 phys=0 grasp=0 world=-462.5000,1057.3750,0.0000
+  = p4 conv=logical-down-spiral prog=0.038683493 fwd=1 phys=0 grasp=0 world=-479.5282,2670.3696,3095.7408
+  = p5 conv=physx-coarse-120-source prog=0.924444444 fwd=1 phys=0 grasp=0 world=-1036.0000,948.0000,6500.0000
+  = p6 conv=physx-covered-100-run prog=0.115740741 fwd=1 phys=0 grasp=0 world=-691.6667,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.518518519 fwd=1 phys=0 grasp=0 world=-1766.6667,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.518518519 fwd=1 phys=0 grasp=0 world=-1766.6667,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.518518519 fwd=1 phys=0 grasp=0 world=-1766.6667,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.346666667 fwd=1 phys=0 grasp=0 world=-2076.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-source prog=0.449074074 fwd=1 phys=0 grasp=0 world=-1891.6667,948.0000,-6500.0000
+tick 390 products=11 dirty=0
+  = p1 conv=physx-covered-100-run prog=0.805555556 fwd=1 phys=0 grasp=0 world=550.0001,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up prog=0.041778173 fwd=1 phys=0 grasp=0 world=-448.9084,1023.2007,-3078.7915
+  = p3 conv=physx-incline prog=0.262500000 fwd=1 phys=0 grasp=0 world=-427.5000,1066.1250,0.0000
+  = p4 conv=logical-down-spiral prog=0.041778173 fwd=1 phys=0 grasp=0 world=-448.9084,2664.7993,3078.7915
+  = p5 conv=physx-coarse-120-source prog=0.938888889 fwd=1 phys=0 grasp=0 world=-1009.9999,948.0000,6500.0000
+  = p6 conv=physx-covered-100-run prog=0.143518519 fwd=1 phys=0 grasp=0 world=-641.6667,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.537962963 fwd=1 phys=0 grasp=0 world=-1731.6666,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.537962963 fwd=1 phys=0 grasp=0 world=-1731.6666,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.537962963 fwd=1 phys=0 grasp=0 world=-1731.6666,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.361111111 fwd=1 phys=0 grasp=0 world=-2050.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-source prog=0.476851852 fwd=1 phys=0 grasp=0 world=-1841.6667,948.0000,-6500.0000
+tick 396 products=11 dirty=0
+  = p1 conv=physx-covered-100-run prog=0.833333333 fwd=1 phys=0 grasp=0 world=599.9999,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up prog=0.044872852 fwd=1 phys=0 grasp=0 world=-418.9708,1028.7711,-3060.6647
+  = p3 conv=physx-incline prog=0.281944444 fwd=1 phys=0 grasp=0 world=-392.5000,1074.8750,0.0000
+  = p4 conv=logical-down-spiral prog=0.044872852 fwd=1 phys=0 grasp=0 world=-418.9708,2659.2288,3060.6647
+  = p5 conv=physx-coarse-120-source prog=0.953333333 fwd=1 phys=0 grasp=0 world=-984.0000,948.0000,6500.0000
+  = p6 conv=physx-covered-100-run prog=0.171296296 fwd=1 phys=0 grasp=0 world=-591.6667,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.557407407 fwd=1 phys=0 grasp=0 world=-1696.6667,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.557407407 fwd=1 phys=0 grasp=0 world=-1696.6667,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.557407407 fwd=1 phys=0 grasp=0 world=-1696.6667,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.375555556 fwd=1 phys=0 grasp=0 world=-2024.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-source prog=0.504629630 fwd=1 phys=0 grasp=0 world=-1791.6667,948.0000,-6500.0000
+tick 402 products=11 dirty=0
+  = p1 conv=physx-covered-100-run prog=0.861111111 fwd=1 phys=0 grasp=0 world=650.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up prog=0.047967531 fwd=1 phys=0 grasp=0 world=-389.7605,1034.3416,-3041.3876
+  = p3 conv=physx-incline prog=0.301388889 fwd=1 phys=0 grasp=0 world=-357.5000,1083.6250,0.0000
+  = p4 conv=logical-down-spiral prog=0.047967531 fwd=1 phys=0 grasp=0 world=-389.7605,2653.6584,3041.3876
+  = p5 conv=physx-coarse-120-source prog=0.967777778 fwd=1 phys=0 grasp=0 world=-958.0000,948.0000,6500.0000
+  = p6 conv=physx-covered-100-run prog=0.199074074 fwd=1 phys=0 grasp=0 world=-541.6666,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.576851852 fwd=1 phys=0 grasp=0 world=-1661.6667,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.576851852 fwd=1 phys=0 grasp=0 world=-1661.6667,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.576851852 fwd=1 phys=0 grasp=0 world=-1661.6667,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.390000000 fwd=1 phys=0 grasp=0 world=-1998.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-source prog=0.532407407 fwd=1 phys=0 grasp=0 world=-1741.6667,948.0000,-6500.0000
+tick 408 products=11 dirty=0
+  = p1 conv=physx-covered-100-run prog=0.888888889 fwd=1 phys=0 grasp=0 world=700.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up prog=0.051062211 fwd=1 phys=0 grasp=0 world=-361.3218,1039.9120,-3020.9894
+  = p3 conv=physx-incline prog=0.320833333 fwd=1 phys=0 grasp=0 world=-322.5000,1092.3750,0.0000
+  = p4 conv=logical-down-spiral prog=0.051062211 fwd=1 phys=0 grasp=0 world=-361.3218,2648.0881,3020.9894
+  = p5 conv=physx-coarse-120-source prog=0.982222222 fwd=1 phys=0 grasp=0 world=-932.0001,948.0000,6500.0000
+  = p6 conv=physx-covered-100-run prog=0.226851852 fwd=1 phys=0 grasp=0 world=-491.6667,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.596296296 fwd=1 phys=0 grasp=0 world=-1626.6666,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.596296296 fwd=1 phys=0 grasp=0 world=-1626.6666,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.596296296 fwd=1 phys=0 grasp=0 world=-1626.6666,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.404444444 fwd=1 phys=0 grasp=0 world=-1972.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-source prog=0.560185185 fwd=1 phys=0 grasp=0 world=-1691.6666,948.0000,-6500.0000
+tick 414 products=11 dirty=0
+  = p1 conv=physx-covered-100-run prog=0.916666667 fwd=1 phys=0 grasp=0 world=750.0001,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up prog=0.054156890 fwd=1 phys=0 grasp=0 world=-333.6977,1045.4824,-2999.5009
+  = p3 conv=physx-incline prog=0.340277778 fwd=1 phys=0 grasp=0 world=-287.5000,1101.1250,0.0000
+  = p4 conv=logical-down-spiral prog=0.054156890 fwd=1 phys=0 grasp=0 world=-333.6977,2642.5176,2999.5009
+  = p5 conv=physx-coarse-120-source prog=0.996666667 fwd=1 phys=0 grasp=0 world=-906.0000,948.0000,6500.0000
+  = p6 conv=physx-covered-100-run prog=0.254629630 fwd=1 phys=0 grasp=0 world=-441.6667,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.615740741 fwd=1 phys=0 grasp=0 world=-1591.6667,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.615740741 fwd=1 phys=0 grasp=0 world=-1591.6667,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.615740741 fwd=1 phys=0 grasp=0 world=-1591.6667,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.418888889 fwd=1 phys=0 grasp=0 world=-1946.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-source prog=0.587962963 fwd=1 phys=0 grasp=0 world=-1641.6666,948.0000,-6500.0000
+tick 416 products=11 dirty=1
+  > p5 physx-coarse-120-source->physx-coarse-120-run fwd=1 prog=0.000000000
+tick 420 products=11 dirty=0
+  = p1 conv=physx-covered-100-run prog=0.944444444 fwd=1 phys=0 grasp=0 world=799.9999,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up prog=0.057251570 fwd=1 phys=0 grasp=0 world=-306.9300,1051.0528,-2976.9547
+  = p3 conv=physx-incline prog=0.359722222 fwd=1 phys=0 grasp=0 world=-252.5000,1109.8750,0.0000
+  = p4 conv=logical-down-spiral prog=0.057251570 fwd=1 phys=0 grasp=0 world=-306.9300,2636.9473,2976.9547
+  = p5 conv=physx-coarse-120-run prog=0.009629630 fwd=1 phys=0 grasp=0 world=-882.6666,948.0000,6500.0000
+  = p6 conv=physx-covered-100-run prog=0.282407407 fwd=1 phys=0 grasp=0 world=-391.6667,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.635185185 fwd=1 phys=0 grasp=0 world=-1556.6667,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.635185185 fwd=1 phys=0 grasp=0 world=-1556.6667,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.635185185 fwd=1 phys=0 grasp=0 world=-1556.6667,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.433333333 fwd=1 phys=0 grasp=0 world=-1920.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-source prog=0.615740741 fwd=1 phys=0 grasp=0 world=-1591.6667,948.0000,-6500.0000
+tick 426 products=11 dirty=0
+  = p1 conv=physx-covered-100-run prog=0.972222222 fwd=1 phys=0 grasp=0 world=850.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up prog=0.060346249 fwd=1 phys=0 grasp=0 world=-281.0590,1056.6232,-2953.3848
+  = p3 conv=physx-incline prog=0.379166667 fwd=1 phys=0 grasp=0 world=-217.5000,1118.6250,0.0000
+  = p4 conv=logical-down-spiral prog=0.060346249 fwd=1 phys=0 grasp=0 world=-281.0590,2631.3767,2953.3848
+  = p5 conv=physx-coarse-120-run prog=0.024074074 fwd=1 phys=0 grasp=0 world=-856.6667,948.0000,6500.0000
+  = p6 conv=physx-covered-100-run prog=0.310185185 fwd=1 phys=0 grasp=0 world=-341.6667,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.654629630 fwd=1 phys=0 grasp=0 world=-1521.6666,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.654629630 fwd=1 phys=0 grasp=0 world=-1521.6666,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.654629630 fwd=1 phys=0 grasp=0 world=-1521.6666,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.447777778 fwd=1 phys=0 grasp=0 world=-1894.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-source prog=0.643518519 fwd=1 phys=0 grasp=0 world=-1541.6667,948.0000,-6500.0000
+tick 432 products=12 dirty=2
+  > p1 physx-covered-100-run->physx-covered-100-sink fwd=1 prog=0.000000000
+  + p12 conv=physx-covered-100-source prog=0.004629630 fwd=1 phys=0 grasp=0 world=-2691.6666,948.0000,-6500.0000
+  = p1 conv=physx-covered-100-sink prog=0.000000000 fwd=1 phys=0 grasp=0 world=900.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up prog=0.063440929 fwd=1 phys=0 grasp=0 world=-256.1240,1062.1937,-2928.8270
+  = p3 conv=physx-incline prog=0.398611111 fwd=1 phys=0 grasp=0 world=-182.5000,1127.3750,0.0000
+  = p4 conv=logical-down-spiral prog=0.063440929 fwd=1 phys=0 grasp=0 world=-256.1240,2625.8064,2928.8270
+  = p5 conv=physx-coarse-120-run prog=0.038518519 fwd=1 phys=0 grasp=0 world=-830.6667,948.0000,6500.0000
+  = p6 conv=physx-covered-100-run prog=0.337962963 fwd=1 phys=0 grasp=0 world=-291.6667,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.674074074 fwd=1 phys=0 grasp=0 world=-1486.6667,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.674074074 fwd=1 phys=0 grasp=0 world=-1486.6667,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.674074074 fwd=1 phys=0 grasp=0 world=-1486.6667,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.462222222 fwd=1 phys=0 grasp=0 world=-1868.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-source prog=0.671296296 fwd=1 phys=0 grasp=0 world=-1491.6667,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-source prog=0.004629630 fwd=1 phys=0 grasp=0 world=-2691.6666,948.0000,-6500.0000
+tick 438 products=12 dirty=0
+  = p1 conv=physx-covered-100-sink prog=0.027777778 fwd=1 phys=0 grasp=0 world=950.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up prog=0.066535608 fwd=1 phys=0 grasp=0 world=-232.1625,1067.7641,-2903.3182
+  = p3 conv=physx-incline prog=0.418055556 fwd=1 phys=0 grasp=0 world=-147.5000,1136.1250,0.0000
+  = p4 conv=logical-down-spiral prog=0.066535608 fwd=1 phys=0 grasp=0 world=-232.1625,2620.2358,2903.3182
+  = p5 conv=physx-coarse-120-run prog=0.052962963 fwd=1 phys=0 grasp=0 world=-804.6667,948.0000,6500.0000
+  = p6 conv=physx-covered-100-run prog=0.365740741 fwd=1 phys=0 grasp=0 world=-241.6667,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.693518519 fwd=1 phys=0 grasp=0 world=-1451.6667,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.693518519 fwd=1 phys=0 grasp=0 world=-1451.6667,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.693518519 fwd=1 phys=0 grasp=0 world=-1451.6667,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.476666667 fwd=1 phys=0 grasp=0 world=-1842.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-source prog=0.699074074 fwd=1 phys=0 grasp=0 world=-1441.6666,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-source prog=0.032407407 fwd=1 phys=0 grasp=0 world=-2641.6667,948.0000,-6500.0000
+tick 444 products=12 dirty=0
+  = p1 conv=physx-covered-100-sink prog=0.055555556 fwd=1 phys=0 grasp=0 world=1000.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up prog=0.069630288 fwd=1 phys=0 grasp=0 world=-209.2111,1073.3345,-2876.8972
+  = p3 conv=physx-incline prog=0.437500000 fwd=1 phys=0 grasp=0 world=-112.5000,1144.8750,0.0000
+  = p4 conv=logical-down-spiral prog=0.069630288 fwd=1 phys=0 grasp=0 world=-209.2111,2614.6655,2876.8972
+  = p5 conv=physx-coarse-120-run prog=0.067407407 fwd=1 phys=0 grasp=0 world=-778.6667,948.0000,6500.0000
+  = p6 conv=physx-covered-100-run prog=0.393518519 fwd=1 phys=0 grasp=0 world=-191.6667,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.712962963 fwd=1 phys=0 grasp=0 world=-1416.6666,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.712962963 fwd=1 phys=0 grasp=0 world=-1416.6666,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.712962963 fwd=1 phys=0 grasp=0 world=-1416.6666,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.491111111 fwd=1 phys=0 grasp=0 world=-1816.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-source prog=0.726851852 fwd=1 phys=0 grasp=0 world=-1391.6666,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-source prog=0.060185185 fwd=1 phys=0 grasp=0 world=-2591.6666,948.0000,-6500.0000
+tick 450 products=15 dirty=3
+  + p13 conv=physx-spiral-up-source prog=0.003240741 fwd=1 phys=0 grasp=0 world=-2694.1667,948.0000,-3200.0000
+  + p14 conv=physx-source prog=0.003240741 fwd=1 phys=0 grasp=0 world=-2694.1667,948.0000,0.0000
+  + p15 conv=logical-down-source prog=0.003240741 fwd=1 phys=0 grasp=0 world=-2694.1667,2740.0000,3200.0000
+  = p1 conv=physx-covered-100-sink prog=0.083333333 fwd=1 phys=0 grasp=0 world=1050.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up prog=0.072724967 fwd=1 phys=0 grasp=0 world=-187.3040,1078.9050,-2849.6037
+  = p3 conv=physx-incline prog=0.456944444 fwd=1 phys=0 grasp=0 world=-77.5000,1153.6250,0.0000
+  = p4 conv=logical-down-spiral prog=0.072724967 fwd=1 phys=0 grasp=0 world=-187.3040,2609.0950,2849.6037
+  = p5 conv=physx-coarse-120-run prog=0.081851852 fwd=1 phys=0 grasp=0 world=-752.6667,948.0000,6500.0000
+  = p6 conv=physx-covered-100-run prog=0.421296296 fwd=1 phys=0 grasp=0 world=-141.6667,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.732407407 fwd=1 phys=0 grasp=0 world=-1381.6667,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.732407407 fwd=1 phys=0 grasp=0 world=-1381.6667,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.732407407 fwd=1 phys=0 grasp=0 world=-1381.6667,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.505555556 fwd=1 phys=0 grasp=0 world=-1790.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-source prog=0.754629630 fwd=1 phys=0 grasp=0 world=-1341.6667,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-source prog=0.087962963 fwd=1 phys=0 grasp=0 world=-2541.6667,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.003240741 fwd=1 phys=0 grasp=0 world=-2694.1667,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.003240741 fwd=1 phys=0 grasp=0 world=-2694.1667,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.003240741 fwd=1 phys=0 grasp=0 world=-2694.1667,2740.0000,3200.0000
+tick 456 products=15 dirty=0
+  = p1 conv=physx-covered-100-sink prog=0.111111111 fwd=1 phys=0 grasp=0 world=1100.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up prog=0.075819647 fwd=1 phys=0 grasp=0 world=-166.4748,1084.4753,-2821.4792
+  = p3 conv=physx-incline prog=0.476388889 fwd=1 phys=0 grasp=0 world=-42.5000,1162.3750,0.0000
+  = p4 conv=logical-down-spiral prog=0.075819647 fwd=1 phys=0 grasp=0 world=-166.4748,2603.5247,2821.4792
+  = p5 conv=physx-coarse-120-run prog=0.096296296 fwd=1 phys=0 grasp=0 world=-726.6666,948.0000,6500.0000
+  = p6 conv=physx-covered-100-run prog=0.449074074 fwd=1 phys=0 grasp=0 world=-91.6667,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.751851852 fwd=1 phys=0 grasp=0 world=-1346.6667,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.751851852 fwd=1 phys=0 grasp=0 world=-1346.6667,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.751851852 fwd=1 phys=0 grasp=0 world=-1346.6667,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.520000000 fwd=1 phys=0 grasp=0 world=-1764.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-source prog=0.782407407 fwd=1 phys=0 grasp=0 world=-1291.6667,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-source prog=0.115740741 fwd=1 phys=0 grasp=0 world=-2491.6667,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.022685185 fwd=1 phys=0 grasp=0 world=-2659.1667,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.022685185 fwd=1 phys=0 grasp=0 world=-2659.1667,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.022685185 fwd=1 phys=0 grasp=0 world=-2659.1667,2740.0000,3200.0000
+tick 462 products=15 dirty=0
+  = p1 conv=physx-covered-100-sink prog=0.138888889 fwd=1 phys=0 grasp=0 world=1150.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up prog=0.078914326 fwd=1 phys=0 grasp=0 world=-146.7548,1090.0458,-2792.5661
+  = p3 conv=physx-incline prog=0.495833333 fwd=1 phys=0 grasp=0 world=-7.5000,1171.1250,0.0000
+  = p4 conv=logical-down-spiral prog=0.078914326 fwd=1 phys=0 grasp=0 world=-146.7548,2597.9541,2792.5661
+  = p5 conv=physx-coarse-120-run prog=0.110740741 fwd=1 phys=0 grasp=0 world=-700.6666,948.0000,6500.0000
+  = p6 conv=physx-covered-100-run prog=0.476851852 fwd=1 phys=0 grasp=0 world=-41.6667,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.771296296 fwd=1 phys=0 grasp=0 world=-1311.6666,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.771296296 fwd=1 phys=0 grasp=0 world=-1311.6666,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.771296296 fwd=1 phys=0 grasp=0 world=-1311.6666,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.534444444 fwd=1 phys=0 grasp=0 world=-1738.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-source prog=0.810185185 fwd=1 phys=0 grasp=0 world=-1241.6666,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-source prog=0.143518519 fwd=1 phys=0 grasp=0 world=-2441.6667,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.042129630 fwd=1 phys=0 grasp=0 world=-2624.1666,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.042129630 fwd=1 phys=0 grasp=0 world=-2624.1666,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.042129630 fwd=1 phys=0 grasp=0 world=-2624.1666,2740.0000,3200.0000
+tick 468 products=15 dirty=0
+  = p1 conv=physx-covered-100-sink prog=0.166666667 fwd=1 phys=0 grasp=0 world=1200.0001,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up prog=0.082009005 fwd=1 phys=0 grasp=0 world=-128.1738,1095.6162,-2762.9082
+  = p3 conv=physx-incline prog=0.515277778 fwd=1 phys=0 grasp=0 world=27.5000,1179.8750,0.0000
+  = p4 conv=logical-down-spiral prog=0.082009005 fwd=1 phys=0 grasp=0 world=-128.1738,2592.3838,2762.9082
+  = p5 conv=physx-coarse-120-run prog=0.125185185 fwd=1 phys=0 grasp=0 world=-674.6666,948.0000,6500.0000
+  = p6 conv=physx-covered-100-run prog=0.504629630 fwd=1 phys=0 grasp=0 world=8.3333,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.790740741 fwd=1 phys=0 grasp=0 world=-1276.6667,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.790740741 fwd=1 phys=0 grasp=0 world=-1276.6667,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.790740741 fwd=1 phys=0 grasp=0 world=-1276.6667,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.548888889 fwd=1 phys=0 grasp=0 world=-1712.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-source prog=0.837962963 fwd=1 phys=0 grasp=0 world=-1191.6666,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-source prog=0.171296296 fwd=1 phys=0 grasp=0 world=-2391.6667,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.061574074 fwd=1 phys=0 grasp=0 world=-2589.1667,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.061574074 fwd=1 phys=0 grasp=0 world=-2589.1667,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.061574074 fwd=1 phys=0 grasp=0 world=-2589.1667,2740.0000,3200.0000
+tick 474 products=15 dirty=0
+  = p1 conv=physx-covered-100-sink prog=0.194444444 fwd=1 phys=0 grasp=0 world=1250.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up prog=0.085103685 fwd=1 phys=0 grasp=0 world=-110.7599,1101.1866,-2732.5504
+  = p3 conv=physx-incline prog=0.534722222 fwd=1 phys=0 grasp=0 world=62.5000,1188.6250,0.0000
+  = p4 conv=logical-down-spiral prog=0.085103685 fwd=1 phys=0 grasp=0 world=-110.7599,2586.8135,2732.5504
+  = p5 conv=physx-coarse-120-run prog=0.139629630 fwd=1 phys=0 grasp=0 world=-648.6667,948.0000,6500.0000
+  = p6 conv=physx-covered-100-run prog=0.532407407 fwd=1 phys=0 grasp=0 world=58.3333,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.810185185 fwd=1 phys=0 grasp=0 world=-1241.6666,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.810185185 fwd=1 phys=0 grasp=0 world=-1241.6666,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.810185185 fwd=1 phys=0 grasp=0 world=-1241.6666,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.563333333 fwd=1 phys=0 grasp=0 world=-1686.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-source prog=0.865740741 fwd=1 phys=0 grasp=0 world=-1141.6667,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-source prog=0.199074074 fwd=1 phys=0 grasp=0 world=-2341.6666,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.081018519 fwd=1 phys=0 grasp=0 world=-2554.1667,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.081018519 fwd=1 phys=0 grasp=0 world=-2554.1667,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.081018519 fwd=1 phys=0 grasp=0 world=-2554.1667,2740.0000,3200.0000
+tick 480 products=15 dirty=0
+  = p1 conv=physx-covered-100-sink prog=0.222222222 fwd=1 phys=0 grasp=0 world=1300.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up prog=0.088198364 fwd=1 phys=0 grasp=0 world=-94.5395,1106.7571,-2701.5384
+  = p3 conv=physx-incline prog=0.554166667 fwd=1 phys=0 grasp=0 world=97.5000,1197.3750,0.0000
+  = p4 conv=logical-down-spiral prog=0.088198364 fwd=1 phys=0 grasp=0 world=-94.5395,2581.2429,2701.5384
+  = p5 conv=physx-coarse-120-run prog=0.154074074 fwd=1 phys=0 grasp=0 world=-622.6667,948.0000,6500.0000
+  = p6 conv=physx-covered-100-run prog=0.560185185 fwd=1 phys=0 grasp=0 world=108.3334,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.829629630 fwd=1 phys=0 grasp=0 world=-1206.6667,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.829629630 fwd=1 phys=0 grasp=0 world=-1206.6667,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.829629630 fwd=1 phys=0 grasp=0 world=-1206.6667,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.577777778 fwd=1 phys=0 grasp=0 world=-1660.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-source prog=0.893518519 fwd=1 phys=0 grasp=0 world=-1091.6667,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-source prog=0.226851852 fwd=1 phys=0 grasp=0 world=-2291.6667,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.100462963 fwd=1 phys=0 grasp=0 world=-2519.1666,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.100462963 fwd=1 phys=0 grasp=0 world=-2519.1666,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.100462963 fwd=1 phys=0 grasp=0 world=-2519.1666,2740.0000,3200.0000
+tick 481 products=16 dirty=1
+  + p16 conv=physx-coarse-120-source prog=0.002407407 fwd=1 phys=0 grasp=0 world=-2695.6667,948.0000,6500.0000
+tick 486 products=16 dirty=0
+  = p1 conv=physx-covered-100-sink prog=0.250000000 fwd=1 phys=0 grasp=0 world=1350.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up prog=0.091293044 fwd=1 phys=0 grasp=0 world=-79.5370,1112.3275,-2669.9191
+  = p3 conv=physx-incline prog=0.573611111 fwd=1 phys=0 grasp=0 world=132.5000,1206.1250,0.0000
+  = p4 conv=logical-down-spiral prog=0.091293044 fwd=1 phys=0 grasp=0 world=-79.5370,2575.6726,2669.9191
+  = p5 conv=physx-coarse-120-run prog=0.168518519 fwd=1 phys=0 grasp=0 world=-596.6667,948.0000,6500.0000
+  = p6 conv=physx-covered-100-run prog=0.587962963 fwd=1 phys=0 grasp=0 world=158.3334,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.849074074 fwd=1 phys=0 grasp=0 world=-1171.6667,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.849074074 fwd=1 phys=0 grasp=0 world=-1171.6667,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.849074074 fwd=1 phys=0 grasp=0 world=-1171.6667,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.592222222 fwd=1 phys=0 grasp=0 world=-1634.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-source prog=0.921296296 fwd=1 phys=0 grasp=0 world=-1041.6667,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-source prog=0.254629630 fwd=1 phys=0 grasp=0 world=-2241.6667,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.119907407 fwd=1 phys=0 grasp=0 world=-2484.1667,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.119907407 fwd=1 phys=0 grasp=0 world=-2484.1667,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.119907407 fwd=1 phys=0 grasp=0 world=-2484.1667,2740.0000,3200.0000
+  = p16 conv=physx-coarse-120-source prog=0.014444444 fwd=1 phys=0 grasp=0 world=-2674.0000,948.0000,6500.0000
+tick 492 products=16 dirty=0
+  = p1 conv=physx-covered-100-sink prog=0.277777778 fwd=1 phys=0 grasp=0 world=1400.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up prog=0.094387723 fwd=1 phys=0 grasp=0 world=-65.7752,1117.8979,-2637.7405
+  = p3 conv=physx-incline prog=0.593055556 fwd=1 phys=0 grasp=0 world=167.5000,1214.8750,0.0000
+  = p4 conv=logical-down-spiral prog=0.094387723 fwd=1 phys=0 grasp=0 world=-65.7752,2570.1021,2637.7405
+  = p5 conv=physx-coarse-120-run prog=0.182962963 fwd=1 phys=0 grasp=0 world=-570.6667,948.0000,6500.0000
+  = p6 conv=physx-covered-100-run prog=0.615740741 fwd=1 phys=0 grasp=0 world=208.3333,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.868518519 fwd=1 phys=0 grasp=0 world=-1136.6666,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.868518519 fwd=1 phys=0 grasp=0 world=-1136.6666,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.868518519 fwd=1 phys=0 grasp=0 world=-1136.6666,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.606666667 fwd=1 phys=0 grasp=0 world=-1608.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-source prog=0.949074074 fwd=1 phys=0 grasp=0 world=-991.6666,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-source prog=0.282407407 fwd=1 phys=0 grasp=0 world=-2191.6667,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.139351852 fwd=1 phys=0 grasp=0 world=-2449.1667,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.139351852 fwd=1 phys=0 grasp=0 world=-2449.1667,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.139351852 fwd=1 phys=0 grasp=0 world=-2449.1667,2740.0000,3200.0000
+  = p16 conv=physx-coarse-120-source prog=0.028888889 fwd=1 phys=0 grasp=0 world=-2648.0000,948.0000,6500.0000
+tick 498 products=16 dirty=0
+  = p1 conv=physx-covered-100-sink prog=0.305555556 fwd=1 phys=0 grasp=0 world=1450.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up prog=0.097482403 fwd=1 phys=0 grasp=0 world=-53.2749,1123.4684,-2605.0514
+  = p3 conv=physx-incline prog=0.612500000 fwd=1 phys=0 grasp=0 world=202.5000,1223.6250,0.0000
+  = p4 conv=logical-down-spiral prog=0.097482403 fwd=1 phys=0 grasp=0 world=-53.2749,2564.5317,2605.0514
+  = p5 conv=physx-coarse-120-run prog=0.197407407 fwd=1 phys=0 grasp=0 world=-544.6666,948.0000,6500.0000
+  = p6 conv=physx-covered-100-run prog=0.643518519 fwd=1 phys=0 grasp=0 world=258.3333,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.887962963 fwd=1 phys=0 grasp=0 world=-1101.6667,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.887962963 fwd=1 phys=0 grasp=0 world=-1101.6667,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.887962963 fwd=1 phys=0 grasp=0 world=-1101.6667,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.621111111 fwd=1 phys=0 grasp=0 world=-1582.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-source prog=0.976851852 fwd=1 phys=0 grasp=0 world=-941.6666,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-source prog=0.310185185 fwd=1 phys=0 grasp=0 world=-2141.6667,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.158796296 fwd=1 phys=0 grasp=0 world=-2414.1666,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.158796296 fwd=1 phys=0 grasp=0 world=-2414.1666,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.158796296 fwd=1 phys=0 grasp=0 world=-2414.1666,2740.0000,3200.0000
+  = p16 conv=physx-coarse-120-source prog=0.043333333 fwd=1 phys=0 grasp=0 world=-2622.0000,948.0000,6500.0000
+tick 503 products=16 dirty=1
+  > p11 physx-covered-100-source->physx-covered-100-run fwd=1 prog=0.000000000
+tick 504 products=16 dirty=0
+  = p1 conv=physx-covered-100-sink prog=0.333333333 fwd=1 phys=0 grasp=0 world=1500.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up prog=0.100577082 fwd=1 phys=0 grasp=0 world=-42.0550,1129.0387,-2571.9009
+  = p3 conv=physx-incline prog=0.631944444 fwd=1 phys=0 grasp=0 world=237.5000,1232.3750,0.0000
+  = p4 conv=logical-down-spiral prog=0.100577082 fwd=1 phys=0 grasp=0 world=-42.0550,2558.9612,2571.9009
+  = p5 conv=physx-coarse-120-run prog=0.211851852 fwd=1 phys=0 grasp=0 world=-518.6667,948.0000,6500.0000
+  = p6 conv=physx-covered-100-run prog=0.671296296 fwd=1 phys=0 grasp=0 world=308.3333,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.907407407 fwd=1 phys=0 grasp=0 world=-1066.6667,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.907407407 fwd=1 phys=0 grasp=0 world=-1066.6667,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.907407407 fwd=1 phys=0 grasp=0 world=-1066.6667,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.635555556 fwd=1 phys=0 grasp=0 world=-1556.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-run prog=0.004629630 fwd=1 phys=0 grasp=0 world=-891.6666,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-source prog=0.337962963 fwd=1 phys=0 grasp=0 world=-2091.6667,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.178240741 fwd=1 phys=0 grasp=0 world=-2379.1667,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.178240741 fwd=1 phys=0 grasp=0 world=-2379.1667,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.178240741 fwd=1 phys=0 grasp=0 world=-2379.1667,2740.0000,3200.0000
+  = p16 conv=physx-coarse-120-source prog=0.057777778 fwd=1 phys=0 grasp=0 world=-2596.0000,948.0000,6500.0000
+tick 510 products=16 dirty=0
+  = p1 conv=physx-covered-100-sink prog=0.361111111 fwd=1 phys=0 grasp=0 world=1550.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up prog=0.103671762 fwd=1 phys=0 grasp=0 world=-32.1324,1134.6091,-2538.3392
+  = p3 conv=physx-incline prog=0.651388889 fwd=1 phys=0 grasp=0 world=272.5000,1241.1250,0.0000
+  = p4 conv=logical-down-spiral prog=0.103671762 fwd=1 phys=0 grasp=0 world=-32.1324,2553.3909,2538.3392
+  = p5 conv=physx-coarse-120-run prog=0.226296296 fwd=1 phys=0 grasp=0 world=-492.6667,948.0000,6500.0000
+  = p6 conv=physx-covered-100-run prog=0.699074074 fwd=1 phys=0 grasp=0 world=358.3334,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.926851852 fwd=1 phys=0 grasp=0 world=-1031.6666,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.926851852 fwd=1 phys=0 grasp=0 world=-1031.6666,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.926851852 fwd=1 phys=0 grasp=0 world=-1031.6666,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.650000000 fwd=1 phys=0 grasp=0 world=-1530.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-run prog=0.032407407 fwd=1 phys=0 grasp=0 world=-841.6667,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-source prog=0.365740741 fwd=1 phys=0 grasp=0 world=-2041.6667,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.197685185 fwd=1 phys=0 grasp=0 world=-2344.1667,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.197685185 fwd=1 phys=0 grasp=0 world=-2344.1667,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.197685185 fwd=1 phys=0 grasp=0 world=-2344.1667,2740.0000,3200.0000
+  = p16 conv=physx-coarse-120-source prog=0.072222222 fwd=1 phys=0 grasp=0 world=-2570.0000,948.0000,6500.0000
+tick 516 products=16 dirty=0
+  = p1 conv=physx-covered-100-sink prog=0.388888889 fwd=1 phys=0 grasp=0 world=1600.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up prog=0.106766441 fwd=1 phys=0 grasp=0 world=-23.5222,1140.1796,-2504.4170
+  = p3 conv=physx-incline prog=0.670833333 fwd=1 phys=0 grasp=0 world=307.5000,1249.8750,0.0000
+  = p4 conv=logical-down-spiral prog=0.106766441 fwd=1 phys=0 grasp=0 world=-23.5222,2547.8203,2504.4170
+  = p5 conv=physx-coarse-120-run prog=0.240740741 fwd=1 phys=0 grasp=0 world=-466.6667,948.0000,6500.0000
+  = p6 conv=physx-covered-100-run prog=0.726851852 fwd=1 phys=0 grasp=0 world=408.3334,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.946296296 fwd=1 phys=0 grasp=0 world=-996.6667,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.946296296 fwd=1 phys=0 grasp=0 world=-996.6667,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.946296296 fwd=1 phys=0 grasp=0 world=-996.6667,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.664444444 fwd=1 phys=0 grasp=0 world=-1504.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-run prog=0.060185185 fwd=1 phys=0 grasp=0 world=-791.6666,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-source prog=0.393518519 fwd=1 phys=0 grasp=0 world=-1991.6667,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.217129630 fwd=1 phys=0 grasp=0 world=-2309.1666,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.217129630 fwd=1 phys=0 grasp=0 world=-2309.1666,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.217129630 fwd=1 phys=0 grasp=0 world=-2309.1666,2740.0000,3200.0000
+  = p16 conv=physx-coarse-120-source prog=0.086666667 fwd=1 phys=0 grasp=0 world=-2544.0000,948.0000,6500.0000
+tick 522 products=16 dirty=0
+  = p1 conv=physx-covered-100-sink prog=0.416666667 fwd=1 phys=0 grasp=0 world=1650.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up prog=0.109861120 fwd=1 phys=0 grasp=0 world=-16.2373,1145.7500,-2470.1857
+  = p3 conv=physx-incline prog=0.690277778 fwd=1 phys=0 grasp=0 world=342.5000,1258.6250,0.0000
+  = p4 conv=logical-down-spiral prog=0.109861120 fwd=1 phys=0 grasp=0 world=-16.2373,2542.2500,2470.1857
+  = p5 conv=physx-coarse-120-run prog=0.255185185 fwd=1 phys=0 grasp=0 world=-440.6667,948.0000,6500.0000
+  = p6 conv=physx-covered-100-run prog=0.754629630 fwd=1 phys=0 grasp=0 world=458.3333,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.965740741 fwd=1 phys=0 grasp=0 world=-961.6667,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.965740741 fwd=1 phys=0 grasp=0 world=-961.6667,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.965740741 fwd=1 phys=0 grasp=0 world=-961.6667,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.678888889 fwd=1 phys=0 grasp=0 world=-1477.9999,948.0000,6500.0000
+  = p11 conv=physx-covered-100-run prog=0.087962963 fwd=1 phys=0 grasp=0 world=-741.6667,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-source prog=0.421296296 fwd=1 phys=0 grasp=0 world=-1941.6667,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.236574074 fwd=1 phys=0 grasp=0 world=-2274.1667,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.236574074 fwd=1 phys=0 grasp=0 world=-2274.1667,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.236574074 fwd=1 phys=0 grasp=0 world=-2274.1667,2740.0000,3200.0000
+  = p16 conv=physx-coarse-120-source prog=0.101111111 fwd=1 phys=0 grasp=0 world=-2518.0000,948.0000,6500.0000
+tick 528 products=16 dirty=0
+  = p1 conv=physx-covered-100-sink prog=0.444444444 fwd=1 phys=0 grasp=0 world=1700.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up prog=0.112955800 fwd=1 phys=0 grasp=0 world=-10.2889,1151.3204,-2435.6973
+  = p3 conv=physx-incline prog=0.709722222 fwd=1 phys=0 grasp=0 world=377.5000,1267.3750,0.0000
+  = p4 conv=logical-down-spiral prog=0.112955800 fwd=1 phys=0 grasp=0 world=-10.2889,2536.6794,2435.6973
+  = p5 conv=physx-coarse-120-run prog=0.269629630 fwd=1 phys=0 grasp=0 world=-414.6667,948.0000,6500.0000
+  = p6 conv=physx-covered-100-run prog=0.782407407 fwd=1 phys=0 grasp=0 world=508.3333,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up-source prog=0.985185185 fwd=1 phys=0 grasp=0 world=-926.6666,948.0000,-3200.0000
+  = p8 conv=physx-source prog=0.985185185 fwd=1 phys=0 grasp=0 world=-926.6666,948.0000,0.0000
+  = p9 conv=logical-down-source prog=0.985185185 fwd=1 phys=0 grasp=0 world=-926.6666,2740.0000,3200.0000
+  = p10 conv=physx-coarse-120-source prog=0.693333333 fwd=1 phys=0 grasp=0 world=-1452.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-run prog=0.115740741 fwd=1 phys=0 grasp=0 world=-691.6667,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-source prog=0.449074074 fwd=1 phys=0 grasp=0 world=-1891.6667,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.256018519 fwd=1 phys=0 grasp=0 world=-2239.1667,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.256018519 fwd=1 phys=0 grasp=0 world=-2239.1667,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.256018519 fwd=1 phys=0 grasp=0 world=-2239.1667,2740.0000,3200.0000
+  = p16 conv=physx-coarse-120-source prog=0.115555556 fwd=1 phys=0 grasp=0 world=-2492.0000,948.0000,6500.0000
+tick 533 products=16 dirty=1
+  > p7 physx-spiral-up-source->physx-spiral-up fwd=1 prog=0.000000000
+  > p8 physx-source->physx-incline fwd=1 prog=0.000000000
+  > p9 logical-down-source->logical-down-spiral fwd=1 prog=0.000000000
+tick 534 products=16 dirty=0
+  = p1 conv=physx-covered-100-sink prog=0.472222222 fwd=1 phys=0 grasp=0 world=1750.0000,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up prog=0.116050479 fwd=1 phys=0 grasp=0 world=-5.6858,1156.8909,-2401.0034
+  = p3 conv=physx-incline prog=0.729166667 fwd=1 phys=0 grasp=0 world=412.5000,1276.1250,0.0000
+  = p4 conv=logical-down-spiral prog=0.116050479 fwd=1 phys=0 grasp=0 world=-5.6858,2531.1091,2401.0034
+  = p5 conv=physx-coarse-120-run prog=0.284074074 fwd=1 phys=0 grasp=0 world=-388.6667,948.0000,6500.0000
+  = p6 conv=physx-covered-100-run prog=0.810185185 fwd=1 phys=0 grasp=0 world=558.3334,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up prog=0.000515780 fwd=1 phys=0 grasp=0 world=-894.1669,948.9284,-3199.9811
+  = p8 conv=physx-incline prog=0.003240741 fwd=1 phys=0 grasp=0 world=-894.1667,949.4583,0.0000
+  = p9 conv=logical-down-spiral prog=0.000515780 fwd=1 phys=0 grasp=0 world=-894.1669,2739.0715,3199.9811
+  = p10 conv=physx-coarse-120-source prog=0.707777778 fwd=1 phys=0 grasp=0 world=-1426.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-run prog=0.143518519 fwd=1 phys=0 grasp=0 world=-641.6667,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-source prog=0.476851852 fwd=1 phys=0 grasp=0 world=-1841.6667,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.275462963 fwd=1 phys=0 grasp=0 world=-2204.1667,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.275462963 fwd=1 phys=0 grasp=0 world=-2204.1667,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.275462963 fwd=1 phys=0 grasp=0 world=-2204.1667,2740.0000,3200.0000
+  = p16 conv=physx-coarse-120-source prog=0.130000000 fwd=1 phys=0 grasp=0 world=-2466.0000,948.0000,6500.0000
+tick 540 products=15 dirty=1
+  - p1 conv=physx-covered-100-sink prog=0.495370370 fwd=1 phys=0 grasp=0 world=1791.6666,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up prog=0.119145159 fwd=1 phys=0 grasp=0 world=-2.4350,1162.4613,-2366.1569
+  = p3 conv=physx-incline prog=0.748611111 fwd=1 phys=0 grasp=0 world=447.5000,1284.8750,0.0000
+  = p4 conv=logical-down-spiral prog=0.119145159 fwd=1 phys=0 grasp=0 world=-2.4350,2525.5388,2366.1569
+  = p5 conv=physx-coarse-120-run prog=0.298518519 fwd=1 phys=0 grasp=0 world=-362.6667,948.0000,6500.0000
+  = p6 conv=physx-covered-100-run prog=0.837962963 fwd=1 phys=0 grasp=0 world=608.3334,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up prog=0.003610459 fwd=1 phys=0 grasp=0 world=-859.1808,954.4988,-3199.0738
+  = p8 conv=physx-incline prog=0.022685185 fwd=1 phys=0 grasp=0 world=-859.1667,958.2083,0.0000
+  = p9 conv=logical-down-spiral prog=0.003610459 fwd=1 phys=0 grasp=0 world=-859.1808,2733.5012,3199.0738
+  = p10 conv=physx-coarse-120-source prog=0.722222222 fwd=1 phys=0 grasp=0 world=-1400.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-run prog=0.171296296 fwd=1 phys=0 grasp=0 world=-591.6667,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-source prog=0.504629630 fwd=1 phys=0 grasp=0 world=-1791.6667,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.294907407 fwd=1 phys=0 grasp=0 world=-2169.1667,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.294907407 fwd=1 phys=0 grasp=0 world=-2169.1667,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.294907407 fwd=1 phys=0 grasp=0 world=-2169.1667,2740.0000,3200.0000
+  = p16 conv=physx-coarse-120-source prog=0.144444444 fwd=1 phys=0 grasp=0 world=-2439.9999,948.0000,6500.0000
+tick 546 products=15 dirty=0
+  = p2 conv=physx-spiral-up prog=0.122239838 fwd=1 phys=0 grasp=0 world=-0.5415,1168.0317,-2331.2104
+  = p3 conv=physx-incline prog=0.768055556 fwd=1 phys=0 grasp=0 world=482.5000,1293.6250,0.0000
+  = p4 conv=logical-down-spiral prog=0.122239838 fwd=1 phys=0 grasp=0 world=-0.5415,2519.9683,2331.2104
+  = p5 conv=physx-coarse-120-run prog=0.312962963 fwd=1 phys=0 grasp=0 world=-336.6667,948.0000,6500.0000
+  = p6 conv=physx-covered-100-run prog=0.865740741 fwd=1 phys=0 grasp=0 world=658.3333,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up prog=0.006705139 fwd=1 phys=0 grasp=0 world=-824.2565,960.0693,-3196.8070
+  = p8 conv=physx-incline prog=0.042129630 fwd=1 phys=0 grasp=0 world=-824.1666,966.9583,0.0000
+  = p9 conv=logical-down-spiral prog=0.006705139 fwd=1 phys=0 grasp=0 world=-824.2565,2727.9307,3196.8070
+  = p10 conv=physx-coarse-120-source prog=0.736666667 fwd=1 phys=0 grasp=0 world=-1374.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-run prog=0.199074074 fwd=1 phys=0 grasp=0 world=-541.6666,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-source prog=0.532407407 fwd=1 phys=0 grasp=0 world=-1741.6667,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.314351852 fwd=1 phys=0 grasp=0 world=-2134.1667,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.314351852 fwd=1 phys=0 grasp=0 world=-2134.1667,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.314351852 fwd=1 phys=0 grasp=0 world=-2134.1667,2740.0000,3200.0000
+  = p16 conv=physx-coarse-120-source prog=0.158888889 fwd=1 phys=0 grasp=0 world=-2414.0000,948.0000,6500.0000
+tick 552 products=15 dirty=0
+  = p2 conv=physx-spiral-up prog=0.125334518 fwd=1 phys=0 grasp=0 world=-0.0081,1173.6022,-2296.2167
+  = p3 conv=physx-incline prog=0.787500000 fwd=1 phys=0 grasp=0 world=517.5001,1302.3750,0.0000
+  = p4 conv=logical-down-spiral prog=0.125334518 fwd=1 phys=0 grasp=0 world=-0.0081,2514.3979,2296.2167
+  = p5 conv=physx-coarse-120-run prog=0.327407407 fwd=1 phys=0 grasp=0 world=-310.6667,948.0000,6500.0000
+  = p6 conv=physx-covered-100-run prog=0.893518519 fwd=1 phys=0 grasp=0 world=708.3333,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up prog=0.009799818 fwd=1 phys=0 grasp=0 world=-789.4467,965.6396,-3193.1842
+  = p8 conv=physx-incline prog=0.061574074 fwd=1 phys=0 grasp=0 world=-789.1667,975.7083,0.0000
+  = p9 conv=logical-down-spiral prog=0.009799818 fwd=1 phys=0 grasp=0 world=-789.4467,2722.3604,3193.1842
+  = p10 conv=physx-coarse-120-source prog=0.751111111 fwd=1 phys=0 grasp=0 world=-1348.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-run prog=0.226851852 fwd=1 phys=0 grasp=0 world=-491.6667,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-source prog=0.560185185 fwd=1 phys=0 grasp=0 world=-1691.6666,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.333796296 fwd=1 phys=0 grasp=0 world=-2099.1667,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.333796296 fwd=1 phys=0 grasp=0 world=-2099.1667,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.333796296 fwd=1 phys=0 grasp=0 world=-2099.1667,2740.0000,3200.0000
+  = p16 conv=physx-coarse-120-source prog=0.173333333 fwd=1 phys=0 grasp=0 world=-2388.0000,948.0000,6500.0000
+tick 558 products=15 dirty=0
+  = p2 conv=physx-spiral-up prog=0.128429197 fwd=1 phys=0 grasp=0 world=-0.8357,1179.1726,-2261.2286
+  = p3 conv=physx-incline prog=0.806944444 fwd=1 phys=0 grasp=0 world=552.5000,1311.1250,0.0000
+  = p4 conv=logical-down-spiral prog=0.128429197 fwd=1 phys=0 grasp=0 world=-0.8357,2508.8274,2261.2286
+  = p5 conv=physx-coarse-120-run prog=0.341851852 fwd=1 phys=0 grasp=0 world=-284.6667,948.0000,6500.0000
+  = p6 conv=physx-covered-100-run prog=0.921296296 fwd=1 phys=0 grasp=0 world=758.3333,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up prog=0.012894498 fwd=1 phys=0 grasp=0 world=-754.8042,971.2101,-3188.2106
+  = p8 conv=physx-incline prog=0.081018519 fwd=1 phys=0 grasp=0 world=-754.1667,984.4583,0.0000
+  = p9 conv=logical-down-spiral prog=0.012894498 fwd=1 phys=0 grasp=0 world=-754.8042,2716.7898,3188.2106
+  = p10 conv=physx-coarse-120-source prog=0.765555556 fwd=1 phys=0 grasp=0 world=-1322.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-run prog=0.254629630 fwd=1 phys=0 grasp=0 world=-441.6667,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-source prog=0.587962963 fwd=1 phys=0 grasp=0 world=-1641.6666,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.353240741 fwd=1 phys=0 grasp=0 world=-2064.1667,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.353240741 fwd=1 phys=0 grasp=0 world=-2064.1667,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.353240741 fwd=1 phys=0 grasp=0 world=-2064.1667,2740.0000,3200.0000
+  = p16 conv=physx-coarse-120-source prog=0.187777778 fwd=1 phys=0 grasp=0 world=-2362.0001,948.0000,6500.0000
+tick 564 products=15 dirty=0
+  = p2 conv=physx-spiral-up prog=0.131523877 fwd=1 phys=0 grasp=0 world=-3.0229,1184.7429,-2226.2993
+  = p3 conv=physx-incline prog=0.826388889 fwd=1 phys=0 grasp=0 world=587.5000,1319.8750,0.0000
+  = p4 conv=logical-down-spiral prog=0.131523877 fwd=1 phys=0 grasp=0 world=-3.0229,2503.2571,2226.2993
+  = p5 conv=physx-coarse-120-run prog=0.356296296 fwd=1 phys=0 grasp=0 world=-258.6667,948.0000,6500.0000
+  = p6 conv=physx-covered-100-run prog=0.949074074 fwd=1 phys=0 grasp=0 world=808.3334,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up prog=0.015989177 fwd=1 phys=0 grasp=0 world=-720.3811,976.7805,-3181.8940
+  = p8 conv=physx-incline prog=0.100462963 fwd=1 phys=0 grasp=0 world=-719.1666,993.2083,0.0000
+  = p9 conv=logical-down-spiral prog=0.015989177 fwd=1 phys=0 grasp=0 world=-720.3811,2711.2195,3181.8940
+  = p10 conv=physx-coarse-120-source prog=0.780000000 fwd=1 phys=0 grasp=0 world=-1296.0001,948.0000,6500.0000
+  = p11 conv=physx-covered-100-run prog=0.282407407 fwd=1 phys=0 grasp=0 world=-391.6667,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-source prog=0.615740741 fwd=1 phys=0 grasp=0 world=-1591.6667,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.372685185 fwd=1 phys=0 grasp=0 world=-2029.1667,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.372685185 fwd=1 phys=0 grasp=0 world=-2029.1667,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.372685185 fwd=1 phys=0 grasp=0 world=-2029.1667,2740.0000,3200.0000
+  = p16 conv=physx-coarse-120-source prog=0.202222222 fwd=1 phys=0 grasp=0 world=-2336.0000,948.0000,6500.0000
+tick 570 products=15 dirty=0
+  = p2 conv=physx-spiral-up prog=0.134618556 fwd=1 phys=0 grasp=0 world=-6.5665,1190.3134,-2191.4814
+  = p3 conv=physx-incline prog=0.845833333 fwd=1 phys=0 grasp=0 world=622.5001,1328.6250,0.0000
+  = p4 conv=logical-down-spiral prog=0.134618556 fwd=1 phys=0 grasp=0 world=-6.5665,2497.6865,2191.4814
+  = p5 conv=physx-coarse-120-run prog=0.370740741 fwd=1 phys=0 grasp=0 world=-232.6667,948.0000,6500.0000
+  = p6 conv=physx-covered-100-run prog=0.976851852 fwd=1 phys=0 grasp=0 world=858.3334,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up prog=0.019083857 fwd=1 phys=0 grasp=0 world=-686.2297,982.3510,-3174.2438
+  = p8 conv=physx-incline prog=0.119907407 fwd=1 phys=0 grasp=0 world=-684.1667,1001.9583,0.0000
+  = p9 conv=logical-down-spiral prog=0.019083857 fwd=1 phys=0 grasp=0 world=-686.2297,2705.6492,3174.2438
+  = p10 conv=physx-coarse-120-source prog=0.794444444 fwd=1 phys=0 grasp=0 world=-1270.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-run prog=0.310185185 fwd=1 phys=0 grasp=0 world=-341.6667,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-source prog=0.643518519 fwd=1 phys=0 grasp=0 world=-1541.6667,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.392129630 fwd=1 phys=0 grasp=0 world=-1994.1667,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.392129630 fwd=1 phys=0 grasp=0 world=-1994.1667,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.392129630 fwd=1 phys=0 grasp=0 world=-1994.1667,2740.0000,3200.0000
+  = p16 conv=physx-coarse-120-source prog=0.216666667 fwd=1 phys=0 grasp=0 world=-2310.0000,948.0000,6500.0000
+tick 575 products=15 dirty=1
+  > p6 physx-covered-100-run->physx-covered-100-sink fwd=1 prog=0.000000000
+tick 576 products=16 dirty=1
+  + p17 conv=physx-covered-100-source prog=0.004629630 fwd=1 phys=0 grasp=0 world=-2691.6666,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up prog=0.137713235 fwd=1 phys=0 grasp=0 world=-11.4612,1195.8838,-2156.8274
+  = p3 conv=physx-incline prog=0.865277778 fwd=1 phys=0 grasp=0 world=657.5000,1337.3750,0.0000
+  = p4 conv=logical-down-spiral prog=0.137713235 fwd=1 phys=0 grasp=0 world=-11.4612,2492.1162,2156.8274
+  = p5 conv=physx-coarse-120-run prog=0.385185185 fwd=1 phys=0 grasp=0 world=-206.6667,948.0000,6500.0000
+  = p6 conv=physx-covered-100-sink prog=0.004629630 fwd=1 phys=0 grasp=0 world=908.3334,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up prog=0.022178536 fwd=1 phys=0 grasp=0 world=-652.4015,987.9214,-3165.2716
+  = p8 conv=physx-incline prog=0.139351852 fwd=1 phys=0 grasp=0 world=-649.1667,1010.7083,0.0000
+  = p9 conv=logical-down-spiral prog=0.022178536 fwd=1 phys=0 grasp=0 world=-652.4015,2700.0786,3165.2716
+  = p10 conv=physx-coarse-120-source prog=0.808888889 fwd=1 phys=0 grasp=0 world=-1243.9999,948.0000,6500.0000
+  = p11 conv=physx-covered-100-run prog=0.337962963 fwd=1 phys=0 grasp=0 world=-291.6667,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-source prog=0.671296296 fwd=1 phys=0 grasp=0 world=-1491.6667,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.411574074 fwd=1 phys=0 grasp=0 world=-1959.1667,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.411574074 fwd=1 phys=0 grasp=0 world=-1959.1667,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.411574074 fwd=1 phys=0 grasp=0 world=-1959.1667,2740.0000,3200.0000
+  = p16 conv=physx-coarse-120-source prog=0.231111111 fwd=1 phys=0 grasp=0 world=-2284.0000,948.0000,6500.0000
+  = p17 conv=physx-covered-100-source prog=0.004629630 fwd=1 phys=0 grasp=0 world=-2691.6666,948.0000,-6500.0000
+tick 582 products=16 dirty=0
+  = p2 conv=physx-spiral-up prog=0.140807915 fwd=1 phys=0 grasp=0 world=-17.6993,1201.4542,-2122.3903
+  = p3 conv=physx-incline prog=0.884722222 fwd=1 phys=0 grasp=0 world=692.5000,1346.1250,0.0000
+  = p4 conv=logical-down-spiral prog=0.140807915 fwd=1 phys=0 grasp=0 world=-17.6993,2486.5457,2122.3903
+  = p5 conv=physx-coarse-120-run prog=0.399629630 fwd=1 phys=0 grasp=0 world=-180.6667,948.0000,6500.0000
+  = p6 conv=physx-covered-100-sink prog=0.032407407 fwd=1 phys=0 grasp=0 world=958.3333,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up prog=0.025273216 fwd=1 phys=0 grasp=0 world=-618.9478,993.4918,-3154.9910
+  = p8 conv=physx-incline prog=0.158796296 fwd=1 phys=0 grasp=0 world=-614.1666,1019.4583,0.0000
+  = p9 conv=logical-down-spiral prog=0.025273216 fwd=1 phys=0 grasp=0 world=-618.9478,2694.5083,3154.9910
+  = p10 conv=physx-coarse-120-source prog=0.823333333 fwd=1 phys=0 grasp=0 world=-1218.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-run prog=0.365740741 fwd=1 phys=0 grasp=0 world=-241.6667,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-source prog=0.699074074 fwd=1 phys=0 grasp=0 world=-1441.6666,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.431018519 fwd=1 phys=0 grasp=0 world=-1924.1666,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.431018519 fwd=1 phys=0 grasp=0 world=-1924.1666,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.431018519 fwd=1 phys=0 grasp=0 world=-1924.1666,2740.0000,3200.0000
+  = p16 conv=physx-coarse-120-source prog=0.245555556 fwd=1 phys=0 grasp=0 world=-2258.0000,948.0000,6500.0000
+  = p17 conv=physx-covered-100-source prog=0.032407407 fwd=1 phys=0 grasp=0 world=-2641.6667,948.0000,-6500.0000
+tick 588 products=16 dirty=0
+  = p2 conv=physx-spiral-up prog=0.143902594 fwd=1 phys=0 grasp=0 world=-25.2717,1207.0247,-2088.2213
+  = p3 conv=physx-incline prog=0.904166667 fwd=1 phys=0 grasp=0 world=727.4999,1354.8750,0.0000
+  = p4 conv=logical-down-spiral prog=0.143902594 fwd=1 phys=0 grasp=0 world=-25.2717,2480.9753,2088.2213
+  = p5 conv=physx-coarse-120-run prog=0.414074074 fwd=1 phys=0 grasp=0 world=-154.6667,948.0000,6500.0000
+  = p6 conv=physx-covered-100-sink prog=0.060185185 fwd=1 phys=0 grasp=0 world=1008.3334,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up prog=0.028367895 fwd=1 phys=0 grasp=0 world=-585.9190,999.0622,-3143.4175
+  = p8 conv=physx-incline prog=0.178240741 fwd=1 phys=0 grasp=0 world=-579.1667,1028.2083,0.0000
+  = p9 conv=logical-down-spiral prog=0.028367895 fwd=1 phys=0 grasp=0 world=-585.9190,2688.9377,3143.4175
+  = p10 conv=physx-coarse-120-source prog=0.837777778 fwd=1 phys=0 grasp=0 world=-1192.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-run prog=0.393518519 fwd=1 phys=0 grasp=0 world=-191.6667,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-source prog=0.726851852 fwd=1 phys=0 grasp=0 world=-1391.6666,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.450462963 fwd=1 phys=0 grasp=0 world=-1889.1667,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.450462963 fwd=1 phys=0 grasp=0 world=-1889.1667,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.450462963 fwd=1 phys=0 grasp=0 world=-1889.1667,2740.0000,3200.0000
+  = p16 conv=physx-coarse-120-source prog=0.260000000 fwd=1 phys=0 grasp=0 world=-2232.0000,948.0000,6500.0000
+  = p17 conv=physx-covered-100-source prog=0.060185185 fwd=1 phys=0 grasp=0 world=-2591.6666,948.0000,-6500.0000
+tick 594 products=16 dirty=0
+  = p2 conv=physx-spiral-up prog=0.146997274 fwd=1 phys=0 grasp=0 world=-34.1669,1212.5951,-2054.3729
+  = p3 conv=physx-incline prog=0.923611111 fwd=1 phys=0 grasp=0 world=762.5000,1363.6250,0.0000
+  = p4 conv=logical-down-spiral prog=0.146997274 fwd=1 phys=0 grasp=0 world=-34.1669,2475.4048,2054.3729
+  = p5 conv=physx-coarse-120-run prog=0.428518519 fwd=1 phys=0 grasp=0 world=-128.6667,948.0000,6500.0000
+  = p6 conv=physx-covered-100-sink prog=0.087962963 fwd=1 phys=0 grasp=0 world=1058.3333,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up prog=0.031462574 fwd=1 phys=0 grasp=0 world=-553.3651,1004.6326,-3130.5686
+  = p8 conv=physx-incline prog=0.197685185 fwd=1 phys=0 grasp=0 world=-544.1667,1036.9583,0.0000
+  = p9 conv=logical-down-spiral prog=0.031462574 fwd=1 phys=0 grasp=0 world=-553.3651,2683.3674,3130.5686
+  = p10 conv=physx-coarse-120-source prog=0.852222222 fwd=1 phys=0 grasp=0 world=-1166.0001,948.0000,6500.0000
+  = p11 conv=physx-covered-100-run prog=0.421296296 fwd=1 phys=0 grasp=0 world=-141.6667,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-source prog=0.754629630 fwd=1 phys=0 grasp=0 world=-1341.6667,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.469907407 fwd=1 phys=0 grasp=0 world=-1854.1667,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.469907407 fwd=1 phys=0 grasp=0 world=-1854.1667,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.469907407 fwd=1 phys=0 grasp=0 world=-1854.1667,2740.0000,3200.0000
+  = p16 conv=physx-coarse-120-source prog=0.274444444 fwd=1 phys=0 grasp=0 world=-2206.0000,948.0000,6500.0000
+  = p17 conv=physx-covered-100-source prog=0.087962963 fwd=1 phys=0 grasp=0 world=-2541.6667,948.0000,-6500.0000
+tick 600 products=16 dirty=0
+  = p2 conv=physx-spiral-up prog=0.150091953 fwd=1 phys=0 grasp=0 world=-44.3712,1218.1655,-2020.8959
+  = p3 conv=physx-incline prog=0.943055556 fwd=1 phys=0 grasp=0 world=797.5000,1372.3750,0.0000
+  = p4 conv=logical-down-spiral prog=0.150091953 fwd=1 phys=0 grasp=0 world=-44.3712,2469.8345,2020.8959
+  = p5 conv=physx-coarse-120-run prog=0.442962963 fwd=1 phys=0 grasp=0 world=-102.6666,948.0000,6500.0000
+  = p6 conv=physx-covered-100-sink prog=0.115740741 fwd=1 phys=0 grasp=0 world=1108.3333,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up prog=0.034557254 fwd=1 phys=0 grasp=0 world=-521.3354,1010.2031,-3116.4637
+  = p8 conv=physx-incline prog=0.217129630 fwd=1 phys=0 grasp=0 world=-509.1666,1045.7083,0.0000
+  = p9 conv=logical-down-spiral prog=0.034557254 fwd=1 phys=0 grasp=0 world=-521.3354,2677.7969,3116.4637
+  = p10 conv=physx-coarse-120-source prog=0.866666667 fwd=1 phys=0 grasp=0 world=-1140.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-run prog=0.449074074 fwd=1 phys=0 grasp=0 world=-91.6667,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-source prog=0.782407407 fwd=1 phys=0 grasp=0 world=-1291.6667,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.489351852 fwd=1 phys=0 grasp=0 world=-1819.1667,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.489351852 fwd=1 phys=0 grasp=0 world=-1819.1667,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.489351852 fwd=1 phys=0 grasp=0 world=-1819.1667,2740.0000,3200.0000
+  = p16 conv=physx-coarse-120-source prog=0.288888889 fwd=1 phys=0 grasp=0 world=-2180.0000,948.0000,6500.0000
+  = p17 conv=physx-covered-100-source prog=0.115740741 fwd=1 phys=0 grasp=0 world=-2491.6667,948.0000,-6500.0000
+tick 606 products=16 dirty=0
+  = p2 conv=physx-spiral-up prog=0.153186633 fwd=1 phys=0 grasp=0 world=-55.8695,1223.7360,-1987.8407
+  = p3 conv=physx-incline prog=0.962500000 fwd=1 phys=0 grasp=0 world=832.4999,1381.1250,0.0000
+  = p4 conv=logical-down-spiral prog=0.153186633 fwd=1 phys=0 grasp=0 world=-55.8695,2464.2642,1987.8407
+  = p5 conv=physx-coarse-120-run prog=0.457407407 fwd=1 phys=0 grasp=0 world=-76.6667,948.0000,6500.0000
+  = p6 conv=physx-covered-100-sink prog=0.143518519 fwd=1 phys=0 grasp=0 world=1158.3333,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up prog=0.037651933 fwd=1 phys=0 grasp=0 world=-489.8784,1015.7735,-3101.1243
+  = p8 conv=physx-incline prog=0.236574074 fwd=1 phys=0 grasp=0 world=-474.1667,1054.4583,0.0000
+  = p9 conv=logical-down-spiral prog=0.037651933 fwd=1 phys=0 grasp=0 world=-489.8784,2672.2266,3101.1243
+  = p10 conv=physx-coarse-120-source prog=0.881111111 fwd=1 phys=0 grasp=0 world=-1114.0001,948.0000,6500.0000
+  = p11 conv=physx-covered-100-run prog=0.476851852 fwd=1 phys=0 grasp=0 world=-41.6667,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-source prog=0.810185185 fwd=1 phys=0 grasp=0 world=-1241.6666,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.508796296 fwd=1 phys=0 grasp=0 world=-1784.1667,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.508796296 fwd=1 phys=0 grasp=0 world=-1784.1667,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.508796296 fwd=1 phys=0 grasp=0 world=-1784.1667,2740.0000,3200.0000
+  = p16 conv=physx-coarse-120-source prog=0.303333333 fwd=1 phys=0 grasp=0 world=-2154.0000,948.0000,6500.0000
+  = p17 conv=physx-covered-100-source prog=0.143518519 fwd=1 phys=0 grasp=0 world=-2441.6667,948.0000,-6500.0000
+tick 612 products=16 dirty=0
+  = p2 conv=physx-spiral-up prog=0.156281312 fwd=1 phys=0 grasp=0 world=-68.6442,1229.3064,-1955.2578
+  = p3 conv=physx-incline prog=0.981944444 fwd=1 phys=0 grasp=0 world=867.5000,1389.8750,0.0000
+  = p4 conv=logical-down-spiral prog=0.156281312 fwd=1 phys=0 grasp=0 world=-68.6442,2458.6936,1955.2578
+  = p5 conv=physx-coarse-120-run prog=0.471851852 fwd=1 phys=0 grasp=0 world=-50.6667,948.0000,6500.0000
+  = p6 conv=physx-covered-100-sink prog=0.171296296 fwd=1 phys=0 grasp=0 world=1208.3333,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up prog=0.040746613 fwd=1 phys=0 grasp=0 world=-459.0414,1021.3439,-3084.5734
+  = p8 conv=physx-incline prog=0.256018519 fwd=1 phys=0 grasp=0 world=-439.1667,1063.2083,0.0000
+  = p9 conv=logical-down-spiral prog=0.040746613 fwd=1 phys=0 grasp=0 world=-459.0414,2666.6560,3084.5734
+  = p10 conv=physx-coarse-120-source prog=0.895555556 fwd=1 phys=0 grasp=0 world=-1088.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-run prog=0.504629630 fwd=1 phys=0 grasp=0 world=8.3333,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-source prog=0.837962963 fwd=1 phys=0 grasp=0 world=-1191.6666,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.528240741 fwd=1 phys=0 grasp=0 world=-1749.1667,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.528240741 fwd=1 phys=0 grasp=0 world=-1749.1667,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.528240741 fwd=1 phys=0 grasp=0 world=-1749.1667,2740.0000,3200.0000
+  = p16 conv=physx-coarse-120-source prog=0.317777778 fwd=1 phys=0 grasp=0 world=-2128.0000,948.0000,6500.0000
+  = p17 conv=physx-covered-100-source prog=0.171296296 fwd=1 phys=0 grasp=0 world=-2391.6667,948.0000,-6500.0000
+tick 618 products=16 dirty=1
+  > p3 physx-incline->physx-sink fwd=1 prog=0.000000000
+  = p2 conv=physx-spiral-up prog=0.159375992 fwd=1 phys=0 grasp=0 world=-82.6761,1234.8768,-1923.1959
+  = p3 conv=physx-sink prog=0.000000000 fwd=1 phys=0 grasp=0 world=900.0000,1398.0000,0.0000
+  = p4 conv=logical-down-spiral prog=0.159375992 fwd=1 phys=0 grasp=0 world=-82.6761,2453.1233,1923.1959
+  = p5 conv=physx-coarse-120-run prog=0.486296296 fwd=1 phys=0 grasp=0 world=-24.6667,948.0000,6500.0000
+  = p6 conv=physx-covered-100-sink prog=0.199074074 fwd=1 phys=0 grasp=0 world=1258.3334,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up prog=0.043841292 fwd=1 phys=0 grasp=0 world=-428.8714,1026.9143,-3066.8362
+  = p8 conv=physx-incline prog=0.275462963 fwd=1 phys=0 grasp=0 world=-404.1667,1071.9583,0.0000
+  = p9 conv=logical-down-spiral prog=0.043841292 fwd=1 phys=0 grasp=0 world=-428.8714,2661.0857,3066.8362
+  = p10 conv=physx-coarse-120-source prog=0.910000000 fwd=1 phys=0 grasp=0 world=-1061.9999,948.0000,6500.0000
+  = p11 conv=physx-covered-100-run prog=0.532407407 fwd=1 phys=0 grasp=0 world=58.3333,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-source prog=0.865740741 fwd=1 phys=0 grasp=0 world=-1141.6667,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.547685185 fwd=1 phys=0 grasp=0 world=-1714.1666,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.547685185 fwd=1 phys=0 grasp=0 world=-1714.1666,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.547685185 fwd=1 phys=0 grasp=0 world=-1714.1666,2740.0000,3200.0000
+  = p16 conv=physx-coarse-120-source prog=0.332222222 fwd=1 phys=0 grasp=0 world=-2102.0000,948.0000,6500.0000
+  = p17 conv=physx-covered-100-source prog=0.199074074 fwd=1 phys=0 grasp=0 world=-2341.6666,948.0000,-6500.0000
+tick 624 products=16 dirty=0
+  = p2 conv=physx-spiral-up prog=0.162470671 fwd=1 phys=0 grasp=0 world=-97.9438,1240.4473,-1891.7041
+  = p3 conv=physx-sink prog=0.019444444 fwd=1 phys=0 grasp=0 world=935.0000,1398.0000,0.0000
+  = p4 conv=logical-down-spiral prog=0.162470671 fwd=1 phys=0 grasp=0 world=-97.9438,2447.5527,1891.7041
+  = p5 conv=physx-coarse-120-run prog=0.500740741 fwd=1 phys=0 grasp=0 world=1.3334,948.0000,6500.0000
+  = p6 conv=physx-covered-100-sink prog=0.226851852 fwd=1 phys=0 grasp=0 world=1308.3333,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up prog=0.046935972 fwd=1 phys=0 grasp=0 world=-399.4137,1032.4847,-3047.9393
+  = p8 conv=physx-incline prog=0.294907407 fwd=1 phys=0 grasp=0 world=-369.1667,1080.7083,0.0000
+  = p9 conv=logical-down-spiral prog=0.046935972 fwd=1 phys=0 grasp=0 world=-399.4137,2655.5151,3047.9393
+  = p10 conv=physx-coarse-120-source prog=0.924444444 fwd=1 phys=0 grasp=0 world=-1036.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-run prog=0.560185185 fwd=1 phys=0 grasp=0 world=108.3334,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-source prog=0.893518519 fwd=1 phys=0 grasp=0 world=-1091.6667,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.567129630 fwd=1 phys=0 grasp=0 world=-1679.1667,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.567129630 fwd=1 phys=0 grasp=0 world=-1679.1667,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.567129630 fwd=1 phys=0 grasp=0 world=-1679.1667,2740.0000,3200.0000
+  = p16 conv=physx-coarse-120-source prog=0.346666667 fwd=1 phys=0 grasp=0 world=-2076.0000,948.0000,6500.0000
+  = p17 conv=physx-covered-100-source prog=0.226851852 fwd=1 phys=0 grasp=0 world=-2291.6667,948.0000,-6500.0000
+tick 630 products=16 dirty=0
+  = p2 conv=physx-spiral-up prog=0.165565351 fwd=1 phys=0 grasp=0 world=-114.4244,1246.0176,-1860.8295
+  = p3 conv=physx-sink prog=0.038888889 fwd=1 phys=0 grasp=0 world=970.0000,1398.0000,0.0000
+  = p4 conv=logical-down-spiral prog=0.165565351 fwd=1 phys=0 grasp=0 world=-114.4244,2441.9824,1860.8295
+  = p5 conv=physx-coarse-120-run prog=0.515185185 fwd=1 phys=0 grasp=0 world=27.3333,948.0000,6500.0000
+  = p6 conv=physx-covered-100-sink prog=0.254629630 fwd=1 phys=0 grasp=0 world=1358.3333,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up prog=0.050030651 fwd=1 phys=0 grasp=0 world=-370.7130,1038.0552,-3027.9115
+  = p8 conv=physx-incline prog=0.314351852 fwd=1 phys=0 grasp=0 world=-334.1667,1089.4584,0.0000
+  = p9 conv=logical-down-spiral prog=0.050030651 fwd=1 phys=0 grasp=0 world=-370.7130,2649.9448,3027.9115
+  = p10 conv=physx-coarse-120-source prog=0.938888889 fwd=1 phys=0 grasp=0 world=-1009.9999,948.0000,6500.0000
+  = p11 conv=physx-covered-100-run prog=0.587962963 fwd=1 phys=0 grasp=0 world=158.3334,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-source prog=0.921296296 fwd=1 phys=0 grasp=0 world=-1041.6667,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.586574074 fwd=1 phys=0 grasp=0 world=-1644.1667,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.586574074 fwd=1 phys=0 grasp=0 world=-1644.1667,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.586574074 fwd=1 phys=0 grasp=0 world=-1644.1667,2740.0000,3200.0000
+  = p16 conv=physx-coarse-120-source prog=0.361111111 fwd=1 phys=0 grasp=0 world=-2050.0000,948.0000,6500.0000
+  = p17 conv=physx-covered-100-source prog=0.254629630 fwd=1 phys=0 grasp=0 world=-2241.6667,948.0000,-6500.0000
+tick 636 products=16 dirty=0
+  = p2 conv=physx-spiral-up prog=0.168660030 fwd=1 phys=0 grasp=0 world=-132.0929,1251.5880,-1830.6190
+  = p3 conv=physx-sink prog=0.058333333 fwd=1 phys=0 grasp=0 world=1005.0000,1398.0000,0.0000
+  = p4 conv=logical-down-spiral prog=0.168660030 fwd=1 phys=0 grasp=0 world=-132.0929,2436.4119,1830.6190
+  = p5 conv=physx-coarse-120-run prog=0.529629630 fwd=1 phys=0 grasp=0 world=53.3334,948.0000,6500.0000
+  = p6 conv=physx-covered-100-sink prog=0.282407407 fwd=1 phys=0 grasp=0 world=1408.3333,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up prog=0.053125331 fwd=1 phys=0 grasp=0 world=-342.8127,1043.6256,-3006.7829
+  = p8 conv=physx-incline prog=0.333796296 fwd=1 phys=0 grasp=0 world=-299.1667,1098.2084,0.0000
+  = p9 conv=logical-down-spiral prog=0.053125331 fwd=1 phys=0 grasp=0 world=-342.8127,2644.3745,3006.7829
+  = p10 conv=physx-coarse-120-source prog=0.953333333 fwd=1 phys=0 grasp=0 world=-984.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-run prog=0.615740741 fwd=1 phys=0 grasp=0 world=208.3333,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-source prog=0.949074074 fwd=1 phys=0 grasp=0 world=-991.6666,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.606018519 fwd=1 phys=0 grasp=0 world=-1609.1666,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.606018519 fwd=1 phys=0 grasp=0 world=-1609.1666,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.606018519 fwd=1 phys=0 grasp=0 world=-1609.1666,2740.0000,3200.0000
+  = p16 conv=physx-coarse-120-source prog=0.375555556 fwd=1 phys=0 grasp=0 world=-2024.0000,948.0000,6500.0000
+  = p17 conv=physx-covered-100-source prog=0.282407407 fwd=1 phys=0 grasp=0 world=-2191.6667,948.0000,-6500.0000
+tick 642 products=16 dirty=0
+  = p2 conv=physx-spiral-up prog=0.171754709 fwd=1 phys=0 grasp=0 world=-150.9225,1257.1584,-1801.1185
+  = p3 conv=physx-sink prog=0.077777778 fwd=1 phys=0 grasp=0 world=1040.0000,1398.0000,0.0000
+  = p4 conv=logical-down-spiral prog=0.171754709 fwd=1 phys=0 grasp=0 world=-150.9225,2430.8416,1801.1185
+  = p5 conv=physx-coarse-120-run prog=0.544074074 fwd=1 phys=0 grasp=0 world=79.3333,948.0000,6500.0000
+  = p6 conv=physx-covered-100-sink prog=0.310185185 fwd=1 phys=0 grasp=0 world=1458.3333,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up prog=0.056220010 fwd=1 phys=0 grasp=0 world=-315.7549,1049.1960,-2984.5856
+  = p8 conv=physx-incline prog=0.353240741 fwd=1 phys=0 grasp=0 world=-264.1667,1106.9584,0.0000
+  = p9 conv=logical-down-spiral prog=0.056220010 fwd=1 phys=0 grasp=0 world=-315.7549,2638.8040,2984.5856
+  = p10 conv=physx-coarse-120-source prog=0.967777778 fwd=1 phys=0 grasp=0 world=-958.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-run prog=0.643518519 fwd=1 phys=0 grasp=0 world=258.3333,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-source prog=0.976851852 fwd=1 phys=0 grasp=0 world=-941.6666,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.625462963 fwd=1 phys=0 grasp=0 world=-1574.1667,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.625462963 fwd=1 phys=0 grasp=0 world=-1574.1667,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.625462963 fwd=1 phys=0 grasp=0 world=-1574.1667,2740.0000,3200.0000
+  = p16 conv=physx-coarse-120-source prog=0.390000000 fwd=1 phys=0 grasp=0 world=-1998.0000,948.0000,6500.0000
+  = p17 conv=physx-covered-100-source prog=0.310185185 fwd=1 phys=0 grasp=0 world=-2141.6667,948.0000,-6500.0000
+tick 647 products=16 dirty=1
+  > p12 physx-covered-100-source->physx-covered-100-run fwd=1 prog=0.000000000
+tick 648 products=16 dirty=0
+  = p2 conv=physx-spiral-up prog=0.174849389 fwd=1 phys=0 grasp=0 world=-170.8850,1262.7289,-1772.3723
+  = p3 conv=physx-sink prog=0.097222222 fwd=1 phys=0 grasp=0 world=1075.0000,1398.0000,0.0000
+  = p4 conv=logical-down-spiral prog=0.174849389 fwd=1 phys=0 grasp=0 world=-170.8850,2425.2710,1772.3723
+  = p5 conv=physx-coarse-120-run prog=0.558518519 fwd=1 phys=0 grasp=0 world=105.3334,948.0000,6500.0000
+  = p6 conv=physx-covered-100-sink prog=0.337962963 fwd=1 phys=0 grasp=0 world=1508.3333,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up prog=0.059314689 fwd=1 phys=0 grasp=0 world=-289.5805,1054.7664,-2961.3531
+  = p8 conv=physx-incline prog=0.372685185 fwd=1 phys=0 grasp=0 world=-229.1667,1115.7084,0.0000
+  = p9 conv=logical-down-spiral prog=0.059314689 fwd=1 phys=0 grasp=0 world=-289.5805,2633.2336,2961.3531
+  = p10 conv=physx-coarse-120-source prog=0.982222222 fwd=1 phys=0 grasp=0 world=-932.0001,948.0000,6500.0000
+  = p11 conv=physx-covered-100-run prog=0.671296296 fwd=1 phys=0 grasp=0 world=308.3333,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-run prog=0.004629630 fwd=1 phys=0 grasp=0 world=-891.6666,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.644907407 fwd=1 phys=0 grasp=0 world=-1539.1667,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.644907407 fwd=1 phys=0 grasp=0 world=-1539.1667,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.644907407 fwd=1 phys=0 grasp=0 world=-1539.1667,2740.0000,3200.0000
+  = p16 conv=physx-coarse-120-source prog=0.404444444 fwd=1 phys=0 grasp=0 world=-1972.0000,948.0000,6500.0000
+  = p17 conv=physx-covered-100-source prog=0.337962963 fwd=1 phys=0 grasp=0 world=-2091.6667,948.0000,-6500.0000
+tick 654 products=16 dirty=0
+  = p2 conv=physx-spiral-up prog=0.177944068 fwd=1 phys=0 grasp=0 world=-191.9500,1268.2993,-1744.4238
+  = p3 conv=physx-sink prog=0.116666667 fwd=1 phys=0 grasp=0 world=1110.0000,1398.0000,0.0000
+  = p4 conv=logical-down-spiral prog=0.177944068 fwd=1 phys=0 grasp=0 world=-191.9500,2419.7007,1744.4238
+  = p5 conv=physx-coarse-120-run prog=0.572962963 fwd=1 phys=0 grasp=0 world=131.3333,948.0000,6500.0000
+  = p6 conv=physx-covered-100-sink prog=0.365740741 fwd=1 phys=0 grasp=0 world=1558.3333,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up prog=0.062409369 fwd=1 phys=0 grasp=0 world=-264.3293,1060.3369,-2937.1205
+  = p8 conv=physx-incline prog=0.392129630 fwd=1 phys=0 grasp=0 world=-194.1667,1124.4584,0.0000
+  = p9 conv=logical-down-spiral prog=0.062409369 fwd=1 phys=0 grasp=0 world=-264.3293,2627.6631,2937.1205
+  = p10 conv=physx-coarse-120-source prog=0.996666667 fwd=1 phys=0 grasp=0 world=-906.0000,948.0000,6500.0000
+  = p11 conv=physx-covered-100-run prog=0.699074074 fwd=1 phys=0 grasp=0 world=358.3334,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-run prog=0.032407407 fwd=1 phys=0 grasp=0 world=-841.6667,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.664351852 fwd=1 phys=0 grasp=0 world=-1504.1666,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.664351852 fwd=1 phys=0 grasp=0 world=-1504.1666,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.664351852 fwd=1 phys=0 grasp=0 world=-1504.1666,2740.0000,3200.0000
+  = p16 conv=physx-coarse-120-source prog=0.418888889 fwd=1 phys=0 grasp=0 world=-1946.0000,948.0000,6500.0000
+  = p17 conv=physx-covered-100-source prog=0.365740741 fwd=1 phys=0 grasp=0 world=-2041.6667,948.0000,-6500.0000
+tick 656 products=16 dirty=1
+  > p10 physx-coarse-120-source->physx-coarse-120-run fwd=1 prog=0.000000000
+tick 660 products=16 dirty=0
+  = p2 conv=physx-spiral-up prog=0.181038748 fwd=1 phys=0 grasp=0 world=-214.0856,1273.8698,-1717.3156
+  = p3 conv=physx-sink prog=0.136111111 fwd=1 phys=0 grasp=0 world=1145.0000,1398.0000,0.0000
+  = p4 conv=logical-down-spiral prog=0.181038748 fwd=1 phys=0 grasp=0 world=-214.0856,2414.1304,1717.3156
+  = p5 conv=physx-coarse-120-run prog=0.587407407 fwd=1 phys=0 grasp=0 world=157.3333,948.0000,6500.0000
+  = p6 conv=physx-covered-100-sink prog=0.393518519 fwd=1 phys=0 grasp=0 world=1608.3333,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up prog=0.065504048 fwd=1 phys=0 grasp=0 world=-240.0392,1065.9073,-2911.9244
+  = p8 conv=physx-incline prog=0.411574074 fwd=1 phys=0 grasp=0 world=-159.1667,1133.2084,0.0000
+  = p9 conv=logical-down-spiral prog=0.065504048 fwd=1 phys=0 grasp=0 world=-240.0392,2622.0928,2911.9244
+  = p10 conv=physx-coarse-120-run prog=0.009629630 fwd=1 phys=0 grasp=0 world=-882.6666,948.0000,6500.0000
+  = p11 conv=physx-covered-100-run prog=0.726851852 fwd=1 phys=0 grasp=0 world=408.3334,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-run prog=0.060185185 fwd=1 phys=0 grasp=0 world=-791.6666,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.683796296 fwd=1 phys=0 grasp=0 world=-1469.1667,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.683796296 fwd=1 phys=0 grasp=0 world=-1469.1667,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.683796296 fwd=1 phys=0 grasp=0 world=-1469.1667,2740.0000,3200.0000
+  = p16 conv=physx-coarse-120-source prog=0.433333333 fwd=1 phys=0 grasp=0 world=-1920.0000,948.0000,6500.0000
+  = p17 conv=physx-covered-100-source prog=0.393518519 fwd=1 phys=0 grasp=0 world=-1991.6667,948.0000,-6500.0000
+tick 666 products=16 dirty=0
+  = p2 conv=physx-spiral-up prog=0.184133427 fwd=1 phys=0 grasp=0 world=-237.2585,1279.4402,-1691.0884
+  = p3 conv=physx-sink prog=0.155555556 fwd=1 phys=0 grasp=0 world=1180.0000,1398.0000,0.0000
+  = p4 conv=logical-down-spiral prog=0.184133427 fwd=1 phys=0 grasp=0 world=-237.2585,2408.5598,1691.0884
+  = p5 conv=physx-coarse-120-run prog=0.601851852 fwd=1 phys=0 grasp=0 world=183.3334,948.0000,6500.0000
+  = p6 conv=physx-covered-100-sink prog=0.421296296 fwd=1 phys=0 grasp=0 world=1658.3333,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up prog=0.068598728 fwd=1 phys=0 grasp=0 world=-216.7472,1071.4777,-2885.8031
+  = p8 conv=physx-incline prog=0.431018519 fwd=1 phys=0 grasp=0 world=-124.1666,1141.9584,0.0000
+  = p9 conv=logical-down-spiral prog=0.068598728 fwd=1 phys=0 grasp=0 world=-216.7472,2616.5222,2885.8031
+  = p10 conv=physx-coarse-120-run prog=0.024074074 fwd=1 phys=0 grasp=0 world=-856.6667,948.0000,6500.0000
+  = p11 conv=physx-covered-100-run prog=0.754629630 fwd=1 phys=0 grasp=0 world=458.3333,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-run prog=0.087962963 fwd=1 phys=0 grasp=0 world=-741.6667,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.703240741 fwd=1 phys=0 grasp=0 world=-1434.1667,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.703240741 fwd=1 phys=0 grasp=0 world=-1434.1667,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.703240741 fwd=1 phys=0 grasp=0 world=-1434.1667,2740.0000,3200.0000
+  = p16 conv=physx-coarse-120-source prog=0.447777778 fwd=1 phys=0 grasp=0 world=-1894.0000,948.0000,6500.0000
+  = p17 conv=physx-covered-100-source prog=0.421296296 fwd=1 phys=0 grasp=0 world=-1941.6667,948.0000,-6500.0000
+tick 672 products=16 dirty=0
+  = p2 conv=physx-spiral-up prog=0.187228107 fwd=1 phys=0 grasp=0 world=-261.4335,1285.0106,-1665.7819
+  = p3 conv=physx-sink prog=0.175000000 fwd=1 phys=0 grasp=0 world=1215.0000,1398.0000,0.0000
+  = p4 conv=logical-down-spiral prog=0.187228107 fwd=1 phys=0 grasp=0 world=-261.4335,2402.9895,1665.7819
+  = p5 conv=physx-coarse-120-run prog=0.616296296 fwd=1 phys=0 grasp=0 world=209.3333,948.0000,6500.0000
+  = p6 conv=physx-covered-100-sink prog=0.449074074 fwd=1 phys=0 grasp=0 world=1708.3333,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up prog=0.071693407 fwd=1 phys=0 grasp=0 world=-194.4882,1077.0482,-2858.7960
+  = p8 conv=physx-incline prog=0.450462963 fwd=1 phys=0 grasp=0 world=-89.1667,1150.7084,0.0000
+  = p9 conv=logical-down-spiral prog=0.071693407 fwd=1 phys=0 grasp=0 world=-194.4882,2610.9519,2858.7960
+  = p10 conv=physx-coarse-120-run prog=0.038518519 fwd=1 phys=0 grasp=0 world=-830.6667,948.0000,6500.0000
+  = p11 conv=physx-covered-100-run prog=0.782407407 fwd=1 phys=0 grasp=0 world=508.3333,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-run prog=0.115740741 fwd=1 phys=0 grasp=0 world=-691.6667,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.722685185 fwd=1 phys=0 grasp=0 world=-1399.1667,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.722685185 fwd=1 phys=0 grasp=0 world=-1399.1667,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.722685185 fwd=1 phys=0 grasp=0 world=-1399.1667,2740.0000,3200.0000
+  = p16 conv=physx-coarse-120-source prog=0.462222222 fwd=1 phys=0 grasp=0 world=-1868.0000,948.0000,6500.0000
+  = p17 conv=physx-covered-100-source prog=0.449074074 fwd=1 phys=0 grasp=0 world=-1891.6667,948.0000,-6500.0000
+tick 675 products=19 dirty=3
+  + p18 conv=physx-spiral-up-source prog=0.003240741 fwd=1 phys=0 grasp=0 world=-2694.1667,948.0000,-3200.0000
+  + p19 conv=physx-source prog=0.003240741 fwd=1 phys=0 grasp=0 world=-2694.1667,948.0000,0.0000
+  + p20 conv=logical-down-source prog=0.003240741 fwd=1 phys=0 grasp=0 world=-2694.1667,2740.0000,3200.0000
+tick 678 products=19 dirty=0
+  = p2 conv=physx-spiral-up prog=0.190322786 fwd=1 phys=0 grasp=0 world=-286.5740,1290.5811,-1641.4347
+  = p3 conv=physx-sink prog=0.194444444 fwd=1 phys=0 grasp=0 world=1250.0000,1398.0000,0.0000
+  = p4 conv=logical-down-spiral prog=0.190322786 fwd=1 phys=0 grasp=0 world=-286.5740,2397.4189,1641.4347
+  = p5 conv=physx-coarse-120-run prog=0.630740741 fwd=1 phys=0 grasp=0 world=235.3334,948.0000,6500.0000
+  = p6 conv=physx-covered-100-sink prog=0.476851852 fwd=1 phys=0 grasp=0 world=1758.3333,948.0000,-6500.0000
+  = p7 conv=physx-spiral-up prog=0.074788087 fwd=1 phys=0 grasp=0 world=-173.2962,1082.6185,-2830.9438
+  = p8 conv=physx-incline prog=0.469907407 fwd=1 phys=0 grasp=0 world=-54.1667,1159.4584,0.0000
+  = p9 conv=logical-down-spiral prog=0.074788087 fwd=1 phys=0 grasp=0 world=-173.2962,2605.3813,2830.9438
+  = p10 conv=physx-coarse-120-run prog=0.052962963 fwd=1 phys=0 grasp=0 world=-804.6667,948.0000,6500.0000
+  = p11 conv=physx-covered-100-run prog=0.810185185 fwd=1 phys=0 grasp=0 world=558.3334,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-run prog=0.143518519 fwd=1 phys=0 grasp=0 world=-641.6667,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.742129630 fwd=1 phys=0 grasp=0 world=-1364.1667,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.742129630 fwd=1 phys=0 grasp=0 world=-1364.1667,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.742129630 fwd=1 phys=0 grasp=0 world=-1364.1667,2740.0000,3200.0000
+  = p16 conv=physx-coarse-120-source prog=0.476666667 fwd=1 phys=0 grasp=0 world=-1842.0000,948.0000,6500.0000
+  = p17 conv=physx-covered-100-source prog=0.476851852 fwd=1 phys=0 grasp=0 world=-1841.6667,948.0000,-6500.0000
+  = p18 conv=physx-spiral-up-source prog=0.012962963 fwd=1 phys=0 grasp=0 world=-2676.6667,948.0000,-3200.0000
+  = p19 conv=physx-source prog=0.012962963 fwd=1 phys=0 grasp=0 world=-2676.6667,948.0000,0.0000
+  = p20 conv=logical-down-source prog=0.012962963 fwd=1 phys=0 grasp=0 world=-2676.6667,2740.0000,3200.0000
+tick 683 products=18 dirty=1
+  - p6 conv=physx-covered-100-sink prog=0.495370370 fwd=1 phys=0 grasp=0 world=1791.6666,948.0000,-6500.0000
+tick 684 products=18 dirty=0
+  = p2 conv=physx-spiral-up prog=0.193417466 fwd=1 phys=0 grasp=0 world=-312.6423,1296.1515,-1618.0831
+  = p3 conv=physx-sink prog=0.213888889 fwd=1 phys=0 grasp=0 world=1285.0000,1398.0000,0.0000
+  = p4 conv=logical-down-spiral prog=0.193417466 fwd=1 phys=0 grasp=0 world=-312.6423,2391.8486,1618.0831
+  = p5 conv=physx-coarse-120-run prog=0.645185185 fwd=1 phys=0 grasp=0 world=261.3333,948.0000,6500.0000
+  = p7 conv=physx-spiral-up prog=0.077882766 fwd=1 phys=0 grasp=0 world=-153.2030,1088.1890,-2802.2888
+  = p8 conv=physx-incline prog=0.489351852 fwd=1 phys=0 grasp=0 world=-19.1667,1168.2084,0.0000
+  = p9 conv=logical-down-spiral prog=0.077882766 fwd=1 phys=0 grasp=0 world=-153.2030,2599.8110,2802.2888
+  = p10 conv=physx-coarse-120-run prog=0.067407407 fwd=1 phys=0 grasp=0 world=-778.6667,948.0000,6500.0000
+  = p11 conv=physx-covered-100-run prog=0.837962963 fwd=1 phys=0 grasp=0 world=608.3334,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-run prog=0.171296296 fwd=1 phys=0 grasp=0 world=-591.6667,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.761574074 fwd=1 phys=0 grasp=0 world=-1329.1666,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.761574074 fwd=1 phys=0 grasp=0 world=-1329.1666,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.761574074 fwd=1 phys=0 grasp=0 world=-1329.1666,2740.0000,3200.0000
+  = p16 conv=physx-coarse-120-source prog=0.491111111 fwd=1 phys=0 grasp=0 world=-1816.0000,948.0000,6500.0000
+  = p17 conv=physx-covered-100-source prog=0.504629630 fwd=1 phys=0 grasp=0 world=-1791.6667,948.0000,-6500.0000
+  = p18 conv=physx-spiral-up-source prog=0.032407407 fwd=1 phys=0 grasp=0 world=-2641.6667,948.0000,-3200.0000
+  = p19 conv=physx-source prog=0.032407407 fwd=1 phys=0 grasp=0 world=-2641.6667,948.0000,0.0000
+  = p20 conv=logical-down-source prog=0.032407407 fwd=1 phys=0 grasp=0 world=-2641.6667,2740.0000,3200.0000
+tick 690 products=18 dirty=0
+  = p2 conv=physx-spiral-up prog=0.196512145 fwd=1 phys=0 grasp=0 world=-339.5987,1301.7218,-1595.7627
+  = p3 conv=physx-sink prog=0.233333333 fwd=1 phys=0 grasp=0 world=1320.0000,1398.0000,0.0000
+  = p4 conv=logical-down-spiral prog=0.196512145 fwd=1 phys=0 grasp=0 world=-339.5987,2386.2781,1595.7627
+  = p5 conv=physx-coarse-120-run prog=0.659629630 fwd=1 phys=0 grasp=0 world=287.3333,948.0000,6500.0000
+  = p7 conv=physx-spiral-up prog=0.080977446 fwd=1 phys=0 grasp=0 world=-134.2391,1093.7594,-2772.8741
+  = p8 conv=physx-incline prog=0.508796296 fwd=1 phys=0 grasp=0 world=15.8333,1176.9584,0.0000
+  = p9 conv=logical-down-spiral prog=0.080977446 fwd=1 phys=0 grasp=0 world=-134.2391,2594.2405,2772.8741
+  = p10 conv=physx-coarse-120-run prog=0.081851852 fwd=1 phys=0 grasp=0 world=-752.6667,948.0000,6500.0000
+  = p11 conv=physx-covered-100-run prog=0.865740741 fwd=1 phys=0 grasp=0 world=658.3333,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-run prog=0.199074074 fwd=1 phys=0 grasp=0 world=-541.6666,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.781018519 fwd=1 phys=0 grasp=0 world=-1294.1667,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.781018519 fwd=1 phys=0 grasp=0 world=-1294.1667,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.781018519 fwd=1 phys=0 grasp=0 world=-1294.1667,2740.0000,3200.0000
+  = p16 conv=physx-coarse-120-source prog=0.505555556 fwd=1 phys=0 grasp=0 world=-1790.0000,948.0000,6500.0000
+  = p17 conv=physx-covered-100-source prog=0.532407407 fwd=1 phys=0 grasp=0 world=-1741.6667,948.0000,-6500.0000
+  = p18 conv=physx-spiral-up-source prog=0.051851852 fwd=1 phys=0 grasp=0 world=-2606.6667,948.0000,-3200.0000
+  = p19 conv=physx-source prog=0.051851852 fwd=1 phys=0 grasp=0 world=-2606.6667,948.0000,0.0000
+  = p20 conv=logical-down-source prog=0.051851852 fwd=1 phys=0 grasp=0 world=-2606.6667,2740.0000,3200.0000
+tick 696 products=18 dirty=0
+  = p2 conv=physx-spiral-up prog=0.199606824 fwd=1 phys=0 grasp=0 world=-367.4025,1307.2922,-1574.5073
+  = p3 conv=physx-sink prog=0.252777778 fwd=1 phys=0 grasp=0 world=1355.0000,1398.0000,0.0000
+  = p4 conv=logical-down-spiral prog=0.199606824 fwd=1 phys=0 grasp=0 world=-367.4025,2380.7078,1574.5073
+  = p5 conv=physx-coarse-120-run prog=0.674074074 fwd=1 phys=0 grasp=0 world=313.3333,948.0000,6500.0000
+  = p7 conv=physx-spiral-up prog=0.084072125 fwd=1 phys=0 grasp=0 world=-116.4332,1099.3298,-2742.7445
+  = p8 conv=physx-incline prog=0.528240741 fwd=1 phys=0 grasp=0 world=50.8333,1185.7084,0.0000
+  = p9 conv=logical-down-spiral prog=0.084072125 fwd=1 phys=0 grasp=0 world=-116.4332,2588.6702,2742.7445
+  = p10 conv=physx-coarse-120-run prog=0.096296296 fwd=1 phys=0 grasp=0 world=-726.6666,948.0000,6500.0000
+  = p11 conv=physx-covered-100-run prog=0.893518519 fwd=1 phys=0 grasp=0 world=708.3333,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-run prog=0.226851852 fwd=1 phys=0 grasp=0 world=-491.6667,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.800462963 fwd=1 phys=0 grasp=0 world=-1259.1667,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.800462963 fwd=1 phys=0 grasp=0 world=-1259.1667,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.800462963 fwd=1 phys=0 grasp=0 world=-1259.1667,2740.0000,3200.0000
+  = p16 conv=physx-coarse-120-source prog=0.520000000 fwd=1 phys=0 grasp=0 world=-1764.0000,948.0000,6500.0000
+  = p17 conv=physx-covered-100-source prog=0.560185185 fwd=1 phys=0 grasp=0 world=-1691.6666,948.0000,-6500.0000
+  = p18 conv=physx-spiral-up-source prog=0.071296296 fwd=1 phys=0 grasp=0 world=-2571.6666,948.0000,-3200.0000
+  = p19 conv=physx-source prog=0.071296296 fwd=1 phys=0 grasp=0 world=-2571.6666,948.0000,0.0000
+  = p20 conv=logical-down-source prog=0.071296296 fwd=1 phys=0 grasp=0 world=-2571.6666,2740.0000,3200.0000
+tick 702 products=18 dirty=0
+  = p2 conv=physx-spiral-up prog=0.202701504 fwd=1 phys=0 grasp=0 world=-396.0117,1312.8627,-1554.3489
+  = p3 conv=physx-sink prog=0.272222222 fwd=1 phys=0 grasp=0 world=1390.0000,1398.0000,0.0000
+  = p4 conv=logical-down-spiral prog=0.202701504 fwd=1 phys=0 grasp=0 world=-396.0117,2375.1372,1554.3489
+  = p5 conv=physx-coarse-120-run prog=0.688518519 fwd=1 phys=0 grasp=0 world=339.3333,948.0000,6500.0000
+  = p7 conv=physx-spiral-up prog=0.087166804 fwd=1 phys=0 grasp=0 world=-99.8121,1104.9003,-2711.9455
+  = p8 conv=physx-incline prog=0.547685185 fwd=1 phys=0 grasp=0 world=85.8334,1194.4584,0.0000
+  = p9 conv=logical-down-spiral prog=0.087166804 fwd=1 phys=0 grasp=0 world=-99.8121,2583.0999,2711.9455
+  = p10 conv=physx-coarse-120-run prog=0.110740741 fwd=1 phys=0 grasp=0 world=-700.6666,948.0000,6500.0000
+  = p11 conv=physx-covered-100-run prog=0.921296296 fwd=1 phys=0 grasp=0 world=758.3333,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-run prog=0.254629630 fwd=1 phys=0 grasp=0 world=-441.6667,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.819907407 fwd=1 phys=0 grasp=0 world=-1224.1666,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.819907407 fwd=1 phys=0 grasp=0 world=-1224.1666,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.819907407 fwd=1 phys=0 grasp=0 world=-1224.1666,2740.0000,3200.0000
+  = p16 conv=physx-coarse-120-source prog=0.534444444 fwd=1 phys=0 grasp=0 world=-1738.0000,948.0000,6500.0000
+  = p17 conv=physx-covered-100-source prog=0.587962963 fwd=1 phys=0 grasp=0 world=-1641.6666,948.0000,-6500.0000
+  = p18 conv=physx-spiral-up-source prog=0.090740741 fwd=1 phys=0 grasp=0 world=-2536.6667,948.0000,-3200.0000
+  = p19 conv=physx-source prog=0.090740741 fwd=1 phys=0 grasp=0 world=-2536.6667,948.0000,0.0000
+  = p20 conv=logical-down-source prog=0.090740741 fwd=1 phys=0 grasp=0 world=-2536.6667,2740.0000,3200.0000
+tick 708 products=18 dirty=0
+  = p2 conv=physx-spiral-up prog=0.205796183 fwd=1 phys=0 grasp=0 world=-425.3829,1318.4331,-1535.3181
+  = p3 conv=physx-sink prog=0.291666667 fwd=1 phys=0 grasp=0 world=1425.0000,1398.0000,0.0000
+  = p4 conv=logical-down-spiral prog=0.205796183 fwd=1 phys=0 grasp=0 world=-425.3829,2369.5669,1535.3181
+  = p5 conv=physx-coarse-120-run prog=0.702962963 fwd=1 phys=0 grasp=0 world=365.3333,948.0000,6500.0000
+  = p7 conv=physx-spiral-up prog=0.090261484 fwd=1 phys=0 grasp=0 world=-84.4011,1110.4707,-2680.5235
+  = p8 conv=physx-incline prog=0.567129630 fwd=1 phys=0 grasp=0 world=120.8333,1203.2084,0.0000
+  = p9 conv=logical-down-spiral prog=0.090261484 fwd=1 phys=0 grasp=0 world=-84.4011,2577.5293,2680.5235
+  = p10 conv=physx-coarse-120-run prog=0.125185185 fwd=1 phys=0 grasp=0 world=-674.6666,948.0000,6500.0000
+  = p11 conv=physx-covered-100-run prog=0.949074074 fwd=1 phys=0 grasp=0 world=808.3334,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-run prog=0.282407407 fwd=1 phys=0 grasp=0 world=-391.6667,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.839351852 fwd=1 phys=0 grasp=0 world=-1189.1667,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.839351852 fwd=1 phys=0 grasp=0 world=-1189.1667,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.839351852 fwd=1 phys=0 grasp=0 world=-1189.1667,2740.0000,3200.0000
+  = p16 conv=physx-coarse-120-source prog=0.548888889 fwd=1 phys=0 grasp=0 world=-1712.0000,948.0000,6500.0000
+  = p17 conv=physx-covered-100-source prog=0.615740741 fwd=1 phys=0 grasp=0 world=-1591.6667,948.0000,-6500.0000
+  = p18 conv=physx-spiral-up-source prog=0.110185185 fwd=1 phys=0 grasp=0 world=-2501.6667,948.0000,-3200.0000
+  = p19 conv=physx-source prog=0.110185185 fwd=1 phys=0 grasp=0 world=-2501.6667,948.0000,0.0000
+  = p20 conv=logical-down-source prog=0.110185185 fwd=1 phys=0 grasp=0 world=-2501.6667,2740.0000,3200.0000
+tick 714 products=18 dirty=0
+  = p2 conv=physx-spiral-up prog=0.208890863 fwd=1 phys=0 grasp=0 world=-455.4721,1324.0035,-1517.4434
+  = p3 conv=physx-sink prog=0.311111111 fwd=1 phys=0 grasp=0 world=1460.0000,1398.0000,0.0000
+  = p4 conv=logical-down-spiral prog=0.208890863 fwd=1 phys=0 grasp=0 world=-455.4721,2363.9963,1517.4434
+  = p5 conv=physx-coarse-120-run prog=0.717407407 fwd=1 phys=0 grasp=0 world=391.3333,948.0000,6500.0000
+  = p7 conv=physx-spiral-up prog=0.093356163 fwd=1 phys=0 grasp=0 world=-70.2233,1116.0411,-2648.5260
+  = p8 conv=physx-incline prog=0.586574074 fwd=1 phys=0 grasp=0 world=155.8333,1211.9584,0.0000
+  = p9 conv=logical-down-spiral prog=0.093356163 fwd=1 phys=0 grasp=0 world=-70.2233,2571.9590,2648.5260
+  = p10 conv=physx-coarse-120-run prog=0.139629630 fwd=1 phys=0 grasp=0 world=-648.6667,948.0000,6500.0000
+  = p11 conv=physx-covered-100-run prog=0.976851852 fwd=1 phys=0 grasp=0 world=858.3334,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-run prog=0.310185185 fwd=1 phys=0 grasp=0 world=-341.6667,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.858796296 fwd=1 phys=0 grasp=0 world=-1154.1667,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.858796296 fwd=1 phys=0 grasp=0 world=-1154.1667,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.858796296 fwd=1 phys=0 grasp=0 world=-1154.1667,2740.0000,3200.0000
+  = p16 conv=physx-coarse-120-source prog=0.563333333 fwd=1 phys=0 grasp=0 world=-1686.0000,948.0000,6500.0000
+  = p17 conv=physx-covered-100-source prog=0.643518519 fwd=1 phys=0 grasp=0 world=-1541.6667,948.0000,-6500.0000
+  = p18 conv=physx-spiral-up-source prog=0.129629630 fwd=1 phys=0 grasp=0 world=-2466.6667,948.0000,-3200.0000
+  = p19 conv=physx-source prog=0.129629630 fwd=1 phys=0 grasp=0 world=-2466.6667,948.0000,0.0000
+  = p20 conv=logical-down-source prog=0.129629630 fwd=1 phys=0 grasp=0 world=-2466.6667,2740.0000,3200.0000
+tick 719 products=18 dirty=1
+  > p11 physx-covered-100-run->physx-covered-100-sink fwd=1 prog=0.000000000
+tick 720 products=19 dirty=1
+  + p21 conv=physx-covered-100-source prog=0.004629630 fwd=1 phys=0 grasp=0 world=-2691.6666,948.0000,-6500.0000
+  = p2 conv=physx-spiral-up prog=0.211985542 fwd=1 phys=0 grasp=0 world=-486.2331,1329.5740,-1500.7523
+  = p3 conv=physx-sink prog=0.330555556 fwd=1 phys=0 grasp=0 world=1495.0000,1398.0000,0.0000
+  = p4 conv=logical-down-spiral prog=0.211985542 fwd=1 phys=0 grasp=0 world=-486.2331,2358.4260,1500.7523
+  = p5 conv=physx-coarse-120-run prog=0.731851852 fwd=1 phys=0 grasp=0 world=417.3334,948.0000,6500.0000
+  = p7 conv=physx-spiral-up prog=0.096450843 fwd=1 phys=0 grasp=0 world=-57.3003,1121.6116,-2616.0015
+  = p8 conv=physx-incline prog=0.606018519 fwd=1 phys=0 grasp=0 world=190.8334,1220.7084,0.0000
+  = p9 conv=logical-down-spiral prog=0.096450843 fwd=1 phys=0 grasp=0 world=-57.3003,2566.3884,2616.0015
+  = p10 conv=physx-coarse-120-run prog=0.154074074 fwd=1 phys=0 grasp=0 world=-622.6667,948.0000,6500.0000
+  = p11 conv=physx-covered-100-sink prog=0.004629630 fwd=1 phys=0 grasp=0 world=908.3334,948.0000,-6500.0000
+  = p12 conv=physx-covered-100-run prog=0.337962963 fwd=1 phys=0 grasp=0 world=-291.6667,948.0000,-6500.0000
+  = p13 conv=physx-spiral-up-source prog=0.878240741 fwd=1 phys=0 grasp=0 world=-1119.1666,948.0000,-3200.0000
+  = p14 conv=physx-source prog=0.878240741 fwd=1 phys=0 grasp=0 world=-1119.1666,948.0000,0.0000
+  = p15 conv=logical-down-source prog=0.878240741 fwd=1 phys=0 grasp=0 world=-1119.1666,2740.0000,3200.0000
+  = p16 conv=physx-coarse-120-source prog=0.577777778 fwd=1 phys=0 grasp=0 world=-1660.0000,948.0000,6500.0000
+  = p17 conv=physx-covered-100-source prog=0.671296296 fwd=1 phys=0 grasp=0 world=-1491.6667,948.0000,-6500.0000
+  = p18 conv=physx-spiral-up-source prog=0.149074074 fwd=1 phys=0 grasp=0 world=-2431.6667,948.0000,-3200.0000
+  = p19 conv=physx-source prog=0.149074074 fwd=1 phys=0 grasp=0 world=-2431.6667,948.0000,0.0000
+  = p20 conv=logical-down-source prog=0.149074074 fwd=1 phys=0 grasp=0 world=-2431.6667,2740.0000,3200.0000
+  = p21 conv=physx-covered-100-source prog=0.004629630 fwd=1 phys=0 grasp=0 world=-2691.6666,948.0000,-6500.0000
+end products=19 spawned=21 destroyed=2 transferred=16
+final p2 conv=physx-spiral-up prog=0.211985542 fwd=1 phys=0 grasp=0 world=-486.2331,1329.5740,-1500.7523
+final p3 conv=physx-sink prog=0.330555556 fwd=1 phys=0 grasp=0 world=1495.0000,1398.0000,0.0000
+final p4 conv=logical-down-spiral prog=0.211985542 fwd=1 phys=0 grasp=0 world=-486.2331,2358.4260,1500.7523
+final p5 conv=physx-coarse-120-run prog=0.731851852 fwd=1 phys=0 grasp=0 world=417.3334,948.0000,6500.0000
+final p7 conv=physx-spiral-up prog=0.096450843 fwd=1 phys=0 grasp=0 world=-57.3003,1121.6116,-2616.0015
+final p8 conv=physx-incline prog=0.606018519 fwd=1 phys=0 grasp=0 world=190.8334,1220.7084,0.0000
+final p9 conv=logical-down-spiral prog=0.096450843 fwd=1 phys=0 grasp=0 world=-57.3003,2566.3884,2616.0015
+final p10 conv=physx-coarse-120-run prog=0.154074074 fwd=1 phys=0 grasp=0 world=-622.6667,948.0000,6500.0000
+final p11 conv=physx-covered-100-sink prog=0.004629630 fwd=1 phys=0 grasp=0 world=908.3334,948.0000,-6500.0000
+final p12 conv=physx-covered-100-run prog=0.337962963 fwd=1 phys=0 grasp=0 world=-291.6667,948.0000,-6500.0000
+final p13 conv=physx-spiral-up-source prog=0.878240741 fwd=1 phys=0 grasp=0 world=-1119.1666,948.0000,-3200.0000
+final p14 conv=physx-source prog=0.878240741 fwd=1 phys=0 grasp=0 world=-1119.1666,948.0000,0.0000
+final p15 conv=logical-down-source prog=0.878240741 fwd=1 phys=0 grasp=0 world=-1119.1666,2740.0000,3200.0000
+final p16 conv=physx-coarse-120-source prog=0.577777778 fwd=1 phys=0 grasp=0 world=-1660.0000,948.0000,6500.0000
+final p17 conv=physx-covered-100-source prog=0.671296296 fwd=1 phys=0 grasp=0 world=-1491.6667,948.0000,-6500.0000
+final p18 conv=physx-spiral-up-source prog=0.149074074 fwd=1 phys=0 grasp=0 world=-2431.6667,948.0000,-3200.0000
+final p19 conv=physx-source prog=0.149074074 fwd=1 phys=0 grasp=0 world=-2431.6667,948.0000,0.0000
+final p20 conv=logical-down-source prog=0.149074074 fwd=1 phys=0 grasp=0 world=-2431.6667,2740.0000,3200.0000
+final p21 conv=physx-covered-100-source prog=0.004629630 fwd=1 phys=0 grasp=0 world=-2691.6666,948.0000,-6500.0000
+invariant_failures=0

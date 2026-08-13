@@ -1,65 +1,38 @@
-# Physics Simulation Plugin for RoboDK
+# physicsAddIn
 
-This plugin adds physics simulation capabilities to RoboDK, including rigid body dynamics, soft body simulation, and material management.
+Physics simulation and robot-cell tooling built on a shared `Common/` core: PhysX rigid-body
+simulation, OPW6 robot kinematics, the motion planner, and the station package format.
 
-## What it does
+Four build targets:
 
-- **Rigid body physics**: Uses PhysX for realistic object interactions
-- **Soft body simulation**: Deformable objects that respond to forces
-- **Material system**: Customize friction, restitution, and other properties
-- **Object configuration**: Fine-tune how objects behave in simulation
-- **Scene setup**: Configure global physics settings and defaults
-- **VHACD integration**: Automatic convex decomposition for complex shapes
-- **Real-time visualization**: See physics in action
-- **Robot support**: Include robots in your physics simulations
+- **RoboDK plugin** (`physicsAddIn/PluginPhysics.pro`) — adds PhysX roles, conveyors, and a
+  built-in package library with placement tools to RoboDK. The build script compiles and installs
+  `PluginPhysics.dll`; enable it under Tools → Add-ins.
+- **QtCadViewer** (`QtCadViewer/QtCadViewer.pro`) — standalone Qt viewer for the shared CAD
+  scene tree, with material editing, convex decomposition, and rigid-/soft-body simulation tools.
+- **RobotSimulator** (`RobotSimulator/RobotSimulator.pro`) — GLFW/Dear ImGui application, no Qt.
+  Opens self-contained robot packages and multi-robot stations: kinematic jogging, program
+  editing and simulation, PhysX conveyors and drag chains, live runs against Teensy hardware
+  over serial, and a set of deterministic CLI subcommands (`--validate-package`,
+  `--simulate-program`, `--live-run`, ...).
+- **RobotSimulator (WebAssembly)** — the same application compiled with Emscripten by
+  `scripts/build_wasm.ps1`.
 
-## Getting started
+Build instructions and dependency setup: [BUILDING.md](BUILDING.md).
+Design docs — architecture, the conveyor rules, library placement, and how anything is
+verified: [docs/](docs/README.md).
+Contribution and code-style guidance: [CONTRIBUTING.md](CONTRIBUTING.md).
+PhysX, OpenCascade, CoACD, ImGui, ImPlot, and GLFW are external dependencies restored or built
+by the scripts under `scripts/`; the only committed third-party code is described in
+[third_party/README.md](third_party/README.md).
 
-### Requirements
-- RoboDK (download from [robodk.com](https://robodk.com/download))
-- PhysX SDK (included with the plugin)
+Content directories, each with its own README:
 
-### Installation
-Plugins typically come as RoboDK Packages (.rdkp) that install automatically when opened in RoboDK.
+- `library/` — the built-in asset catalogue ([library/README.md](library/README.md))
+- `examples/` — station examples ([examples/README.md](examples/README.md))
+- `templates/` — authoring templates ([templates/README.md](templates/README.md))
+- `tests/robot_simulator/` — regression fixtures ([tests/robot_simulator/README.md](tests/robot_simulator/README.md))
+- `firmware/` — AR4 Teensy 4.1 firmware ([firmware/README.md](firmware/README.md))
 
-For manual installation, copy the plugin files to your RoboDK plugins folder (usually `C:/RoboDK/bin/plugins`).
-
-### Setup
-1. Enable the plugin (Tools → Add-ins or press Shift+I)
-2. Look for "Physics Simulation" in the menu
-3. Right-click objects to add them to physics simulation
-4. Configure materials and properties as needed
-
-## How to use it
-
-### Adding objects to physics
-- Right-click any object in your scene
-- Select "PhysX Simulation" to add/remove from physics
-- Objects get default materials automatically
-
-### Working with materials
-- Go to "Physics Simulation" → "Material Manager"
-- Create custom materials with specific properties
-- Edit existing materials (default ones are read-only)
-
-### Creating soft bodies
-- Use "Physics Simulation" → "Create Soft Body"
-- Adjust soft body settings
-- Choose between new geometry or existing objects
-
-### Scene configuration
-- Access via "Physics Simulation" → "Scene Defaults"
-- Set up global physics parameters
-- Configure default materials and properties
-
-## About RoboDK Plugins
-
-The RoboDK Plugin Interface lets you extend and customize RoboDK with native C++ plugins that integrate directly into the core software.
-
-You can add custom functionality to the RoboDK interface, including new menu items, toolbar buttons, event processing, render synchronization, API command handling, and more.
-
-Once your plugin is complete, you can package it as a self-contained .rdkp file for easy distribution.
-
-RoboDK handles plugins through the Add-in Manager, and the [Plugin Interface](https://github.com/RoboDK/Plug-In-Interface) provides the C++ tools needed to build your plugin.
-
-For more information, check out the [Plugin Interface GitHub](https://github.com/RoboDK/Plug-In-Interface) and the [documentation](https://robodk.com/doc/en/PlugIns/index.html). 
+The plugin is built on the [RoboDK Plug-In Interface](https://github.com/RoboDK/Plug-In-Interface)
+([documentation](https://robodk.com/doc/en/PlugIns/index.html)).

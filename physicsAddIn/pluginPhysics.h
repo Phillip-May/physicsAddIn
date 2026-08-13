@@ -1,73 +1,93 @@
 #ifndef PLUGINPHYSICS_H
 #define PLUGINPHYSICS_H
 
-
 #include <QObject>
 #include <QtPlugin>
-#include <QDockWidget>
+
+#include <map>
+#include <memory>
+
 #include "iapprobodk.h"
 #include "robodktypes.h"
-#include "MaterialManager.h"
 
-class QToolBar;
-class QMenu;
+#include <QString>
+#include <QStringList>
+
+// moc requires PhysicsWorld to be complete when instantiating the plugin.
+#include "PhysicsWorld.h"
+
 class QAction;
+class QMenu;
+class QTimer;
+class QToolBar;
 class IRoboDK;
 class IItem;
 
-///
-/// \brief The PluginPhysics class provides physics simulation capabilities for RoboDK.
-/// A RoboDK plugin must implement the IAppRoboDK and the QObject class.
-///
-class PluginPhysics : public QObject, IAppRoboDK
-{
+class PhysicsPanel;
+class ConveyorPropertiesPanel;
+class PlacedItemPropertiesPanel;
+class LibraryDock;
+class LibraryPlacementTool;
+class PlacedItemPicker;
+class QDockWidget;
+
+class PluginPhysics : public QObject, IAppRoboDK {
     Q_OBJECT
-    Q_PLUGIN_METADATA(IID "RoboDK.IAppRoboDK")// FILE "metadatalugin.json")
+    Q_PLUGIN_METADATA(IID "RoboDK.IAppRoboDK")
     Q_INTERFACES(IAppRoboDK)
 
 public:
-    //------------------------------- RoboDK Plug-in Interface commands ------------------------------
+    ~PluginPhysics() override;
+
     static QString getPluginName();
-    QString PluginName(void) override;    
-    virtual QString PluginLoad(QMainWindow *mw, QMenuBar *menubar, QStatusBar *statusbar, RoboDK *rdk, const QString &settings="") override;
-    virtual void PluginUnload() override;
-    virtual void PluginLoadToolbar(QMainWindow *mw, int icon_size) override;
-    virtual bool PluginItemClick(Item item, QMenu *menu, TypeClick click_type) override;
-    virtual QString PluginCommand(const QString &command, const QString &value) override;
-    virtual void PluginEvent(TypeEvent event_type) override;
+    QString PluginName() override;
+    QString PluginLoad(QMainWindow* mw, QMenuBar* menubar, QStatusBar* statusbar, RoboDK* rdk,
+                       const QString& settings = "") override;
+    void PluginUnload() override;
+    void PluginLoadToolbar(QMainWindow* mw, int icon_size) override;
+    bool PluginItemClick(Item item, QMenu* menu, TypeClick click_type) override;
+    QString PluginCommand(const QString& command, const QString& value) override;
+    void PluginEvent(TypeEvent event_type) override;
 
-    //----------------------------------------------------------------------------------
-
-// Recommended pointers to use in your plugin:
 public:
-    /// RoboDK's <strong>main window</strong> pointer.
-    QMainWindow *MainWindow;
-
-    /// RoboDK's main <strong>status bar</strong> pointer.
-    QStatusBar *StatusBar;
-
-    /// Pointer to the <strong>RoboDK API</strong> interface.
-    RoboDK *RDK;
-
-    QAction *actionSceneConfig;
-    QAction *actionMaterialManager;
-    QAction *actionCreateSoftBody;
-    QAction *actionCadViewer;
-
-public slots:
+    QMainWindow* MainWindow = nullptr;
+    QStatusBar* StatusBar = nullptr;
+    RoboDK* RDK = nullptr;
 
 private:
-    void showMaterialManager();
-    void showObjectProperties(Item item = nullptr);
-    void showSoftBodyDialog();
-    void showCadViewer();
-    void testVHACDIntegration();
-    
-    // Physics engine and managers
-    MaterialManager* m_materialManager;
+    void stepSimulation();
+    void setSimulationTimerActive(bool active);
+    void loadStationConfiguration();
+    bool anyProgramRunning();
+    void pollStationRunControl();
+    // RoboDK has no safe item-edited or item-deleted event, so panels are polled.
+    void syncConveyorPanels();
+    void openConveyorPanel(Item item);
+    void syncPlacedItemPanels();
+    void openPlacedItemPanel(Item item);
+    // Deferred because EventChanged may arrive re-entrantly during a simulation step.
+    void adoptConveyorsIfRequested();
+    void addConveyor();
+    QStringList workpieceCandidates();
 
+    std::unique_ptr<PhysicsWorld> m_world;
+    PhysicsPanel* m_panel = nullptr;
+    // Item identity survives renames; hidden panels are reused.
+    std::map<Item, ConveyorPropertiesPanel*> m_conveyorPanels;
+    std::map<Item, PlacedItemPropertiesPanel*> m_placedItemPanels;
+    PlacedItemPicker* m_itemPicker = nullptr;
+    LibraryDock* m_libraryDock = nullptr;
+    LibraryPlacementTool* m_libraryPlacer = nullptr;
+    QAction* m_actionAddConveyor = nullptr;
+    bool m_conveyorAdoptionRequested = false;
+    QStringList m_workpieceCandidates;
+    QTimer* m_stepTimer = nullptr;
+    QTimer* m_runControlTimer = nullptr;
+    QTimer* m_panelTimer = nullptr;
+    QAction* m_actionShowPanel = nullptr;
+    qint64 m_lastStepMs = 0;
+    // RoboDK does not emit a program-start event; run control detects this edge.
+    bool m_programWasRunning = false;
 };
-//! [0]
 
-
-#endif // PLUGINPHYSICS_H 
+#endif // PLUGINPHYSICS_H

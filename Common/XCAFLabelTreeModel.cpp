@@ -62,7 +62,6 @@ QVariant XCAFLabelTreeModel::data(const QModelIndex& index, int role) const {
     if (role == Qt::DisplayRole) {
         QString baseName;
         
-        // Handle special "All Shapes" node (empty label)
         if (node->label.IsNull()) {
             baseName = "All Shapes";
         } else {
@@ -74,65 +73,54 @@ QVariant XCAFLabelTreeModel::data(const QModelIndex& index, int role) const {
             }
         }
         
-        // Build comprehensive diagnostic information
         QStringList info;
         info << baseName;
         
-        // Shape type information
         QString shapeInfo = getShapeTypeString(node->label);
         if (!shapeInfo.isEmpty()) {
             info << shapeInfo;
         }
         
-        // Reference information
         QString refInfo = getReferenceInfo(node->label);
         if (!refInfo.isEmpty()) {
             info << refInfo;
         }
         
-        // Transform information
         QString transformInfo = getTransformInfo(node->label);
         if (!transformInfo.isEmpty()) {
             info << transformInfo;
         }
         
-        // Assembly information
         QString assemblyInfo = getAssemblyInfo(node->label);
         if (!assemblyInfo.isEmpty()) {
             info << assemblyInfo;
         }
         
-        // Color information
         QString colorInfo = getColorInfo(node->label);
         if (!colorInfo.isEmpty()) {
             info << colorInfo;
         }
         
-        // Product information (STEP 214 specific)
         QString productInfo = getProductInfo(node->label);
         if (!productInfo.isEmpty()) {
             info << productInfo;
         }
         
-        // Visibility information
         QString visibilityInfo = getVisibilityInfo(node->label);
         if (!visibilityInfo.isEmpty()) {
             info << visibilityInfo;
         }
         
-        // Layer information
         QString layerInfo = getLayerInfo(node->label);
         if (!layerInfo.isEmpty()) {
             info << layerInfo;
         }
         
-        // STEP 214 specific information
         QString step214Info = getStep214Info(node->label);
         if (!step214Info.isEmpty()) {
             info << step214Info;
         }
         
-        // Geometry location information
         QString geometryInfo = getGeometryLocationInfo(node->label);
         if (!geometryInfo.isEmpty()) {
             info << geometryInfo;
@@ -174,7 +162,6 @@ QString XCAFLabelTreeModel::getShapeTypeString(const TDF_Label& label) const {
         default: typeStr = "UNKNOWN"; break;
     }
     
-    // Count sub-shapes for compounds
     if (shape.ShapeType() == TopAbs_COMPOUND) {
         int solidCount = 0, shellCount = 0, faceCount = 0, edgeCount = 0;
         for (TopExp_Explorer exp(shape, TopAbs_SOLID); exp.More(); exp.Next()) solidCount++;
@@ -221,14 +208,12 @@ QString XCAFLabelTreeModel::getTransformInfo(const TDF_Label& label) const {
     const gp_Mat& mat = trsf.VectorialPart();
     const gp_XYZ& trans = trsf.TranslationPart();
     
-    // Check if it's just a translation (identity matrix)
     if (mat.Value(1,1) == 1.0 && mat.Value(1,2) == 0.0 && mat.Value(1,3) == 0.0 &&
         mat.Value(2,1) == 0.0 && mat.Value(2,2) == 1.0 && mat.Value(2,3) == 0.0 &&
         mat.Value(3,1) == 0.0 && mat.Value(3,2) == 0.0 && mat.Value(3,3) == 1.0) {
         return QString("T[%1,%2,%3]").arg(trans.X(), 0, 'f', 2).arg(trans.Y(), 0, 'f', 2).arg(trans.Z(), 0, 'f', 2);
     }
     
-    // Check if it's just a rotation (no translation)
     if (trans.X() == 0 && trans.Y() == 0 && trans.Z() == 0) {
         return "ROTATION";
     }
@@ -255,7 +240,6 @@ QString XCAFLabelTreeModel::getAssemblyInfo(const TDF_Label& label) const {
     TopoDS_Shape shape = m_shapeTool->GetShape(label);
     if (shape.IsNull() || shape.ShapeType() != TopAbs_COMPOUND) return "";
     
-    // Check if this compound has multiple direct shape children (assembly indicator)
     int shapeCount = 0;
     int subAssemblyCount = 0;
     
@@ -267,7 +251,6 @@ QString XCAFLabelTreeModel::getAssemblyInfo(const TDF_Label& label) const {
                 if (!childShape.IsNull()) {
                     shapeCount++;
                     
-                    // Check if this child is itself a sub-assembly
                     if (childShape.ShapeType() == TopAbs_COMPOUND) {
                         int childShapeCount = 0;
                         for (TDF_ChildIterator childIt(childLabel); childIt.More(); childIt.Next()) {
@@ -301,11 +284,8 @@ QString XCAFLabelTreeModel::getAssemblyInfo(const TDF_Label& label) const {
 }
 
 QString XCAFLabelTreeModel::getProductInfo(const TDF_Label& label) const {
-    // STEP 214 specific product information
-    // This would typically involve STEP 214 specific entities like PRODUCT_DEFINITION_CONTEXT
-    // For now, we'll look for common STEP 214 patterns
-    
-    // Check if this label has children that might indicate product structure
+    // STEP 214 product structure is inferred from label shape here, not read from
+    // PRODUCT_DEFINITION_CONTEXT; layers (XCAFDoc_LayerTool) are not read at all.
     int childCount = 0;
     int shapeChildCount = 0;
     int refChildCount = 0;
@@ -347,26 +327,19 @@ QString XCAFLabelTreeModel::getProductInfo(const TDF_Label& label) const {
 }
 
 QString XCAFLabelTreeModel::getVisibilityInfo(const TDF_Label& label) const {
-    // Check visibility attributes
-    // This is STEP 214 specific information
     return "";
 }
 
 QString XCAFLabelTreeModel::getLayerInfo(const TDF_Label& label) const {
-    // Check layer information
-    // This would involve XCAFDoc_LayerTool
     return "";
 }
 
 QString XCAFLabelTreeModel::getStep214Info(const TDF_Label& label) const {
-    // STEP 214 specific diagnostic information
     QStringList info;
     
-    // Check for common STEP 214 patterns
     if (m_shapeTool.IsNull() == false && !label.IsNull()) {
         TopoDS_Shape shape = m_shapeTool->GetShape(label);
         
-        // Check if this is a compound with no direct shape (typical STEP 214 assembly pattern)
         if (!shape.IsNull() && shape.ShapeType() == TopAbs_COMPOUND) {
             bool hasDirectShape = false;
             int childCount = 0;
@@ -385,7 +358,6 @@ QString XCAFLabelTreeModel::getStep214Info(const TDF_Label& label) const {
                             emptyChildCount++;
                         }
                         
-                        // Check if this child is a reference
                         if (m_shapeTool->IsReference(childLabel)) {
                             refChildCount++;
                         }
@@ -406,16 +378,13 @@ QString XCAFLabelTreeModel::getStep214Info(const TDF_Label& label) const {
             }
         }
         
-        // Check for reference chains (common in STEP 214)
         if (m_shapeTool->IsReference(label)) {
             TDF_Label refLabel;
             if (m_shapeTool->GetReferredShape(label, refLabel)) {
-                // Check if the referred shape is also a reference
                 if (!refLabel.IsNull() && m_shapeTool->IsReference(refLabel)) {
                     info << "REF_CHAIN";
                 }
                 
-                // Check if the referred shape has geometry
                 if (!refLabel.IsNull()) {
                     TopoDS_Shape refShape = m_shapeTool->GetShape(refLabel);
                     if (refShape.IsNull()) {
@@ -426,12 +395,10 @@ QString XCAFLabelTreeModel::getStep214Info(const TDF_Label& label) const {
         }
     }
     
-    // Check for empty labels with children (STEP 214 product structure)
     if (label.IsNull() == false) {
         int childCount = 0;
         int emptyChildCount = 0;
         
-        // Double-check label is not null before creating iterator
         if (!label.IsNull()) {
             for (TDF_ChildIterator it(label); it.More(); it.Next()) {
                 childCount++;
@@ -463,17 +430,14 @@ QString XCAFLabelTreeModel::getGeometryLocationInfo(const TDF_Label& label) cons
     
     TopoDS_Shape shape = m_shapeTool->GetShape(label);
     
-    // If this label has no shape, try to find where the geometry might be
     if (shape.IsNull()) {
         QStringList locations;
         
-        // Check if this is a reference
         if (m_shapeTool->IsReference(label)) {
             TDF_Label refLabel;
             if (m_shapeTool->GetReferredShape(label, refLabel)) {
                 locations << QString("REF->%1").arg(refLabel.Tag());
                 
-                // Check if the referred shape also has no geometry
                 TopoDS_Shape refShape = m_shapeTool->GetShape(refLabel);
                 if (refShape.IsNull()) {
                     locations << "REF_TO_EMPTY";
@@ -481,7 +445,6 @@ QString XCAFLabelTreeModel::getGeometryLocationInfo(const TDF_Label& label) cons
             }
         }
         
-        // Check children for references
         if (!label.IsNull()) {
             int refChildren = 0;
             for (TDF_ChildIterator it(label); it.More(); it.Next()) {

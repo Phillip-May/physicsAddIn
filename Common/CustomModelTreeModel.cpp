@@ -1,4 +1,5 @@
 #include "CustomModelTreeModel.h"
+#include "CadNodeQtAdapter.h"
 #include <QString>
 
 CustomModelTreeModel::CustomModelTreeModel(std::shared_ptr<NodeType> root, QObject* parent)
@@ -111,7 +112,7 @@ QVariant CustomModelTreeModel::data(const QModelIndex& index, int role) const {
         return display;
     }
     if (role == Qt::BackgroundRole) {
-        QColor c = node->color.toQColor();
+        QColor c = toQColor(node->color);
         c.setAlphaF(c.alphaF() / 3.0); // Make it 1/3 as opaque
         return c;
     }

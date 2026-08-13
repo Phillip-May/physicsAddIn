@@ -2,6 +2,7 @@
 #include <QOpenGLWidget>
 #include <QOpenGLFunctions>
 #include <GL/gl.h>
+#include <QPoint>
 #include <QVector3D>
 #include <memory>
 #include <vector>
@@ -10,7 +11,6 @@
 #include <map>
 #include <QQuaternion>
 #include <QTimer>
-#include <vector>
 
 #include "CadNode.h"
 #include "SimulationManager.h"
@@ -38,12 +38,10 @@ struct CachedGeometry {
     
     CachedGeometry() {}
     
-    // Helper to check if this geometry is valid for rendering
     bool isValid() const {
         return initialized && displayList != 0 && triangleCount > 0;
     }
     
-    // Helper to mark as invalid
     void markInvalid() {
         initialized = true;
         displayList = 0;
@@ -72,9 +70,6 @@ struct CameraState {
     QPoint mousePressPos;
     bool mousePressed = false;
     bool mouseDragged = false;
-    // For rotation
-    bool rotating = false;
-    bool firstRotateMove = false;
     QPoint pivotScreenOnPress;
     QVector3D cameraPosOnPress;
     QQuaternion cameraRotOnPress;
@@ -95,10 +90,8 @@ public:
     // Camera state access
     CameraState getCameraState() const;
     void setCameraState(const CameraState& state);
-    // Add this slot for tree selection
     static void collectFaceNodes(CadNode *node, std::vector<CadNode*> &out);
     CadNode* getRootTreeNode() const { return rootNode_; }
-    // Add this slot for tree selection
     Q_SLOT void setSelectedFaceNode(CadNode* node, const TopLoc_Location& accLoc);
     struct FaceInstance {
         CadNode* node;
@@ -115,29 +108,6 @@ public:
             return node == other.node && accumulatedLoc == other.accumulatedLoc;
         }
     };
-    
-    // Connection path segment for visualization
-    struct ConnectionPathSegment {
-        QVector3D start;
-        QVector3D end;
-        QVector4D color;
-        float width;
-        float height;
-        bool isBend;
-        
-        ConnectionPathSegment(const QVector3D& s, const QVector3D& e, const QVector4D& c = QVector4D(1, 0, 0, 1), float w = 2.0f, float h = 2.0f, bool bend = false)
-            : start(s), end(e), color(c), width(w), height(h), isBend(bend) {}
-    };
-    
-    struct ControlPointMarker {
-        QVector3D position;
-        QVector4D color;
-        float size;
-        QString label;
-        
-        ControlPointMarker(const QVector3D& pos, const QVector4D& c = QVector4D(1, 1, 0, 1), float s = 8.0f, const QString& l = "")
-            : position(pos), color(c), size(s), label(l) {}
-    };
 public slots:
     void clearSelection();
     void addToSelection(CadNode* node, const TopLoc_Location& accLoc);
@@ -150,24 +120,6 @@ public slots:
     void setSelectedFrameNode(CadNode* node, const TopLoc_Location& accLoc) { selectedFrameNode_ = node; selectedFrameNodeAccumulatedLoc_ = accLoc; update(); }
     void setSelectedFrameNode(CadNode* node) { selectedFrameNode_ = node; selectedFrameNodeAccumulatedLoc_ = node ? node->loc : TopLoc_Location(); update(); }
     void setSimulationManager(SimulationManager* simManager) { m_simulationManager = simManager; }
-    
-    // Custom drawing callback system
-    void addCustomDrawCallback(const std::function<void()>& callback);
-    void clearCustomDrawCallbacks();
-    
-    // Connection path visualization
-    void setConnectionPathSegments(const std::vector<ConnectionPathSegment>& segments);
-    void clearConnectionPathSegments();
-    void renderConnectionPathSegments();
-    
-    // Control point markers visualization
-    void setControlPointMarkers(const std::vector<ControlPointMarker>& markers);
-    void clearControlPointMarkers();
-    void renderControlPointMarkers();
-
-    // Simulation manager access
-    SimulationManager* getSimulationManager() const { return m_simulationManager; }
-
 protected:
     void initializeGL() override;
     void resizeGL(int w, int h) override;
@@ -216,11 +168,11 @@ private:
     // Flat cache of all visible faces (per instance)
     std::vector<FaceInstance> faceCache_;
     void buildFaceCache();
+    FaceInstance* rayPickFace(const QPoint& pos, gp_Pnt* hitPoint, bool rebuildCache);
     
     // Flat cache of all visible edges (per instance)
     std::vector<EdgeInstance> edgeCache_;
     void buildEdgeCache();
-    // Update: Add accumulatedLoc parameter for hierarchical transform
     void traverseAndRender(const CadNode *node, CADNodeColor inheritedColor, const TopLoc_Location& accumulatedLoc, bool ancestorsVisible, const CadNode* parentReferenceNode = nullptr);
     void renderEdge(const TopoDS_Edge &edge, const CADNodeColor &color);
     // Overload: pick and output intersection point (returns true if hit)
@@ -234,24 +186,25 @@ private:
     // Helper to pick hovered edge
     void pickHoveredEdgeAt(const QPoint& pos);
     void renderFace(const XCAFNodeData* node, const CADNodeColor& color);
+    void renderMeshGeometry(const MeshGeometryData* meshData, const CADNodeColor& color);
     void drawPivotSphere(); // Draws a sphere at m_center
     QVector3D m_zoomContactPoint; // Last zoom contact point
     bool m_showZoomContactSphere = false;
     QTimer m_zoomContactTimer;
-    bool m_rotating = false;
     bool m_firstRotateMove = false;
+    QPoint m_lastMousePos;
     QPoint m_pivotScreenOnPress;
     QVector3D m_cameraPosOnPress;
     QQuaternion m_cameraRotOnPress;
     float m_cameraZoomOnPress = 0.0f;
     
-    // Optimized rendering functions
     void renderBatchedGeometry();
     void buildColorBatches();
     void renderFaceOptimized(const CadNode* node, const TopLoc_Location& accumulatedLoc, const CadNode* parentReferenceNode = nullptr);
     void renderEdgeOptimized(const CadNode* node, const TopLoc_Location& accumulatedLoc);
     void renderHighlightedEdges();
     CachedGeometry& getOrCreateCachedGeometry(const TopoDS_Face& face);
+    CachedGeometry& getOrCreateCachedMeshGeometry(const MeshGeometryData* meshData);
     
     // Frustum culling helpers
     bool isInFrustum(const TopoDS_Face& face, const TopLoc_Location& loc);
@@ -260,7 +213,6 @@ private:
     // Frustum planes (normal + distance)
     QVector4D m_frustumPlanes[6];
     
-    // Cache-related member variables (previously globals)
     std::map<const void*, CachedGeometry> m_geometryCache;
     bool m_cacheDirty = true;
     int m_frameCount = 0; // Frame counter for performance monitoring
@@ -269,14 +221,10 @@ private:
     int m_skippedFaces = 0; // Faces skipped
     void clearGeometryCache();
     void drawBoundingBox(const QVector3D& min, const QVector3D& max, const QVector4D& color);
+    void renderConvexHullList(const std::vector<ConvexHullData>& hulls);
     void renderConvexHulls(const PhysicsNodeData* physData);
     void renderConnectionPoint(const CadNode* node, const CADNodeColor& color);
     void renderGroundPlane(const MutexRootNodeData& mutexData);
-    
-    // Custom drawing system
-    std::vector<std::function<void()>> m_customDrawCallbacks;
-    std::vector<ConnectionPathSegment> m_connectionPathSegments;
-    std::vector<ControlPointMarker> m_controlPointMarkers;
 
 signals:
     void facePicked(CadNode* node, const TopLoc_Location& accLoc);

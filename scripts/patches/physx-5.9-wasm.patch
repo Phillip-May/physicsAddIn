@@ -1,0 +1,67 @@
+diff --git a/physx/include/foundation/PxMath.h b/physx/include/foundation/PxMath.h
+index b16a97b..d500cab 100644
+--- a/physx/include/foundation/PxMath.h
++++ b/physx/include/foundation/PxMath.h
+@@ -42,7 +42,7 @@
+ #pragma warning(pop)
+ #endif
+ 
+-#if (PX_LINUX_FAMILY && !PX_ARM_FAMILY)
++#if (PX_LINUX_FAMILY && !PX_ARM_FAMILY && !PX_EMSCRIPTEN)
+ // Force linking against nothing newer than glibc v2.17 to remain compatible with platforms with older glibc versions
+ __asm__(".symver expf,expf@GLIBC_2.2.5");
+ __asm__(".symver powf,powf@GLIBC_2.2.5");
+diff --git a/physx/include/foundation/PxHash.h b/physx/include/foundation/PxHash.h
+index 589caa9..7dbdd62 100644
+--- a/physx/include/foundation/PxHash.h
++++ b/physx/include/foundation/PxHash.h
+@@ -108,7 +108,7 @@ PX_FORCE_INLINE uint32_t PxComputeHash(const uint64_t key)
+ 	return uint32_t(x);
+ }
+ 
+-#if PX_APPLE_FAMILY
++#if PX_APPLE_FAMILY || PX_EMSCRIPTEN
+ // hash for size_t, to make gcc happy
+ PX_INLINE uint32_t PxComputeHash(const size_t key)
+ {
+diff --git a/physx/source/foundation/FdTempAllocator.cpp b/physx/source/foundation/FdTempAllocator.cpp
+index 7e07ae5..038658f 100644
+--- a/physx/source/foundation/FdTempAllocator.cpp
++++ b/physx/source/foundation/FdTempAllocator.cpp
+@@ -64,7 +64,7 @@ void* PxTempAllocator::allocate(size_t size, const char* filename, PxI32 line)
+ 	if(!size)
+ 		return 0;
+ 
+-	PxU32 index = PxMax(PxHighestSetBit(PxU32(size) + sizeof(Chunk) - 1), sMinIndex);
++	PxU32 index = PxMax(PxHighestSetBit(PxU32(PxU32(size) + sizeof(Chunk) - 1)), sMinIndex);
+ 
+ 	Chunk* chunk = 0;
+ 	if(index < sMaxIndex)
+diff --git a/physx/source/foundation/unix/FdUnixThread.cpp b/physx/source/foundation/unix/FdUnixThread.cpp
+index e540c3e..b201174 100644
+--- a/physx/source/foundation/unix/FdUnixThread.cpp
++++ b/physx/source/foundation/unix/FdUnixThread.cpp
+@@ -267,7 +267,9 @@ void PxThreadImpl::yield()
+ 
+ void PxThreadImpl::yieldProcessor()
+ {
+-#if (PX_ARM || PX_A64)
++#if PX_EMSCRIPTEN
++	__asm__ __volatile__("nop");
++#elif (PX_ARM || PX_A64)
+ 	__asm__ __volatile__("yield");
+ #else
+ 	__asm__ __volatile__("pause");
+diff --git a/physx/source/foundation/unix/FdUnixMutex.cpp b/physx/source/foundation/unix/FdUnixMutex.cpp
+index 28c5d87..3e440e2 100644
+--- a/physx/source/foundation/unix/FdUnixMutex.cpp
++++ b/physx/source/foundation/unix/FdUnixMutex.cpp
+@@ -91,7 +91,7 @@ PxMutexImpl::PxMutexImpl()
+ 	pthread_mutexattr_t attr;
+ 	pthread_mutexattr_init(&attr);
+ 	pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+-#if PX_LINUX
++#if PX_LINUX && !PX_EMSCRIPTEN
+ 	pthread_mutexattr_setprotocol(&attr, gMutexProtocol);
+ 	pthread_mutexattr_setprioceiling(&attr, 0);
+ #endif

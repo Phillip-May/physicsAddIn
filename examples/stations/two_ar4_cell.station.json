@@ -1,0 +1,45 @@
+{
+    "station_schema": 2,
+    "name": "Two AR4 Cell",
+    "_comment": [
+        "A station: the tree above the robots. It names which base robot packages the cell contains",
+        "and where each one stands, rather than describing any machine itself - that stays in the",
+        "package, so correcting the AR4 upstream corrects both arms here.",
+        "",
+        "package and config are both resolved as an entry inside the station archive first, then as",
+        "a path relative to this file. A loose station like this one always takes the second route.",
+        "",
+        "id names the folder an arm's own data lives in, and is deliberately not the same field as",
+        "name: renaming 'Left arm' must not orphan instances/left/config.json.",
+        "",
+        "Placement is position_mm plus rotation_deg applied Rz(yaw) * Ry(pitch) * Rx(roll), with",
+        "rotation_deg given as [about X, about Y, about Z]. An explicit 12-value loc may be given",
+        "instead and wins where present.",
+        "",
+        "The scene is Y-up: Y is height, X and Z are the floor. Two arms standing on the same floor",
+        "therefore share a Y and are separated in X or Z, and turning one to face the other is the",
+        "middle number, a rotation about Y. This file used to separate them in Y and turn them about",
+        "Z, which stacked one of them 800mm above the other and stood it on its head.",
+        "",
+        "A metre apart facing each other across the cell - about twice the AR4's reach, so each arm",
+        "can work without the other being in the way."
+    ],
+    "robots": [
+        {
+            "id": "left",
+            "name": "Left arm",
+            "package": "builtin:ar4_6dof_robot",
+            "config": "instances/left/config.json",
+            "position_mm": [-500.0, 0.0, 0.0],
+            "rotation_deg": [0.0, 0.0, 0.0]
+        },
+        {
+            "id": "right",
+            "name": "Right arm",
+            "package": "builtin:ar4_6dof_robot",
+            "config": "instances/right/config.json",
+            "position_mm": [500.0, 0.0, 0.0],
+            "rotation_deg": [0.0, 180.0, 0.0]
+        }
+    ]
+}

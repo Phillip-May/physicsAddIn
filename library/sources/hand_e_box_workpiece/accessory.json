@@ -1,0 +1,53 @@
+{
+  "name": "Hand-E box 30 mm",
+  "color": [
+    0.72,
+    0.72,
+    0.72,
+    1.0
+  ],
+  "type": 7,
+  "data": {},
+  "mountingHoles": {
+    "comment": "Four virtual bottom-corner placement centers for the 30 mm Hand-E workpiece.",
+    "placementSource": true,
+    "grids": [
+      {
+        "originMm": [
+          -10.0,
+          -15.0,
+          -10.0
+        ],
+        "uStepMm": [
+          20.0,
+          0.0,
+          0.0
+        ],
+        "vStepMm": [
+          0.0,
+          0.0,
+          20.0
+        ],
+        "uCount": 2,
+        "vCount": 2
+      }
+    ]
+  },
+  "children": [
+    {
+      "name": "Box model",
+      "color": [
+        0.925,
+        0.541,
+        0.165,
+        1.0
+      ],
+      "type": 12,
+      "data": {
+        "meshSource": "meshes/box.meshbin"
+      },
+      "children": []
+    }
+  ],
+  "libraryCategory": "model"
+}

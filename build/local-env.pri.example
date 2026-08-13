@@ -1,0 +1,17 @@
+# Copy this file to build/local-env.pri and edit paths for your workstation.
+# build/local-env.pri is ignored by git.
+
+OCCT_ROOT = C:/OpenCASCADE-7.6.0-vc14-64/opencascade-7.6.0
+PHYSX_ROOT = C:/PhysX-110.1-omni-and-physx-5.9.0/physx
+PHYSX_PLATFORM = win.x86_64.vc142.md
+COACD_ROOT = $$REPO_ROOT/external/CoACD
+# Read by scripts/ only (the WebAssembly build); qmake ignores it.
+# EMSDK_ROOT = C:/Users/you/emsdk
+
+# Read by scripts/build_robodk_plugin.ps1 only; qmake ignores it. Where the built plugin is
+# installed: <ROBODK_ROOT>/bin/plugins for Release, <ROBODK_ROOT>/bind/plugins for Debug.
+# ROBODK_ROOT = C:/RoboDK
+
+# Optional feature gates. CPU PhysX is the default and requires no CUDA SDK.
+# CONFIG += physx_gpu
+# CONFIG += occt_draw occt_inspector occt_vtk occt_opengles

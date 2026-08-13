@@ -1,0 +1,24 @@
+{
+    "station_schema": 3,
+    "name": "WS2000 with FANUC M-800iA/60",
+    "mechanisms": [
+        {
+            "id": "rail",
+            "name": "WS2000",
+            "package": "builtin:ws2000_gantry",
+            "position_mm": [0.0, 0.0, 0.0],
+            "rotation_deg": [0.0, 0.0, 0.0],
+            "joint_position_mm": 0.0
+        }
+    ],
+    "robots": [
+        {
+            "id": "arm",
+            "name": "FANUC M-800iA/60",
+            "package": "builtin:fanuc_m800ia_60_robot",
+            "parent_mechanism": "rail",
+            "position_mm": [0.0, 0.0, 0.0],
+            "rotation_deg": [0.0, 0.0, 0.0]
+        }
+    ]
+}

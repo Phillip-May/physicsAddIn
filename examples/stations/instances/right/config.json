@@ -1,0 +1,17 @@
+{
+    "_comment": [
+        "The other arm in the same cell, from the same base package, calibrated differently and",
+        "throttled to 80 percent on the shoulder joints. Two arms sharing a package and not sharing",
+        "an answer is the whole reason this file is per instance."
+    ],
+    "backoff_steps": 700,
+    "joints": [
+        { "joint": 1, "steps_per_deg": 88.8850,  "offset_deg": 0.3,  "master_dir": 1,  "jog_dir_invert": 0 },
+        { "joint": 2, "steps_per_deg": 111.1140, "offset_deg": 0.0,  "master_dir": -1, "jog_dir_invert": 1 },
+        { "joint": 3, "steps_per_deg": 111.1020, "offset_deg": -0.6, "master_dir": 1,  "jog_dir_invert": 1 },
+        { "joint": 4, "steps_per_deg": 99.5590,  "offset_deg": 0.0,  "master_dir": -1, "jog_dir_invert": 0 },
+        { "joint": 5, "steps_per_deg": 43.7180,  "offset_deg": 0.0,  "master_dir": -1, "jog_dir_invert": 1 },
+        { "joint": 6, "steps_per_deg": 44.4470,  "offset_deg": 0.2,  "master_dir": 1,  "jog_dir_invert": 1 }
+    ],
+    "dynamic_limit_scale": [0.8, 0.8, 1.0, 1.0, 1.0, 1.0]
+}

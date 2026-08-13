@@ -7,6 +7,7 @@
 #include <QToolBar>
 #include <QComboBox>
 #include "MaterialManager.h"
+#include "PxPhysicsAPI.h"
 #include <QTreeView>
 #include <thread>
 #include <mutex>
@@ -15,31 +16,33 @@
 class PhysXEngine {
     friend class SimulationManager;
 public:
-    PhysXEngine(SimulationManager* parent = nullptr)
-        : m_globalCookingParams(PxTolerancesScale())
-        , m_parent(parent)
+    PhysXEngine()
+        : m_foundation(nullptr),
+          m_physics(nullptr),
+          m_dispatcher(nullptr),
+          m_scene(nullptr),
+          m_material(nullptr),
+          m_kinematicMaterial(nullptr),
+          m_groundPlane(nullptr),
+          m_cudaContextManager(nullptr),
+          m_globalCookingParams(physx::PxTolerancesScale())
     {
     }
     ~PhysXEngine();
     bool initializePhysX(const std::shared_ptr<CadNode>& rootNode);
 private:
-    // PhysX components (moved from global variables)
-    PxDefaultAllocator m_allocator;
-    PxDefaultErrorCallback m_errorCallback;
-    PxFoundation* m_foundation;
-    PxPhysics* m_physics;
-    PxCpuDispatcher* m_dispatcher;
-    PxScene* m_scene;
-    PxMaterial* m_material;
-    PxMaterial* m_kinematicMaterial;  // Low-friction material for kinematic actors (robots)
-    PxPvd* m_pvd;
-    PxPvdTransport* m_pvdTransport;  // Keep transport alive for PhysX 5.x
-    PxRigidStatic* m_groundPlane;
-    PxCudaContextManager* m_cudaContextManager;  // CUDA context for deformable volumes
-    // Global cooking parameters for all mesh creation
-    PxCookingParams m_globalCookingParams;
-    // Global variables for physics simulation
-    PxVec3 m_gravity;
+    physx::PxDefaultAllocator m_allocator;
+    physx::PxDefaultErrorCallback m_errorCallback;
+    physx::PxFoundation* m_foundation;
+    physx::PxPhysics* m_physics;
+    physx::PxCpuDispatcher* m_dispatcher;
+    physx::PxScene* m_scene;
+    physx::PxMaterial* m_material;
+    physx::PxMaterial* m_kinematicMaterial;
+    physx::PxRigidStatic* m_groundPlane;
+    physx::PxCudaContextManager* m_cudaContextManager;
+    physx::PxCookingParams m_globalCookingParams;
+    physx::PxVec3 m_gravity;
 
     // Scene configuration settings
     int m_solverPositionIterations;
@@ -58,26 +61,21 @@ private:
     
     // Reference to root CadNode for ground plane configuration
     std::shared_ptr<CadNode> m_rootNode;
-    
-    // Reference to parent SimulationManager
-    SimulationManager* m_parent;
 private:
-    static PxFilterFlags simulationFilterShader(PxFilterObjectAttributes attributes0, PxFilterData filterData0, PxFilterObjectAttributes attributes1, PxFilterData filterData1, PxPairFlags &pairFlags, const void *constantBlock, PxU32 constantBlockSize);
+    static physx::PxFilterFlags simulationFilterShader(
+        physx::PxFilterObjectAttributes attributes0, physx::PxFilterData filterData0,
+        physx::PxFilterObjectAttributes attributes1, physx::PxFilterData filterData1,
+        physx::PxPairFlags& pairFlags, const void* constantBlock,
+        physx::PxU32 constantBlockSize);
 
     bool createKinematicMaterial();
     bool createGroundPlane();
-    void configureDynamicActor(PxRigidDynamic *actor);
-    void stepSimulationExtended(float deltaTime);
-    void stepSimulation(float deltaTime);
+    void configureDynamicActor(physx::PxRigidDynamic* actor);
+    void stepSimulationExtended();
+    void stepSimulation();
     void buildSceneFromNodes(const std::vector<CadNode*>& physicsNodes, 
-                           std::unordered_map<CadNode*, PxRigidDynamic*>& nodeToActor,
-                           std::unordered_map<PxRigidDynamic*, CadNode*>& actorToNode,
-                           std::unordered_map<PxRigidDynamic*, std::shared_ptr<CadNode>>& actorToSegmentNode);
-    void createDragChainFromConnection(CadNode* connectionNode,
-                                     std::unordered_map<CadNode*, PxRigidDynamic*>& nodeToActor,
-                                     std::unordered_map<PxRigidDynamic*, CadNode*>& actorToNode,
-                                     std::unordered_map<PxRigidDynamic*, std::shared_ptr<CadNode>>& actorToSegmentNode,
-                                     SimulationManager* simManager = nullptr);
+                           std::unordered_map<CadNode*, physx::PxRigidDynamic*>& nodeToActor,
+                           std::unordered_map<physx::PxRigidDynamic*, CadNode*>& actorToNode);
 };
 
 class SimulationManager
@@ -96,21 +94,6 @@ public:
     // Mark that GUI has processed the latest updates
     void markUpdatesProcessed();
     
-    // Check PVD connection status
-    bool isPvdConnected() const;
-    
-    // Manually trigger PVD connection
-    void connectPvd();
-
-    // Test drag chain creation (for debugging)
-    void testDragChainCreation();
-
-    // Force drag chain creation for all connection nodes
-    void forceDragChainCreation();
-
-    // Create a test connection node for debugging
-    void createTestConnectionNode();
-
     void startSimulation();
     void pauseSimulation();
     void resumeSimulation();
@@ -149,23 +132,7 @@ private:
         std::atomic<int> version{0};
     };
 
-    //Gui/main thread side code
     using SimulationUpdateCallback = std::function<void(const SimulationState&)>;
-
-    /*
-    void addObject(const PhysicsObject& object);
-    void removeObject(const std::string& objectId);
-    void updateObject(const PhysicsObject& object);
-    void updateSimulationParameters(float gravity, float timeStep, float damping);
-    // State retrieval
-    SimulationState getCurrentState();
-    bool isRunning() const;
-    bool isPaused() const;
-    // Callback registration
-    void setUpdateCallback(SimulationUpdateCallback callback);
-    // Wait for simulation to complete current step
-    void waitForStepComplete();
-    */
 private:
     // Thread management
     void simulationLoop();
@@ -202,8 +169,7 @@ private:
     std::queue<SimulationCommandData> m_commandQueue;
     SimulationUpdateCallback m_updateCallback;
 
-    //Target timestep
-    float m_timeStepMS = 16; //Milliseconds
+    float m_timeStepMS = 16;
 
     // PhysX engine (will be created in simulation thread)
     std::unique_ptr<PhysXEngine> m_physXEngine;
@@ -212,17 +178,10 @@ private:
     // Mappings
     std::unordered_map<CadNode*, physx::PxRigidDynamic*> m_nodeToActor;
     std::unordered_map<physx::PxRigidDynamic*, CadNode*> m_actorToNode;
-    
-    // Mapping for drag chain segments
-    std::unordered_map<PxRigidDynamic*, std::shared_ptr<CadNode>> m_actorToSegmentNode;
-    // Track segments per connection node to prevent duplicates
-    std::unordered_map<CadNode*, std::vector<std::shared_ptr<CadNode>>> m_connectionSegments;
-    // Track which connection nodes have already been processed to prevent duplicate calls
-    std::unordered_set<CadNode*> m_processedConnections;
     // Timing
     std::chrono::steady_clock::time_point m_lastStepTime;
 private:
-    MaterialManager *const materialManager;
+    std::unique_ptr<MaterialManager> materialManager;
     static void collectPhysicsNodes(const std::shared_ptr<CadNode>& root, std::vector<CadNode*>& outNodes);
     void buildPhysXSceneFromNodes();
 };

@@ -197,7 +197,7 @@ void ObjectPropertiesDialog::onSaveClicked()
     phys->useCustomProperties = m_useCustomPropertiesCheck->isChecked();
     phys->useCustomCenterOfMass = m_useCustomCenterOfMassCheck->isChecked();
     phys->mass = static_cast<float>(m_massSpin->value());
-    phys->centerOfMass = gp_Vec(m_centerOfMassXSpin->value(), m_centerOfMassYSpin->value(), m_centerOfMassZSpin->value());
+    phys->centerOfMass = CadVec3(m_centerOfMassXSpin->value(), m_centerOfMassYSpin->value(), m_centerOfMassZSpin->value());
     // Save material
     QString materialName = m_materialCombo->currentText();
     if (!materialName.isEmpty()) {
@@ -223,8 +223,7 @@ void ObjectPropertiesDialog::onCancelClicked()
 
 void ObjectPropertiesDialog::onUseCustomPropertiesToggled(bool checked)
 {
-    // Enable/disable property controls based on checkbox
-    // Note: Friction and restitution are always read-only (controlled by material)
+    // Friction and restitution stay read-only regardless: the material controls them.
     m_massSpin->setEnabled(checked);
     m_materialCombo->setEnabled(checked);
     

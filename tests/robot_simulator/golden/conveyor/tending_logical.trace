@@ -1,0 +1,1126 @@
+conveyor_trace mode=logical hz=60 ticks=1200 sample_every=6
+c input-conveyor role=spawner mode=logical speed_mm_s=180.000 length_mm=700.000 interval_s=5.000 max_active=10 initial=0
+c input-pick-feeder role=pick_feeder mode=logical speed_mm_s=120.000 length_mm=700.000 interval_s=5.000 max_active=0 initial=2
+c output-conveyor role=deleter mode=logical speed_mm_s=250.000 length_mm=1400.000 interval_s=2.000 max_active=0 initial=0
+init p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+init p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+tick 1 products=3 dirty=1
+  + p3 conv=input-conveyor prog=0.004285714 fwd=1 phys=0 grasp=0 world=-3197.0000,823.0000,1300.0000
+tick 6 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-conveyor prog=0.025714286 fwd=1 phys=0 grasp=0 world=-3182.0000,823.0000,1300.0000
+tick 12 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-conveyor prog=0.051428571 fwd=1 phys=0 grasp=0 world=-3164.0000,823.0000,1300.0000
+tick 18 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-conveyor prog=0.077142857 fwd=1 phys=0 grasp=0 world=-3146.0000,823.0000,1300.0000
+tick 24 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-conveyor prog=0.102857143 fwd=1 phys=0 grasp=0 world=-3128.0000,823.0000,1300.0000
+tick 30 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-conveyor prog=0.128571429 fwd=1 phys=0 grasp=0 world=-3110.0000,823.0000,1300.0000
+tick 36 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-conveyor prog=0.154285714 fwd=1 phys=0 grasp=0 world=-3092.0000,823.0000,1300.0000
+tick 42 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-conveyor prog=0.180000000 fwd=1 phys=0 grasp=0 world=-3074.0000,823.0000,1300.0000
+tick 48 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-conveyor prog=0.205714286 fwd=1 phys=0 grasp=0 world=-3056.0000,823.0000,1300.0000
+tick 54 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-conveyor prog=0.231428571 fwd=1 phys=0 grasp=0 world=-3038.0000,823.0000,1300.0000
+tick 60 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-conveyor prog=0.257142857 fwd=1 phys=0 grasp=0 world=-3020.0000,823.0000,1300.0000
+tick 66 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-conveyor prog=0.282857143 fwd=1 phys=0 grasp=0 world=-3002.0000,823.0000,1300.0000
+tick 72 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-conveyor prog=0.308571429 fwd=1 phys=0 grasp=0 world=-2984.0000,823.0000,1300.0000
+tick 78 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-conveyor prog=0.334285714 fwd=1 phys=0 grasp=0 world=-2966.0000,823.0000,1300.0000
+tick 84 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-conveyor prog=0.360000000 fwd=1 phys=0 grasp=0 world=-2948.0000,823.0000,1300.0000
+tick 90 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-conveyor prog=0.385714286 fwd=1 phys=0 grasp=0 world=-2930.0000,823.0000,1300.0000
+tick 96 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-conveyor prog=0.411428571 fwd=1 phys=0 grasp=0 world=-2912.0000,823.0000,1300.0000
+tick 102 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-conveyor prog=0.437142857 fwd=1 phys=0 grasp=0 world=-2894.0000,823.0000,1300.0000
+tick 108 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-conveyor prog=0.462857143 fwd=1 phys=0 grasp=0 world=-2876.0000,823.0000,1300.0000
+tick 114 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-conveyor prog=0.488571429 fwd=1 phys=0 grasp=0 world=-2858.0000,823.0000,1300.0000
+tick 120 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-conveyor prog=0.514285714 fwd=1 phys=0 grasp=0 world=-2840.0000,823.0000,1300.0000
+tick 126 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-conveyor prog=0.540000000 fwd=1 phys=0 grasp=0 world=-2822.0000,823.0000,1300.0000
+tick 132 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-conveyor prog=0.565714286 fwd=1 phys=0 grasp=0 world=-2804.0000,823.0000,1300.0000
+tick 138 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-conveyor prog=0.591428571 fwd=1 phys=0 grasp=0 world=-2786.0000,823.0000,1300.0000
+tick 144 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-conveyor prog=0.617142857 fwd=1 phys=0 grasp=0 world=-2768.0000,823.0000,1300.0000
+tick 150 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-conveyor prog=0.642857143 fwd=1 phys=0 grasp=0 world=-2750.0000,823.0000,1300.0000
+tick 156 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-conveyor prog=0.668571429 fwd=1 phys=0 grasp=0 world=-2732.0000,823.0000,1300.0000
+tick 162 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-conveyor prog=0.694285714 fwd=1 phys=0 grasp=0 world=-2714.0000,823.0000,1300.0000
+tick 168 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-conveyor prog=0.720000000 fwd=1 phys=0 grasp=0 world=-2696.0000,823.0000,1300.0000
+tick 174 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-conveyor prog=0.745714286 fwd=1 phys=0 grasp=0 world=-2678.0000,823.0000,1300.0000
+tick 180 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-conveyor prog=0.771428571 fwd=1 phys=0 grasp=0 world=-2660.0000,823.0000,1300.0000
+tick 186 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-conveyor prog=0.797142857 fwd=1 phys=0 grasp=0 world=-2642.0000,823.0000,1300.0000
+tick 192 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-conveyor prog=0.822857143 fwd=1 phys=0 grasp=0 world=-2624.0000,823.0000,1300.0000
+tick 198 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-conveyor prog=0.848571429 fwd=1 phys=0 grasp=0 world=-2606.0000,823.0000,1300.0000
+tick 204 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-conveyor prog=0.874285714 fwd=1 phys=0 grasp=0 world=-2588.0000,823.0000,1300.0000
+tick 210 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-conveyor prog=0.900000000 fwd=1 phys=0 grasp=0 world=-2570.0000,823.0000,1300.0000
+tick 216 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-conveyor prog=0.925714286 fwd=1 phys=0 grasp=0 world=-2552.0000,823.0000,1300.0000
+tick 222 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-conveyor prog=0.951428571 fwd=1 phys=0 grasp=0 world=-2534.0000,823.0000,1300.0000
+tick 228 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-conveyor prog=0.977142857 fwd=1 phys=0 grasp=0 world=-2516.0000,823.0000,1300.0000
+tick 234 products=3 dirty=1
+  > p3 input-conveyor->input-pick-feeder fwd=1 prog=0.000000000
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.000000000 fwd=1 phys=0 grasp=0 world=-2500.0000,823.0000,1300.0000
+tick 240 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.017142857 fwd=1 phys=0 grasp=0 world=-2488.0000,822.1429,1300.0000
+tick 246 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.034285714 fwd=1 phys=0 grasp=0 world=-2476.0000,821.2857,1300.0000
+tick 252 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.051428571 fwd=1 phys=0 grasp=0 world=-2464.0000,820.4286,1300.0000
+tick 258 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.068571429 fwd=1 phys=0 grasp=0 world=-2452.0000,819.5714,1300.0000
+tick 264 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.085714286 fwd=1 phys=0 grasp=0 world=-2440.0000,818.7143,1300.0000
+tick 270 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.102857143 fwd=1 phys=0 grasp=0 world=-2428.0000,817.8571,1300.0000
+tick 276 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.120000000 fwd=1 phys=0 grasp=0 world=-2416.0000,817.0000,1300.0000
+tick 282 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.137142857 fwd=1 phys=0 grasp=0 world=-2404.0000,816.1429,1300.0000
+tick 288 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.154285714 fwd=1 phys=0 grasp=0 world=-2392.0000,815.2857,1300.0000
+tick 294 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.171428571 fwd=1 phys=0 grasp=0 world=-2380.0000,814.4286,1300.0000
+tick 300 products=3 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.188571429 fwd=1 phys=0 grasp=0 world=-2368.0000,813.5714,1300.0000
+tick 301 products=4 dirty=1
+  + p4 conv=input-conveyor prog=0.004285714 fwd=1 phys=0 grasp=0 world=-3197.0000,823.0000,1300.0000
+tick 306 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.205714286 fwd=1 phys=0 grasp=0 world=-2356.0000,812.7143,1300.0000
+  = p4 conv=input-conveyor prog=0.025714286 fwd=1 phys=0 grasp=0 world=-3182.0000,823.0000,1300.0000
+tick 312 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.222857143 fwd=1 phys=0 grasp=0 world=-2344.0000,811.8571,1300.0000
+  = p4 conv=input-conveyor prog=0.051428571 fwd=1 phys=0 grasp=0 world=-3164.0000,823.0000,1300.0000
+tick 318 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.240000000 fwd=1 phys=0 grasp=0 world=-2332.0000,811.0000,1300.0000
+  = p4 conv=input-conveyor prog=0.077142857 fwd=1 phys=0 grasp=0 world=-3146.0000,823.0000,1300.0000
+tick 324 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.257142857 fwd=1 phys=0 grasp=0 world=-2320.0000,810.1429,1300.0000
+  = p4 conv=input-conveyor prog=0.102857143 fwd=1 phys=0 grasp=0 world=-3128.0000,823.0000,1300.0000
+tick 330 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.274285714 fwd=1 phys=0 grasp=0 world=-2308.0000,809.2857,1300.0000
+  = p4 conv=input-conveyor prog=0.128571429 fwd=1 phys=0 grasp=0 world=-3110.0000,823.0000,1300.0000
+tick 336 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.291428571 fwd=1 phys=0 grasp=0 world=-2296.0000,808.4286,1300.0000
+  = p4 conv=input-conveyor prog=0.154285714 fwd=1 phys=0 grasp=0 world=-3092.0000,823.0000,1300.0000
+tick 342 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.308571429 fwd=1 phys=0 grasp=0 world=-2284.0000,807.5714,1300.0000
+  = p4 conv=input-conveyor prog=0.180000000 fwd=1 phys=0 grasp=0 world=-3074.0000,823.0000,1300.0000
+tick 348 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.325714286 fwd=1 phys=0 grasp=0 world=-2272.0000,806.7143,1300.0000
+  = p4 conv=input-conveyor prog=0.205714286 fwd=1 phys=0 grasp=0 world=-3056.0000,823.0000,1300.0000
+tick 354 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.342857143 fwd=1 phys=0 grasp=0 world=-2260.0000,805.8571,1300.0000
+  = p4 conv=input-conveyor prog=0.231428571 fwd=1 phys=0 grasp=0 world=-3038.0000,823.0000,1300.0000
+tick 360 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.360000000 fwd=1 phys=0 grasp=0 world=-2248.0000,805.0000,1300.0000
+  = p4 conv=input-conveyor prog=0.257142857 fwd=1 phys=0 grasp=0 world=-3020.0000,823.0000,1300.0000
+tick 366 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.377142857 fwd=1 phys=0 grasp=0 world=-2236.0000,804.1429,1300.0000
+  = p4 conv=input-conveyor prog=0.282857143 fwd=1 phys=0 grasp=0 world=-3002.0000,823.0000,1300.0000
+tick 372 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.394285714 fwd=1 phys=0 grasp=0 world=-2224.0000,803.2857,1300.0000
+  = p4 conv=input-conveyor prog=0.308571429 fwd=1 phys=0 grasp=0 world=-2984.0000,823.0000,1300.0000
+tick 378 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.411428571 fwd=1 phys=0 grasp=0 world=-2212.0000,802.4286,1300.0000
+  = p4 conv=input-conveyor prog=0.334285714 fwd=1 phys=0 grasp=0 world=-2966.0000,823.0000,1300.0000
+tick 384 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.428571429 fwd=1 phys=0 grasp=0 world=-2200.0000,801.5714,1300.0000
+  = p4 conv=input-conveyor prog=0.360000000 fwd=1 phys=0 grasp=0 world=-2948.0000,823.0000,1300.0000
+tick 390 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.445714286 fwd=1 phys=0 grasp=0 world=-2188.0000,800.7143,1300.0000
+  = p4 conv=input-conveyor prog=0.385714286 fwd=1 phys=0 grasp=0 world=-2930.0000,823.0000,1300.0000
+tick 396 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.462857143 fwd=1 phys=0 grasp=0 world=-2176.0000,799.8571,1300.0000
+  = p4 conv=input-conveyor prog=0.411428571 fwd=1 phys=0 grasp=0 world=-2912.0000,823.0000,1300.0000
+tick 402 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.480000000 fwd=1 phys=0 grasp=0 world=-2164.0000,799.0000,1300.0000
+  = p4 conv=input-conveyor prog=0.437142857 fwd=1 phys=0 grasp=0 world=-2894.0000,823.0000,1300.0000
+tick 408 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.497142857 fwd=1 phys=0 grasp=0 world=-2152.0000,798.1429,1300.0000
+  = p4 conv=input-conveyor prog=0.462857143 fwd=1 phys=0 grasp=0 world=-2876.0000,823.0000,1300.0000
+tick 414 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.514285714 fwd=1 phys=0 grasp=0 world=-2140.0000,797.2857,1300.0000
+  = p4 conv=input-conveyor prog=0.488571429 fwd=1 phys=0 grasp=0 world=-2858.0000,823.0000,1300.0000
+tick 420 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.531428571 fwd=1 phys=0 grasp=0 world=-2128.0000,796.4286,1300.0000
+  = p4 conv=input-conveyor prog=0.514285714 fwd=1 phys=0 grasp=0 world=-2840.0000,823.0000,1300.0000
+tick 426 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.548571429 fwd=1 phys=0 grasp=0 world=-2116.0000,795.5714,1300.0000
+  = p4 conv=input-conveyor prog=0.540000000 fwd=1 phys=0 grasp=0 world=-2822.0000,823.0000,1300.0000
+tick 432 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.565714286 fwd=1 phys=0 grasp=0 world=-2104.0000,794.7143,1300.0000
+  = p4 conv=input-conveyor prog=0.565714286 fwd=1 phys=0 grasp=0 world=-2804.0000,823.0000,1300.0000
+tick 438 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.582857143 fwd=1 phys=0 grasp=0 world=-2092.0000,793.8571,1300.0000
+  = p4 conv=input-conveyor prog=0.591428571 fwd=1 phys=0 grasp=0 world=-2786.0000,823.0000,1300.0000
+tick 444 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.600000000 fwd=1 phys=0 grasp=0 world=-2080.0000,793.0000,1300.0000
+  = p4 conv=input-conveyor prog=0.617142857 fwd=1 phys=0 grasp=0 world=-2768.0000,823.0000,1300.0000
+tick 450 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.617142857 fwd=1 phys=0 grasp=0 world=-2068.0000,792.1429,1300.0000
+  = p4 conv=input-conveyor prog=0.642857143 fwd=1 phys=0 grasp=0 world=-2750.0000,823.0000,1300.0000
+tick 456 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.634285714 fwd=1 phys=0 grasp=0 world=-2056.0000,791.2857,1300.0000
+  = p4 conv=input-conveyor prog=0.668571429 fwd=1 phys=0 grasp=0 world=-2732.0000,823.0000,1300.0000
+tick 462 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.651428571 fwd=1 phys=0 grasp=0 world=-2044.0000,790.4286,1300.0000
+  = p4 conv=input-conveyor prog=0.694285714 fwd=1 phys=0 grasp=0 world=-2714.0000,823.0000,1300.0000
+tick 468 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.668571429 fwd=1 phys=0 grasp=0 world=-2032.0000,789.5714,1300.0000
+  = p4 conv=input-conveyor prog=0.720000000 fwd=1 phys=0 grasp=0 world=-2696.0000,823.0000,1300.0000
+tick 474 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.685714286 fwd=1 phys=0 grasp=0 world=-2020.0000,788.7143,1300.0000
+  = p4 conv=input-conveyor prog=0.745714286 fwd=1 phys=0 grasp=0 world=-2678.0000,823.0000,1300.0000
+tick 480 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-conveyor prog=0.771428571 fwd=1 phys=0 grasp=0 world=-2660.0000,823.0000,1300.0000
+tick 486 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-conveyor prog=0.797142857 fwd=1 phys=0 grasp=0 world=-2642.0000,823.0000,1300.0000
+tick 492 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-conveyor prog=0.822857143 fwd=1 phys=0 grasp=0 world=-2624.0000,823.0000,1300.0000
+tick 498 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-conveyor prog=0.848571429 fwd=1 phys=0 grasp=0 world=-2606.0000,823.0000,1300.0000
+tick 504 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-conveyor prog=0.874285714 fwd=1 phys=0 grasp=0 world=-2588.0000,823.0000,1300.0000
+tick 510 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-conveyor prog=0.900000000 fwd=1 phys=0 grasp=0 world=-2570.0000,823.0000,1300.0000
+tick 516 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-conveyor prog=0.925714286 fwd=1 phys=0 grasp=0 world=-2552.0000,823.0000,1300.0000
+tick 522 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-conveyor prog=0.951428571 fwd=1 phys=0 grasp=0 world=-2534.0000,823.0000,1300.0000
+tick 528 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-conveyor prog=0.977142857 fwd=1 phys=0 grasp=0 world=-2516.0000,823.0000,1300.0000
+tick 534 products=4 dirty=1
+  > p4 input-conveyor->input-pick-feeder fwd=1 prog=0.000000000
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.000000000 fwd=1 phys=0 grasp=0 world=-2500.0000,823.0000,1300.0000
+tick 540 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.017142857 fwd=1 phys=0 grasp=0 world=-2488.0000,822.1429,1300.0000
+tick 546 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.034285714 fwd=1 phys=0 grasp=0 world=-2476.0000,821.2857,1300.0000
+tick 552 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.051428571 fwd=1 phys=0 grasp=0 world=-2464.0000,820.4286,1300.0000
+tick 558 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.068571429 fwd=1 phys=0 grasp=0 world=-2452.0000,819.5714,1300.0000
+tick 564 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.085714286 fwd=1 phys=0 grasp=0 world=-2440.0000,818.7143,1300.0000
+tick 570 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.102857143 fwd=1 phys=0 grasp=0 world=-2428.0000,817.8571,1300.0000
+tick 576 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.120000000 fwd=1 phys=0 grasp=0 world=-2416.0000,817.0000,1300.0000
+tick 582 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.137142857 fwd=1 phys=0 grasp=0 world=-2404.0000,816.1429,1300.0000
+tick 588 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.154285714 fwd=1 phys=0 grasp=0 world=-2392.0000,815.2857,1300.0000
+tick 594 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.171428571 fwd=1 phys=0 grasp=0 world=-2380.0000,814.4286,1300.0000
+tick 600 products=4 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.188571429 fwd=1 phys=0 grasp=0 world=-2368.0000,813.5714,1300.0000
+tick 601 products=5 dirty=1
+  + p5 conv=input-conveyor prog=0.004285714 fwd=1 phys=0 grasp=0 world=-3197.0000,823.0000,1300.0000
+tick 606 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.205714286 fwd=1 phys=0 grasp=0 world=-2356.0000,812.7143,1300.0000
+  = p5 conv=input-conveyor prog=0.025714286 fwd=1 phys=0 grasp=0 world=-3182.0000,823.0000,1300.0000
+tick 612 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.222857143 fwd=1 phys=0 grasp=0 world=-2344.0000,811.8571,1300.0000
+  = p5 conv=input-conveyor prog=0.051428571 fwd=1 phys=0 grasp=0 world=-3164.0000,823.0000,1300.0000
+tick 618 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.240000000 fwd=1 phys=0 grasp=0 world=-2332.0000,811.0000,1300.0000
+  = p5 conv=input-conveyor prog=0.077142857 fwd=1 phys=0 grasp=0 world=-3146.0000,823.0000,1300.0000
+tick 624 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.257142857 fwd=1 phys=0 grasp=0 world=-2320.0000,810.1429,1300.0000
+  = p5 conv=input-conveyor prog=0.102857143 fwd=1 phys=0 grasp=0 world=-3128.0000,823.0000,1300.0000
+tick 630 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.274285714 fwd=1 phys=0 grasp=0 world=-2308.0000,809.2857,1300.0000
+  = p5 conv=input-conveyor prog=0.128571429 fwd=1 phys=0 grasp=0 world=-3110.0000,823.0000,1300.0000
+tick 636 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.291428571 fwd=1 phys=0 grasp=0 world=-2296.0000,808.4286,1300.0000
+  = p5 conv=input-conveyor prog=0.154285714 fwd=1 phys=0 grasp=0 world=-3092.0000,823.0000,1300.0000
+tick 642 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.308571429 fwd=1 phys=0 grasp=0 world=-2284.0000,807.5714,1300.0000
+  = p5 conv=input-conveyor prog=0.180000000 fwd=1 phys=0 grasp=0 world=-3074.0000,823.0000,1300.0000
+tick 648 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.325714286 fwd=1 phys=0 grasp=0 world=-2272.0000,806.7143,1300.0000
+  = p5 conv=input-conveyor prog=0.205714286 fwd=1 phys=0 grasp=0 world=-3056.0000,823.0000,1300.0000
+tick 654 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.342857143 fwd=1 phys=0 grasp=0 world=-2260.0000,805.8571,1300.0000
+  = p5 conv=input-conveyor prog=0.231428571 fwd=1 phys=0 grasp=0 world=-3038.0000,823.0000,1300.0000
+tick 660 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.360000000 fwd=1 phys=0 grasp=0 world=-2248.0000,805.0000,1300.0000
+  = p5 conv=input-conveyor prog=0.257142857 fwd=1 phys=0 grasp=0 world=-3020.0000,823.0000,1300.0000
+tick 666 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.377142857 fwd=1 phys=0 grasp=0 world=-2236.0000,804.1429,1300.0000
+  = p5 conv=input-conveyor prog=0.282857143 fwd=1 phys=0 grasp=0 world=-3002.0000,823.0000,1300.0000
+tick 672 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.394285714 fwd=1 phys=0 grasp=0 world=-2224.0000,803.2857,1300.0000
+  = p5 conv=input-conveyor prog=0.308571429 fwd=1 phys=0 grasp=0 world=-2984.0000,823.0000,1300.0000
+tick 678 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.411428571 fwd=1 phys=0 grasp=0 world=-2212.0000,802.4286,1300.0000
+  = p5 conv=input-conveyor prog=0.334285714 fwd=1 phys=0 grasp=0 world=-2966.0000,823.0000,1300.0000
+tick 684 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.428571429 fwd=1 phys=0 grasp=0 world=-2200.0000,801.5714,1300.0000
+  = p5 conv=input-conveyor prog=0.360000000 fwd=1 phys=0 grasp=0 world=-2948.0000,823.0000,1300.0000
+tick 690 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.445714286 fwd=1 phys=0 grasp=0 world=-2188.0000,800.7143,1300.0000
+  = p5 conv=input-conveyor prog=0.385714286 fwd=1 phys=0 grasp=0 world=-2930.0000,823.0000,1300.0000
+tick 696 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.462857143 fwd=1 phys=0 grasp=0 world=-2176.0000,799.8571,1300.0000
+  = p5 conv=input-conveyor prog=0.411428571 fwd=1 phys=0 grasp=0 world=-2912.0000,823.0000,1300.0000
+tick 702 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.480000000 fwd=1 phys=0 grasp=0 world=-2164.0000,799.0000,1300.0000
+  = p5 conv=input-conveyor prog=0.437142857 fwd=1 phys=0 grasp=0 world=-2894.0000,823.0000,1300.0000
+tick 708 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.497142857 fwd=1 phys=0 grasp=0 world=-2152.0000,798.1429,1300.0000
+  = p5 conv=input-conveyor prog=0.462857143 fwd=1 phys=0 grasp=0 world=-2876.0000,823.0000,1300.0000
+tick 714 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.514285714 fwd=1 phys=0 grasp=0 world=-2140.0000,797.2857,1300.0000
+  = p5 conv=input-conveyor prog=0.488571429 fwd=1 phys=0 grasp=0 world=-2858.0000,823.0000,1300.0000
+tick 720 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.531428571 fwd=1 phys=0 grasp=0 world=-2128.0000,796.4286,1300.0000
+  = p5 conv=input-conveyor prog=0.514285714 fwd=1 phys=0 grasp=0 world=-2840.0000,823.0000,1300.0000
+tick 726 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.548571429 fwd=1 phys=0 grasp=0 world=-2116.0000,795.5714,1300.0000
+  = p5 conv=input-conveyor prog=0.540000000 fwd=1 phys=0 grasp=0 world=-2822.0000,823.0000,1300.0000
+tick 732 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.565714286 fwd=1 phys=0 grasp=0 world=-2104.0000,794.7143,1300.0000
+  = p5 conv=input-conveyor prog=0.565714286 fwd=1 phys=0 grasp=0 world=-2804.0000,823.0000,1300.0000
+tick 738 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.582857143 fwd=1 phys=0 grasp=0 world=-2092.0000,793.8571,1300.0000
+  = p5 conv=input-conveyor prog=0.591428571 fwd=1 phys=0 grasp=0 world=-2786.0000,823.0000,1300.0000
+tick 744 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-conveyor prog=0.617142857 fwd=1 phys=0 grasp=0 world=-2768.0000,823.0000,1300.0000
+tick 750 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-conveyor prog=0.642857143 fwd=1 phys=0 grasp=0 world=-2750.0000,823.0000,1300.0000
+tick 756 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-conveyor prog=0.668571429 fwd=1 phys=0 grasp=0 world=-2732.0000,823.0000,1300.0000
+tick 762 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-conveyor prog=0.694285714 fwd=1 phys=0 grasp=0 world=-2714.0000,823.0000,1300.0000
+tick 768 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-conveyor prog=0.720000000 fwd=1 phys=0 grasp=0 world=-2696.0000,823.0000,1300.0000
+tick 774 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-conveyor prog=0.745714286 fwd=1 phys=0 grasp=0 world=-2678.0000,823.0000,1300.0000
+tick 780 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-conveyor prog=0.771428571 fwd=1 phys=0 grasp=0 world=-2660.0000,823.0000,1300.0000
+tick 786 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-conveyor prog=0.797142857 fwd=1 phys=0 grasp=0 world=-2642.0000,823.0000,1300.0000
+tick 792 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-conveyor prog=0.822857143 fwd=1 phys=0 grasp=0 world=-2624.0000,823.0000,1300.0000
+tick 798 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-conveyor prog=0.848571429 fwd=1 phys=0 grasp=0 world=-2606.0000,823.0000,1300.0000
+tick 804 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-conveyor prog=0.874285714 fwd=1 phys=0 grasp=0 world=-2588.0000,823.0000,1300.0000
+tick 810 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-conveyor prog=0.900000000 fwd=1 phys=0 grasp=0 world=-2570.0000,823.0000,1300.0000
+tick 816 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-conveyor prog=0.925714286 fwd=1 phys=0 grasp=0 world=-2552.0000,823.0000,1300.0000
+tick 822 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-conveyor prog=0.951428571 fwd=1 phys=0 grasp=0 world=-2534.0000,823.0000,1300.0000
+tick 828 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-conveyor prog=0.977142857 fwd=1 phys=0 grasp=0 world=-2516.0000,823.0000,1300.0000
+tick 834 products=5 dirty=1
+  > p5 input-conveyor->input-pick-feeder fwd=1 prog=0.000000000
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.000000000 fwd=1 phys=0 grasp=0 world=-2500.0000,823.0000,1300.0000
+tick 840 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.017142857 fwd=1 phys=0 grasp=0 world=-2488.0000,822.1429,1300.0000
+tick 846 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.034285714 fwd=1 phys=0 grasp=0 world=-2476.0000,821.2857,1300.0000
+tick 852 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.051428571 fwd=1 phys=0 grasp=0 world=-2464.0000,820.4286,1300.0000
+tick 858 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.068571429 fwd=1 phys=0 grasp=0 world=-2452.0000,819.5714,1300.0000
+tick 864 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.085714286 fwd=1 phys=0 grasp=0 world=-2440.0000,818.7143,1300.0000
+tick 870 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.102857143 fwd=1 phys=0 grasp=0 world=-2428.0000,817.8571,1300.0000
+tick 876 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.120000000 fwd=1 phys=0 grasp=0 world=-2416.0000,817.0000,1300.0000
+tick 882 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.137142857 fwd=1 phys=0 grasp=0 world=-2404.0000,816.1429,1300.0000
+tick 888 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.154285714 fwd=1 phys=0 grasp=0 world=-2392.0000,815.2857,1300.0000
+tick 894 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.171428571 fwd=1 phys=0 grasp=0 world=-2380.0000,814.4286,1300.0000
+tick 900 products=5 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.188571429 fwd=1 phys=0 grasp=0 world=-2368.0000,813.5714,1300.0000
+tick 901 products=6 dirty=1
+  + p6 conv=input-conveyor prog=0.004285714 fwd=1 phys=0 grasp=0 world=-3197.0000,823.0000,1300.0000
+tick 906 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.205714286 fwd=1 phys=0 grasp=0 world=-2356.0000,812.7143,1300.0000
+  = p6 conv=input-conveyor prog=0.025714286 fwd=1 phys=0 grasp=0 world=-3182.0000,823.0000,1300.0000
+tick 912 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.222857143 fwd=1 phys=0 grasp=0 world=-2344.0000,811.8571,1300.0000
+  = p6 conv=input-conveyor prog=0.051428571 fwd=1 phys=0 grasp=0 world=-3164.0000,823.0000,1300.0000
+tick 918 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.240000000 fwd=1 phys=0 grasp=0 world=-2332.0000,811.0000,1300.0000
+  = p6 conv=input-conveyor prog=0.077142857 fwd=1 phys=0 grasp=0 world=-3146.0000,823.0000,1300.0000
+tick 924 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.257142857 fwd=1 phys=0 grasp=0 world=-2320.0000,810.1429,1300.0000
+  = p6 conv=input-conveyor prog=0.102857143 fwd=1 phys=0 grasp=0 world=-3128.0000,823.0000,1300.0000
+tick 930 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.274285714 fwd=1 phys=0 grasp=0 world=-2308.0000,809.2857,1300.0000
+  = p6 conv=input-conveyor prog=0.128571429 fwd=1 phys=0 grasp=0 world=-3110.0000,823.0000,1300.0000
+tick 936 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.291428571 fwd=1 phys=0 grasp=0 world=-2296.0000,808.4286,1300.0000
+  = p6 conv=input-conveyor prog=0.154285714 fwd=1 phys=0 grasp=0 world=-3092.0000,823.0000,1300.0000
+tick 942 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.308571429 fwd=1 phys=0 grasp=0 world=-2284.0000,807.5714,1300.0000
+  = p6 conv=input-conveyor prog=0.180000000 fwd=1 phys=0 grasp=0 world=-3074.0000,823.0000,1300.0000
+tick 948 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.325714286 fwd=1 phys=0 grasp=0 world=-2272.0000,806.7143,1300.0000
+  = p6 conv=input-conveyor prog=0.205714286 fwd=1 phys=0 grasp=0 world=-3056.0000,823.0000,1300.0000
+tick 954 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.342857143 fwd=1 phys=0 grasp=0 world=-2260.0000,805.8571,1300.0000
+  = p6 conv=input-conveyor prog=0.231428571 fwd=1 phys=0 grasp=0 world=-3038.0000,823.0000,1300.0000
+tick 960 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.360000000 fwd=1 phys=0 grasp=0 world=-2248.0000,805.0000,1300.0000
+  = p6 conv=input-conveyor prog=0.257142857 fwd=1 phys=0 grasp=0 world=-3020.0000,823.0000,1300.0000
+tick 966 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.377142857 fwd=1 phys=0 grasp=0 world=-2236.0000,804.1429,1300.0000
+  = p6 conv=input-conveyor prog=0.282857143 fwd=1 phys=0 grasp=0 world=-3002.0000,823.0000,1300.0000
+tick 972 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.394285714 fwd=1 phys=0 grasp=0 world=-2224.0000,803.2857,1300.0000
+  = p6 conv=input-conveyor prog=0.308571429 fwd=1 phys=0 grasp=0 world=-2984.0000,823.0000,1300.0000
+tick 978 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.411428571 fwd=1 phys=0 grasp=0 world=-2212.0000,802.4286,1300.0000
+  = p6 conv=input-conveyor prog=0.334285714 fwd=1 phys=0 grasp=0 world=-2966.0000,823.0000,1300.0000
+tick 984 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.428571429 fwd=1 phys=0 grasp=0 world=-2200.0000,801.5714,1300.0000
+  = p6 conv=input-conveyor prog=0.360000000 fwd=1 phys=0 grasp=0 world=-2948.0000,823.0000,1300.0000
+tick 990 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.445714286 fwd=1 phys=0 grasp=0 world=-2188.0000,800.7143,1300.0000
+  = p6 conv=input-conveyor prog=0.385714286 fwd=1 phys=0 grasp=0 world=-2930.0000,823.0000,1300.0000
+tick 996 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.462857143 fwd=1 phys=0 grasp=0 world=-2176.0000,799.8571,1300.0000
+  = p6 conv=input-conveyor prog=0.411428571 fwd=1 phys=0 grasp=0 world=-2912.0000,823.0000,1300.0000
+tick 1002 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.480000000 fwd=1 phys=0 grasp=0 world=-2164.0000,799.0000,1300.0000
+  = p6 conv=input-conveyor prog=0.437142857 fwd=1 phys=0 grasp=0 world=-2894.0000,823.0000,1300.0000
+tick 1008 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.492857143 fwd=1 phys=0 grasp=0 world=-2155.0000,798.3571,1300.0000
+  = p6 conv=input-conveyor prog=0.462857143 fwd=1 phys=0 grasp=0 world=-2876.0000,823.0000,1300.0000
+tick 1014 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.492857143 fwd=1 phys=0 grasp=0 world=-2155.0000,798.3571,1300.0000
+  = p6 conv=input-conveyor prog=0.488571429 fwd=1 phys=0 grasp=0 world=-2858.0000,823.0000,1300.0000
+tick 1020 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.492857143 fwd=1 phys=0 grasp=0 world=-2155.0000,798.3571,1300.0000
+  = p6 conv=input-conveyor prog=0.514285714 fwd=1 phys=0 grasp=0 world=-2840.0000,823.0000,1300.0000
+tick 1026 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.492857143 fwd=1 phys=0 grasp=0 world=-2155.0000,798.3571,1300.0000
+  = p6 conv=input-conveyor prog=0.540000000 fwd=1 phys=0 grasp=0 world=-2822.0000,823.0000,1300.0000
+tick 1032 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.492857143 fwd=1 phys=0 grasp=0 world=-2155.0000,798.3571,1300.0000
+  = p6 conv=input-conveyor prog=0.565714286 fwd=1 phys=0 grasp=0 world=-2804.0000,823.0000,1300.0000
+tick 1038 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.492857143 fwd=1 phys=0 grasp=0 world=-2155.0000,798.3571,1300.0000
+  = p6 conv=input-conveyor prog=0.591428571 fwd=1 phys=0 grasp=0 world=-2786.0000,823.0000,1300.0000
+tick 1044 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.492857143 fwd=1 phys=0 grasp=0 world=-2155.0000,798.3571,1300.0000
+  = p6 conv=input-conveyor prog=0.617142857 fwd=1 phys=0 grasp=0 world=-2768.0000,823.0000,1300.0000
+tick 1050 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.492857143 fwd=1 phys=0 grasp=0 world=-2155.0000,798.3571,1300.0000
+  = p6 conv=input-conveyor prog=0.642857143 fwd=1 phys=0 grasp=0 world=-2750.0000,823.0000,1300.0000
+tick 1056 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.492857143 fwd=1 phys=0 grasp=0 world=-2155.0000,798.3571,1300.0000
+  = p6 conv=input-conveyor prog=0.668571429 fwd=1 phys=0 grasp=0 world=-2732.0000,823.0000,1300.0000
+tick 1062 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.492857143 fwd=1 phys=0 grasp=0 world=-2155.0000,798.3571,1300.0000
+  = p6 conv=input-conveyor prog=0.694285714 fwd=1 phys=0 grasp=0 world=-2714.0000,823.0000,1300.0000
+tick 1068 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.492857143 fwd=1 phys=0 grasp=0 world=-2155.0000,798.3571,1300.0000
+  = p6 conv=input-conveyor prog=0.720000000 fwd=1 phys=0 grasp=0 world=-2696.0000,823.0000,1300.0000
+tick 1074 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.492857143 fwd=1 phys=0 grasp=0 world=-2155.0000,798.3571,1300.0000
+  = p6 conv=input-conveyor prog=0.745714286 fwd=1 phys=0 grasp=0 world=-2678.0000,823.0000,1300.0000
+tick 1080 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.492857143 fwd=1 phys=0 grasp=0 world=-2155.0000,798.3571,1300.0000
+  = p6 conv=input-conveyor prog=0.771428571 fwd=1 phys=0 grasp=0 world=-2660.0000,823.0000,1300.0000
+tick 1086 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.492857143 fwd=1 phys=0 grasp=0 world=-2155.0000,798.3571,1300.0000
+  = p6 conv=input-conveyor prog=0.797142857 fwd=1 phys=0 grasp=0 world=-2642.0000,823.0000,1300.0000
+tick 1092 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.492857143 fwd=1 phys=0 grasp=0 world=-2155.0000,798.3571,1300.0000
+  = p6 conv=input-conveyor prog=0.822857143 fwd=1 phys=0 grasp=0 world=-2624.0000,823.0000,1300.0000
+tick 1098 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.492857143 fwd=1 phys=0 grasp=0 world=-2155.0000,798.3571,1300.0000
+  = p6 conv=input-conveyor prog=0.848571429 fwd=1 phys=0 grasp=0 world=-2606.0000,823.0000,1300.0000
+tick 1104 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.492857143 fwd=1 phys=0 grasp=0 world=-2155.0000,798.3571,1300.0000
+  = p6 conv=input-conveyor prog=0.874285714 fwd=1 phys=0 grasp=0 world=-2588.0000,823.0000,1300.0000
+tick 1110 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.492857143 fwd=1 phys=0 grasp=0 world=-2155.0000,798.3571,1300.0000
+  = p6 conv=input-conveyor prog=0.900000000 fwd=1 phys=0 grasp=0 world=-2570.0000,823.0000,1300.0000
+tick 1116 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.492857143 fwd=1 phys=0 grasp=0 world=-2155.0000,798.3571,1300.0000
+  = p6 conv=input-conveyor prog=0.925714286 fwd=1 phys=0 grasp=0 world=-2552.0000,823.0000,1300.0000
+tick 1122 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.492857143 fwd=1 phys=0 grasp=0 world=-2155.0000,798.3571,1300.0000
+  = p6 conv=input-conveyor prog=0.951428571 fwd=1 phys=0 grasp=0 world=-2534.0000,823.0000,1300.0000
+tick 1128 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.492857143 fwd=1 phys=0 grasp=0 world=-2155.0000,798.3571,1300.0000
+  = p6 conv=input-conveyor prog=0.977142857 fwd=1 phys=0 grasp=0 world=-2516.0000,823.0000,1300.0000
+tick 1134 products=6 dirty=1
+  > p6 input-conveyor->input-pick-feeder fwd=1 prog=0.000000000
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.492857143 fwd=1 phys=0 grasp=0 world=-2155.0000,798.3571,1300.0000
+  = p6 conv=input-pick-feeder prog=0.000000000 fwd=1 phys=0 grasp=0 world=-2500.0000,823.0000,1300.0000
+tick 1140 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.492857143 fwd=1 phys=0 grasp=0 world=-2155.0000,798.3571,1300.0000
+  = p6 conv=input-pick-feeder prog=0.017142857 fwd=1 phys=0 grasp=0 world=-2488.0000,822.1429,1300.0000
+tick 1146 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.492857143 fwd=1 phys=0 grasp=0 world=-2155.0000,798.3571,1300.0000
+  = p6 conv=input-pick-feeder prog=0.034285714 fwd=1 phys=0 grasp=0 world=-2476.0000,821.2857,1300.0000
+tick 1152 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.492857143 fwd=1 phys=0 grasp=0 world=-2155.0000,798.3571,1300.0000
+  = p6 conv=input-pick-feeder prog=0.051428571 fwd=1 phys=0 grasp=0 world=-2464.0000,820.4286,1300.0000
+tick 1158 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.492857143 fwd=1 phys=0 grasp=0 world=-2155.0000,798.3571,1300.0000
+  = p6 conv=input-pick-feeder prog=0.068571429 fwd=1 phys=0 grasp=0 world=-2452.0000,819.5714,1300.0000
+tick 1164 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.492857143 fwd=1 phys=0 grasp=0 world=-2155.0000,798.3571,1300.0000
+  = p6 conv=input-pick-feeder prog=0.085714286 fwd=1 phys=0 grasp=0 world=-2440.0000,818.7143,1300.0000
+tick 1170 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.492857143 fwd=1 phys=0 grasp=0 world=-2155.0000,798.3571,1300.0000
+  = p6 conv=input-pick-feeder prog=0.102857143 fwd=1 phys=0 grasp=0 world=-2428.0000,817.8571,1300.0000
+tick 1176 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.492857143 fwd=1 phys=0 grasp=0 world=-2155.0000,798.3571,1300.0000
+  = p6 conv=input-pick-feeder prog=0.120000000 fwd=1 phys=0 grasp=0 world=-2416.0000,817.0000,1300.0000
+tick 1182 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.492857143 fwd=1 phys=0 grasp=0 world=-2155.0000,798.3571,1300.0000
+  = p6 conv=input-pick-feeder prog=0.137142857 fwd=1 phys=0 grasp=0 world=-2404.0000,816.1429,1300.0000
+tick 1188 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.492857143 fwd=1 phys=0 grasp=0 world=-2155.0000,798.3571,1300.0000
+  = p6 conv=input-pick-feeder prog=0.154285714 fwd=1 phys=0 grasp=0 world=-2392.0000,815.2857,1300.0000
+tick 1194 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.492857143 fwd=1 phys=0 grasp=0 world=-2155.0000,798.3571,1300.0000
+  = p6 conv=input-pick-feeder prog=0.171428571 fwd=1 phys=0 grasp=0 world=-2380.0000,814.4286,1300.0000
+tick 1200 products=6 dirty=0
+  = p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+  = p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+  = p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+  = p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+  = p5 conv=input-pick-feeder prog=0.492857143 fwd=1 phys=0 grasp=0 world=-2155.0000,798.3571,1300.0000
+  = p6 conv=input-pick-feeder prog=0.188571429 fwd=1 phys=0 grasp=0 world=-2368.0000,813.5714,1300.0000
+end products=6 spawned=4 destroyed=0 transferred=4
+final p1 conv=input-pick-feeder prog=0.892857143 fwd=1 phys=0 grasp=0 world=-1875.0000,778.3571,1300.0000
+final p2 conv=input-pick-feeder prog=0.792857143 fwd=1 phys=0 grasp=0 world=-1945.0000,783.3571,1300.0000
+final p3 conv=input-pick-feeder prog=0.692857143 fwd=1 phys=0 grasp=0 world=-2015.0000,788.3571,1300.0000
+final p4 conv=input-pick-feeder prog=0.592857143 fwd=1 phys=0 grasp=0 world=-2085.0000,793.3571,1300.0000
+final p5 conv=input-pick-feeder prog=0.492857143 fwd=1 phys=0 grasp=0 world=-2155.0000,798.3571,1300.0000
+final p6 conv=input-pick-feeder prog=0.188571429 fwd=1 phys=0 grasp=0 world=-2368.0000,813.5714,1300.0000
+invariant_failures=0

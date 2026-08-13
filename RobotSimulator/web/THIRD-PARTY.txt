@@ -1,0 +1,38 @@
+Third-party components bundled in this WebAssembly build
+========================================================
+
+Dear ImGui - https://github.com/ocornut/imgui
+  Copyright (c) 2014-2025 Omar Cornut
+  MIT License
+
+ImPlot - https://github.com/epezent/implot
+  Copyright (c) 2020 Evan Pezent
+  MIT License
+
+GLFW - https://www.glfw.org/  (supplied by Emscripten's port)
+  Copyright (c) 2002-2006 Marcus Geelnard, 2006-2019 Camilla Lowy
+  zlib/libpng License
+
+DroidSans.ttf - the user interface font
+  Copyright (c) Steve Matteson
+  Apache License 2.0
+  Distributed with Dear ImGui in misc/fonts/.
+
+nlohmann/json 3.12.0 - https://github.com/nlohmann/json
+  Copyright (c) 2013-2025 Niels Lohmann
+  MIT License
+
+miniz 3.1.2 - https://github.com/richgel999/miniz
+  Copyright (c) 2013-2014 RAD Game Tools and Valve Software
+  Copyright (c) 2010-2014 Rich Geldreich and Tenacious Software LLC
+  MIT License
+
+NVIDIA PhysX 5.9.0 - https://github.com/NVIDIA-Omniverse/PhysX
+  Copyright (c) 2008-2026 NVIDIA Corporation and contributors
+  BSD 3-Clause License
+  CPU-only static WebAssembly build; CUDA/GPU projects are disabled.
+
+Emscripten - https://emscripten.org/
+  MIT License / University of Illinois NCSA Open Source License
+
+The full text of each licence is available from the respective project.

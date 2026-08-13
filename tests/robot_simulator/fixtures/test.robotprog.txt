@@ -1,0 +1,8 @@
+RobotSimulatorProgram 1
+SetSpeed 30 100
+SetBlending -1
+MoveJ 0 0 0 0 0 0
+MoveL 0 0.939318 -0.949866 0 0.0105482 0
+MoveL 0 0.0105488 -1.29745 0 1.2869 0
+MoveL 0 -0.939316 0.928768 0 0.0105482 0
+MoveJ 0 0 0 0 0 0

@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<!--
+  Host page for the WebAssembly build.
+
+  Qt's wasm mkspec also emits a RobotSimulator.html built on qtloader.js, but that shell
+  drives Qt's own platform plugin and its "qtcanvas" element. This build never constructs a
+  QGuiApplication - the UI is Dear ImGui on GLFW - so the canvas belongs to Emscripten's
+  GLFW port instead, and Module.canvas has to be set here for it to find one.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Robot Simulator</title>
+<!-- Empty data URI: without it the browser requests /favicon.ico and logs a 404. -->
+<link rel="icon" href="data:,">
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #f0f0f0;
+    font-family: "Segoe UI", Tahoma, sans-serif;
+  }
+  /* The canvas is sized in device pixels by the app itself, once per frame, to match
+     window.innerWidth/Height. It must not be given a CSS size that fights that. */
+  canvas#canvas {
+    display: block;
+    border: 0;
+    outline: none;
+  }
+  #status {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    background: #f0f0f0;
+    color: #202020;
+    font-size: 14px;
+  }
+  #status.hidden { display: none; }
+  #bar {
+    width: 320px;
+    height: 6px;
+    background: #d8d8d8;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  #fill {
+    height: 100%;
+    width: 0;
+    background: #2b7fd4;
+    transition: width 0.15s linear;
+  }
+  #detail { color: #606060; font-size: 12px; min-height: 1em; }
+  #detail.error { color: #b00020; max-width: 70ch; text-align: center; }
+</style>
+</head>
+<body>
+<canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas>
+
+<div id="status">
+  <div id="label">Loading Robot Simulator&hellip;</div>
+  <div id="bar"><div id="fill"></div></div>
+  <div id="detail"></div>
+</div>
+
+<script>
+(function () {
+  var canvas = document.getElementById('canvas');
+  var status = document.getElementById('status');
+  var label = document.getElementById('label');
+  var fill = document.getElementById('fill');
+  var detail = document.getElementById('detail');
+  var running = false;
+
+  function showError(text) {
+    status.classList.remove('hidden');
+    label.textContent = 'Robot Simulator failed to start';
+    fill.style.width = '0';
+    detail.classList.add('error');
+    detail.textContent = text;
+  }
+
+  // Emscripten reports preload progress through setStatus with strings shaped
+  // "Downloading... (12345/67890)"; anything else is a plain message.
+  function setStatus(text) {
+    if (running || !text) return;
+    var match = /([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/.exec(text);
+    if (match) {
+      label.textContent = 'Loading Robot Simulator…';
+      fill.style.width = (100 * parseFloat(match[2]) / parseFloat(match[4])) + '%';
+      detail.textContent = match[1].trim();
+    } else {
+      detail.textContent = text;
+    }
+  }
+
+  var Module = {
+    canvas: canvas,
+    // The scene is preloaded from RobotSimulator.data, so nothing here fetches at runtime.
+    print: function (text) { console.log(text); },
+    printErr: function (text) {
+      console.error(text);
+      // Only surface hard failures; the app writes ordinary diagnostics to stderr too.
+      if (!running && /error|abort|failed/i.test(text)) detail.textContent = text;
+    },
+    setStatus: setStatus,
+    onRuntimeInitialized: function () {
+      running = true;
+      status.classList.add('hidden');
+      // GLFW routes keyboard through the canvas, which only receives it when focused.
+      canvas.focus();
+    },
+    onAbort: function (what) { showError(String(what)); }
+  };
+  window.Module = Module;
+
+  // Focus follows clicks so keyboard input keeps reaching the app after interacting
+  // elsewhere on the page.
+  canvas.addEventListener('mousedown', function () { canvas.focus(); });
+  // Stop the page from scrolling or zooming when the wheel is used to zoom the 3D view.
+  canvas.addEventListener('wheel', function (event) { event.preventDefault(); }, { passive: false });
+
+  window.addEventListener('error', function (event) {
+    if (!running) showError(event.message || 'Unhandled error while loading.');
+  });
+
+  var script = document.createElement('script');
+  script.src = 'RobotSimulator.js';
+  script.onerror = function () { showError('Could not load RobotSimulator.js.'); };
+  document.body.appendChild(script);
+})();
+</script>
+</body>
+</html>
